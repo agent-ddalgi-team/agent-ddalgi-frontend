@@ -5,4 +5,5 @@ import axios from 'axios'
 // VITE_API_URL로 전달한다. 배포 시에는 같은 origin에서 서빙하거나 리버스 프록시로 맞춘다.
 export const apiClient = axios.create({
   baseURL: '',
+  withCredentials: true,
 })
