@@ -26,6 +26,7 @@ import {
 } from '../../utils/pdfExport'
 import { exportClientDocument } from '../../utils/documentExport'
 import type { EditableDraftSection } from '../../types/session'
+import type { CompanyInfoKey } from '../../types/profile'
 
 interface ApprovalExportViewProps {
   companyName: string
@@ -238,11 +239,21 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
     if (exportFormat === 'DOCX') {
       setExportStatus('Word(DOCX) 문서를 생성하고 있습니다...')
       try {
+        const pageKeys: CompanyInfoKey[] = [
+          'company_name',
+          'history',
+          'technology',
+          'processes',
+          'certifications',
+          'capabilities',
+          'customers_markets',
+          'company_summary',
+        ]
         const sections: EditableDraftSection[] = Object.values(
           splitPageData,
         ).map((p, idx) => ({
           section_id: `sec-${idx + 1}`,
-          key: `overview`,
+          key: pageKeys[idx] || 'company_summary',
           title: p.title.replace('\n', ' - '),
           paragraphs: [
             {

@@ -35,8 +35,14 @@ interface FileSystemFileHandle {
  * 앵커 태그를 활용한 표준 다운로드 폴백
  */
 function downloadViaAnchor(blob: Blob, fileName: string): void {
-  // File 객체로 래핑하여 메타데이터 보존
-  const file = new File([blob], fileName, { type: blob.type })
+  // File 객체로 래핑하여 메타데이터 및 확장자 보존
+  const mimeType = fileName.endsWith('.pdf')
+    ? 'application/pdf'
+    : fileName.endsWith('.docx')
+      ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      : blob.type || 'application/octet-stream'
+
+  const file = new File([blob], fileName, { type: mimeType })
   const url = window.URL.createObjectURL(file)
   const link = document.createElement('a')
   link.href = url
@@ -63,12 +69,12 @@ function downloadViaAnchor(blob: Blob, fileName: string): void {
     } catch {
       // 무시
     }
-  }, 2000)
+  }, 2500)
 }
 
 /**
  * 최신 Chromium(Chrome/Edge) File System Access API 및 크로스 브라우징 안전 다운로더
- * - Chrome/Edge: 네이티브 '다른 이름으로 저장' 대화상자를 통해 정확한 .docx 확장자 보장
+ * - Chrome/Edge: 네이티브 '다른 이름으로 저장' 대화상자를 통해 정확한 .pdf / .docx 확장자 보장
  * - 기타 브라우저/폴백: 정밀 MouseEvent 기반 다운로드
  */
 export async function triggerBrowserDownload(
@@ -76,15 +82,18 @@ export async function triggerBrowserDownload(
   fileName: string,
   mimeType?: string,
 ): Promise<void> {
+  const isPdf = fileName.endsWith('.pdf')
   const isDocx = fileName.endsWith('.docx')
-  const defaultMime = isDocx
-    ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    : 'text/markdown;charset=utf-8;'
+  const defaultMime = isPdf
+    ? 'application/pdf'
+    : isDocx
+      ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      : 'text/markdown;charset=utf-8;'
   const effectiveMime = mimeType || defaultMime
 
   let blob: Blob
   if (data instanceof Blob) {
-    blob = data
+    blob = data.type ? data : new Blob([data], { type: effectiveMime })
   } else if (typeof data === 'string') {
     blob = new Blob([data], { type: effectiveMime })
   } else {
@@ -102,24 +111,33 @@ export async function triggerBrowserDownload(
     try {
       const handle = await windowWithPicker.showSaveFilePicker({
         suggestedName: fileName,
-        types: isDocx
+        types: isPdf
           ? [
               {
-                description: 'Word 문서 (*.docx)',
+                description: 'PDF 문서 (*.pdf)',
                 accept: {
-                  'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
-                    ['.docx'],
+                  'application/pdf': ['.pdf'],
                 },
               },
             ]
-          : [
-              {
-                description: 'Markdown 문서 (*.md)',
-                accept: {
-                  'text/markdown': ['.md'],
+          : isDocx
+            ? [
+                {
+                  description: 'Word 문서 (*.docx)',
+                  accept: {
+                    'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+                      ['.docx'],
+                  },
                 },
-              },
-            ],
+              ]
+            : [
+                {
+                  description: 'Markdown 문서 (*.md)',
+                  accept: {
+                    'text/markdown': ['.md'],
+                  },
+                },
+              ],
       })
 
       const writable = await handle.createWritable()

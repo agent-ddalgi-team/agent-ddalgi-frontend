@@ -1,5 +1,6 @@
 import { jsPDF } from 'jspdf'
 import saveAs from 'file-saver'
+import { triggerBrowserDownload } from './documentExport'
 import type { EditableDraftSection } from '../types/session'
 
 export interface PdfExportOptions {
@@ -671,22 +672,12 @@ export async function generateAndDownloadPdf(
   // PDF Blob 생성
   const pdfBlob = doc.output('blob')
 
-  // 1. file-saver를 통한 1차 저장 시도
+  // 1. Chromium File System Access API 및 크로스 브라우징 안전 다운로드
   try {
+    await triggerBrowserDownload(pdfBlob, fileName, 'application/pdf')
+  } catch (err) {
+    console.warn('triggerBrowserDownload fallback to saveAs:', err)
     saveAs(pdfBlob, fileName)
-  } catch {
-    // 2. 앵커 태그 다운로드 폴백
-    const url = window.URL.createObjectURL(pdfBlob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = fileName
-    link.style.display = 'none'
-    document.body.appendChild(link)
-    link.click()
-    setTimeout(() => {
-      if (link.parentNode) link.parentNode.removeChild(link)
-      window.URL.revokeObjectURL(url)
-    }, 1500)
   }
 
   return fileName
