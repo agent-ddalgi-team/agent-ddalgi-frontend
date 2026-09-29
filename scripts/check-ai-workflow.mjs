@@ -1339,6 +1339,13 @@ finally:
         readable.includes('자료를 보완') &&
         !readable.includes('lead_time'),
     )
+    const companyDiagnostic = await evaluate(
+      `import('/src/constants/profileLabels.ts').then(m => m.readableIssueMessage('회사명이 실제 문서 블록에 없습니다(사실 참조만으로는 통과하지 않습니다).'))`,
+    )
+    assert.ok(
+      companyDiagnostic.includes('근거 연결') &&
+        companyDiagnostic.includes('자료 점검'),
+    )
     const checkTitles = async () => {
       const state = await documentState()
       for (const page of state.document.pages) {
@@ -1369,6 +1376,15 @@ finally:
       'draft cards and page view do not repeat headings; old field-key errors have Korean actions',
     )
     await screenshot('s03-cards-before-check.png')
+    if (!live) {
+      const beforeLocation = await documentState()
+      const patched = await evaluate(
+        `fetch(${JSON.stringify(route)},{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(${JSON.stringify({ expected_revision: beforeLocation.document.document_revision, operations: [{ op: 'insert_block', page_id: beforeLocation.document.pages[0].page_id, after_block_id: null, block: { block_id: 'location_warning', type: 'paragraph', content: { text: '추가 확인 필요' }, fact_ids: [], evidence_refs: [] } }] })})}).then(r=>r.status)`,
+      )
+      assert.equal(patched, 200)
+      await click('문서 상태 새로고침')
+      await idle()
+    }
     await click('내용 검증 실행')
     await until(
       async () => {
@@ -1395,6 +1411,30 @@ finally:
           null,
           2,
         ),
+      )
+    }
+    const locationButton = '[data-issue-locations] button'
+    if (!live)
+      assert.ok(
+        await has('[data-issue-locations]'),
+        'issue locations are displayed',
+      )
+    if (await has(locationButton)) {
+      const label = await evaluate(
+        `document.querySelector('${locationButton}').textContent`,
+      )
+      assert.ok(label.includes('쪽') || label.includes('자료 점검'))
+      await evaluate(`document.querySelector('${locationButton}').click()`)
+      await until(
+        () =>
+          evaluate(
+            `!!document.querySelector('[data-screen="S02"]:not([hidden])')`,
+          ),
+        'issue jumps to editor',
+      )
+      await screen(3)
+      checks.push(
+        'issue location opens the editor; old company error explains evidence instead of missing text',
       )
     }
     for (const issue of issueList.issues.filter(

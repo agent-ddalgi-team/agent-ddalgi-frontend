@@ -1037,7 +1037,7 @@ export function DocumentWorkspace({
                   value={instruction}
                   onChange={(e) => setInstruction(e.target.value)}
                   disabled={proposalDisabled}
-                  maxLength={2000}
+                  maxLength={10000}
                   rows={3}
                   placeholder="예: 사실과 수치는 유지하고 조금 더 읽기 쉽게 정리해 줘"
                   className="w-full resize-none bg-transparent text-xs text-slate-900 outline-none placeholder:text-slate-400 disabled:opacity-50"
@@ -1969,6 +1969,54 @@ export function DocumentWorkspace({
                     <p className="mt-1.5 whitespace-pre-wrap leading-relaxed">
                       {readableIssueMessage(issue.message)}
                     </p>
+                    <div
+                      className="mt-2 flex flex-col gap-2"
+                      data-issue-locations
+                    >
+                      {doc.pages.flatMap((page, pi) =>
+                        page.blocks
+                          .filter((block) =>
+                            issue.block_ids.includes(block.block_id),
+                          )
+                          .map((block) => (
+                            <button
+                              type="button"
+                              key={block.block_id}
+                              className="rounded-lg border border-current/15 bg-white p-2 text-left hover:bg-slate-50"
+                              onClick={() => {
+                                navigate(2)
+                                selectPage(pi)
+                                focusBlock(block.block_id)
+                              }}
+                            >
+                              <span className="block font-bold">
+                                {pi + 1}쪽 · {blockLabel[block.type]} 확인하기 →
+                              </span>
+                              <span className="mt-1 block line-clamp-2 text-slate-600">
+                                {blockText(block).slice(0, 120)}
+                              </span>
+                            </button>
+                          )),
+                      )}
+                      {!doc.pages.some((page) =>
+                        page.blocks.some((block) =>
+                          issue.block_ids.includes(block.block_id),
+                        ),
+                      ) && (
+                        <p className="text-[11px] text-slate-600">
+                          문서 전체 검사 · 특정 문장 위치가 지정되지 않았습니다.
+                        </p>
+                      )}
+                      {issue.code === 'REQUIRED_MISSING' && (
+                        <button
+                          type="button"
+                          className={button}
+                          onClick={() => navigate(1)}
+                        >
+                          자료 점검에서 근거 확인하기 →
+                        </button>
+                      )}
+                    </div>
                     {issue.resolution?.reason && (
                       <p className="mt-1.5 text-[11px] text-slate-500">
                         확인 사유: {issue.resolution.reason}
