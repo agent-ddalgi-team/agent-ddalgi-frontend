@@ -37,6 +37,10 @@ export const STATUS_BADGE_CLASS: Record<FieldStatus, string> = {
 // 기존 저장 결과에도 적용한다. 문제 코드·차단 여부·해결 상태는 변경하지 않는다.
 export function readableIssueMessage(message: string): string {
   let result = message.replace(
+    '회사명이 실제 문서 블록에 없습니다(사실 참조만으로는 통과하지 않습니다).',
+    '회사명 표기 또는 근거 연결을 확인해 주세요. 회사명이 적혀 있어도 자료 점검에서 미확인으로 남아 있거나 해당 문구에 회사명 근거가 연결되지 않으면 통과하지 않습니다. 자료 점검의 회사명 항목부터 확인해 주세요.',
+  )
+  result = result.replace(
     /\b(company_name|company_summary|business_areas|products_services|technology|strengths|customers_markets|certifications|history|processes|process_count|capabilities|lead_time|other_info)\b/g,
     (key) => FIELD_LABELS[key as CompanyInfoKey] || key,
   )
