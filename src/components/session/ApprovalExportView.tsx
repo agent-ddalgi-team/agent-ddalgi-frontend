@@ -63,6 +63,8 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
       bodyText: string
       summary: string
       source: string
+      photoUrl: string
+      photoCaption: string
       kpis: Array<{ label: string; value: string }>
     }
   > = {
@@ -75,6 +77,9 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
         '공식 CI와 2025년도 주요 지향 가치, 그리고 글로벌 시장을 향한 정밀 화학 원료 공급 비전을 표지에 집약했습니다.',
       summary: `${companyName}의 대표 CI, 브랜드 슬로건 및 2025년 공식 비전을 첫 페이지에 품격 있게 배치한 커버 섹션입니다.`,
       source: '회사소개서_기존본.pptx',
+      photoUrl:
+        'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1200&auto=format&fit=crop&q=80',
+      photoCaption: '글로벌 엔터프라이즈 사옥 전경',
       kpis: [
         { label: '설립 연도', value: '2012년' },
         { label: '글로벌 거점', value: '4개국' },
@@ -90,6 +95,9 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
       summary:
         '주요 연혁 5대 마일스톤과 전국 생산 거점 맵을 요약하여 회사의 안정적인 성장 궤적을 제시합니다.',
       source: '기업 인터뷰.txt',
+      photoUrl:
+        'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=1200&auto=format&fit=crop&q=80',
+      photoCaption: '군산·안산 스마트 팩토리 전경',
       kpis: [
         { label: '국내 거점', value: '2개 공장' },
         { label: '연구 인력', value: '45명' },
@@ -106,6 +114,9 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
       summary:
         '군산 제2 스마트 팩토리의 정밀 공정 라인과 99.4% 자동화 성과 지표를 결합하여 신규 고객에게 기술 신뢰성을 입증하는 핵심 페이지입니다.',
       source: '공정설명서_v3.pdf',
+      photoUrl:
+        'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=1200&auto=format&fit=crop&q=80',
+      photoCaption: '정밀 자동화 제어 공정 설비',
       kpis: [
         { label: '공정 자동화율', value: '99.4%' },
         { label: '무사고 일수', value: '1,820일' },
@@ -122,6 +133,9 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
       summary:
         '배합-반응-정제-패키징의 4단계를 알기 쉬운 흐름도와 아이콘으로 구성하여 기술력을 어필합니다.',
       source: '공정설명서_v3.pdf',
+      photoUrl:
+        'https://images.unsplash.com/photo-1581092335397-9583fe92d232?w=1200&auto=format&fit=crop&q=80',
+      photoCaption: '4단계 촉매 반응 및 정제 파이프라인',
       kpis: [
         { label: '배합 정밀도', value: '±0.01%' },
         { label: '정제 순도', value: '99.999%' },
@@ -138,6 +152,9 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
       summary:
         '인증서 3건의 실물 번호와 유효 기간이 대조 완료되어 신뢰성 검토를 마친 상태입니다.',
       source: '품질인증서_ISO9001.pdf',
+      photoUrl:
+        'https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?w=1200&auto=format&fit=crop&q=80',
+      photoCaption: 'ISO 공인 정밀 분석 연구소',
       kpis: [
         { label: 'ISO 인증', value: '9001/14001' },
         { label: '품질 검사', value: '실시간 전수' },
@@ -154,6 +171,9 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
       summary:
         '인쇄 시 깨짐 없는 고해상도(300DPI) 실물 설비 사진을 활용하여 공장 인프라의 완성도를 보여줍니다.',
       source: '공정_자동화라인_사진.jpg',
+      photoUrl:
+        'https://images.unsplash.com/photo-1581092580497-e0d23cbdf1dc?w=1200&auto=format&fit=crop&q=80',
+      photoCaption: '클린룸 이송 로봇 및 무인 패키징',
       kpis: [
         { label: '스마트 설비', value: '12개 라인' },
         { label: '클린룸 등급', value: 'Class 1000' },
@@ -170,6 +190,9 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
       summary:
         '국내외 8대 고객사 레퍼런스를 인포그래픽으로 일목요연하게 정리했습니다.',
       source: '회사소개서_기존본.pptx',
+      photoUrl:
+        'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=1200&auto=format&fit=crop&q=80',
+      photoCaption: '글로벌 고객사 출하 및 물류 인프라',
       kpis: [
         { label: '주요 고객사', value: '8대 대기업' },
         { label: '해외 수출', value: '42%' },
@@ -186,6 +209,9 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
       summary:
         '공식 영업 채널 및 공장 방문 접수처 정보가 정확히 기재되어 있는지 사전 검증을 마쳤습니다.',
       source: '기업 인터뷰.txt',
+      photoUrl:
+        'https://images.unsplash.com/photo-1497366216548-37526070297c?w=1200&auto=format&fit=crop&q=80',
+      photoCaption: '영업본부 및 테크니컬 지원 센터',
       kpis: [
         { label: '대표 번호', value: '02-555-1234' },
         { label: '공식 메일', value: 'contact@geosan.com' },
@@ -495,15 +521,15 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
                     <div className="rounded-lg bg-slate-100 overflow-hidden border border-slate-200 shadow-2xs">
                       <div className="relative w-full h-32 bg-slate-900 flex flex-col items-center justify-center overflow-hidden">
                         <img
-                          className="w-full h-full object-cover opacity-90"
-                          alt="공정 설비"
-                          src="https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=800&auto=format&fit=crop&q=80"
+                          className="w-full h-full object-cover opacity-90 transition-all duration-300"
+                          alt={activeData.photoCaption}
+                          src={activeData.photoUrl}
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent"></div>
                         <div className="relative z-10 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/95 backdrop-blur-sm shadow-xs">
                           <Verified className="h-3.5 w-3.5 text-[#007A78]" />
                           <span className="text-[10px] text-slate-900 font-bold">
-                            {companyName} 스마트 공정 라인
+                            {companyName} · {activeData.photoCaption}
                           </span>
                         </div>
                       </div>
