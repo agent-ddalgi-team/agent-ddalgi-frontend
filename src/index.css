@@ -95,11 +95,9 @@
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(6px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
@@ -167,6 +165,16 @@
   position: sticky;
   top: 76px;
 }
+.document-toc {
+  max-height: calc(100dvh - 168px);
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+.toc-contents {
+  max-height: min(36dvh, 320px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 .document-inspector {
   min-width: 0;
   overflow-wrap: anywhere;
@@ -214,26 +222,165 @@
 }
 .editor-paper {
   min-height: 760px;
-  aspect-ratio: 210 / 297;
   margin: 0 auto;
-  padding: 28px;
+  padding: clamp(20px, 3vw, 48px);
   background: white;
-  border-radius: 5px;
-  box-shadow: 0 4px 16px #0f172a14;
+  border-radius: 8px;
+  box-shadow: 0 6px 24px #0f172a0d;
+}
+.editor-page-header,
+.editor-page-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+}
+.editor-page-header {
+  margin-bottom: 36px;
+}
+.editor-brand {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+  color: #007a78;
+}
+.editor-page-footer {
+  margin-top: auto;
+  padding-top: 32px;
+  border-top: 1px solid #eef2f6;
 }
 .editor-block {
-  margin: 18px 0;
-  padding: 12px;
-  border: 1px solid #e2e8f0;
+  flex-shrink: 0;
+  min-width: 0;
+  margin: 8px -10px;
+  padding: 10px;
+  border: 1px solid transparent;
   border-radius: 8px;
+  scroll-margin-top: 110px;
 }
-.editor-block.selected {
-  border-color: #007a78;
-  box-shadow: 0 0 0 1px #007a781a;
+.editor-block.selected:not(.reading .editor-block) {
+  border-color: #93c9c3;
+  box-shadow: 0 0 0 3px #007a7808;
+}
+.editor-text {
+  display: block;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: #334155;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.9;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+[data-block-type='heading'] {
+  margin-top: 28px;
+  margin-bottom: 0;
+}
+[data-block-type='heading'] .editor-text {
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 1.5;
+  letter-spacing: -0.035em;
+  color: #0f172a;
+}
+[data-hero='true'] .editor-text,
+.editor-page-title {
+  font-size: clamp(26px, 2.5vw, 36px);
+  font-weight: 800;
+  line-height: 1.35;
+  letter-spacing: -0.045em;
+  color: #0f172a;
+}
+[data-hero='true'] {
+  margin-top: 0;
+  margin-bottom: 18px;
+}
+.editor-block-tools,
+.editor-block-meta {
+  position: absolute;
+  left: 0;
+  right: 0;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+.editor-block-tools {
+  bottom: calc(100% + 4px);
+}
+.editor-block-meta {
+  top: calc(100% + 4px);
+}
+.editing .editor-block.selected .editor-block-tools,
+.editing .editor-block.selected .editor-block-meta,
+.editing .editor-block:focus-within .editor-block-tools,
+.editing .editor-block:focus-within .editor-block-meta {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
 }
 .editor-block.removed {
   background: #fff1f2;
-  opacity: 0.7;
+  opacity: 0.65;
+}
+.reading .editor-block.removed {
+  display: none;
+}
+.editor-photo {
+  margin: 0 0 12px;
+  overflow: hidden;
+  border-radius: 10px;
+  background: #f1f5f9;
+}
+.editor-photo img {
+  display: block;
+  width: 100%;
+  max-height: 420px;
+  object-fit: contain;
+}
+[data-block-type='image'] .editor-text {
+  font-size: 12px;
+  color: #64748b;
+}
+.editor-add-photo {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 22px;
+  margin: 24px 0 32px;
+  border: 1px dashed #b6cfce;
+  border-radius: 12px;
+  text-align: left;
+  color: #357774;
+  background: #f5faf9;
+  cursor: pointer;
+}
+.editor-add-photo span {
+  flex: 1;
+}
+.editor-add-photo strong {
+  display: block;
+  font-size: 13px;
+}
+.editor-add-photo small {
+  display: block;
+  margin-top: 5px;
+  font-size: 11px;
+  color: #64748b;
+}
+.editor-add-photo:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.photo-choices {
+  white-space: normal;
 }
 .screen-dock {
   position: fixed;
