@@ -63,6 +63,8 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
       bodyText: string
       summary: string
       source: string
+      photoUrl: string
+      photoCaption: string
       kpis: Array<{ label: string; value: string }>
     }
   > = {
@@ -75,6 +77,9 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
         '공식 CI와 2025년도 주요 지향 가치, 그리고 글로벌 시장을 향한 정밀 화학 원료 공급 비전을 표지에 집약했습니다.',
       summary: `${companyName}의 대표 CI, 브랜드 슬로건 및 2025년 공식 비전을 첫 페이지에 품격 있게 배치한 커버 섹션입니다.`,
       source: '회사소개서_기존본.pptx',
+      photoUrl:
+        'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1200&auto=format&fit=crop&q=80',
+      photoCaption: '글로벌 엔터프라이즈 사옥 전경',
       kpis: [
         { label: '설립 연도', value: '2012년' },
         { label: '글로벌 거점', value: '4개국' },
@@ -90,6 +95,9 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
       summary:
         '주요 연혁 5대 마일스톤과 전국 생산 거점 맵을 요약하여 회사의 안정적인 성장 궤적을 제시합니다.',
       source: '기업 인터뷰.txt',
+      photoUrl:
+        'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=1200&auto=format&fit=crop&q=80',
+      photoCaption: '군산·안산 스마트 팩토리 전경',
       kpis: [
         { label: '국내 거점', value: '2개 공장' },
         { label: '연구 인력', value: '45명' },
@@ -106,6 +114,9 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
       summary:
         '군산 제2 스마트 팩토리의 정밀 공정 라인과 99.4% 자동화 성과 지표를 결합하여 신규 고객에게 기술 신뢰성을 입증하는 핵심 페이지입니다.',
       source: '공정설명서_v3.pdf',
+      photoUrl:
+        'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=1200&auto=format&fit=crop&q=80',
+      photoCaption: '정밀 자동화 제어 공정 설비',
       kpis: [
         { label: '공정 자동화율', value: '99.4%' },
         { label: '무사고 일수', value: '1,820일' },
@@ -122,6 +133,9 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
       summary:
         '배합-반응-정제-패키징의 4단계를 알기 쉬운 흐름도와 아이콘으로 구성하여 기술력을 어필합니다.',
       source: '공정설명서_v3.pdf',
+      photoUrl:
+        'https://images.unsplash.com/photo-1581092335397-9583fe92d232?w=1200&auto=format&fit=crop&q=80',
+      photoCaption: '4단계 촉매 반응 및 정제 파이프라인',
       kpis: [
         { label: '배합 정밀도', value: '±0.01%' },
         { label: '정제 순도', value: '99.999%' },
@@ -138,6 +152,9 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
       summary:
         '인증서 3건의 실물 번호와 유효 기간이 대조 완료되어 신뢰성 검토를 마친 상태입니다.',
       source: '품질인증서_ISO9001.pdf',
+      photoUrl:
+        'https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?w=1200&auto=format&fit=crop&q=80',
+      photoCaption: 'ISO 공인 정밀 분석 연구소',
       kpis: [
         { label: 'ISO 인증', value: '9001/14001' },
         { label: '품질 검사', value: '실시간 전수' },
@@ -154,6 +171,9 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
       summary:
         '인쇄 시 깨짐 없는 고해상도(300DPI) 실물 설비 사진을 활용하여 공장 인프라의 완성도를 보여줍니다.',
       source: '공정_자동화라인_사진.jpg',
+      photoUrl:
+        'https://images.unsplash.com/photo-1581092580497-e0d23cbdf1dc?w=1200&auto=format&fit=crop&q=80',
+      photoCaption: '클린룸 이송 로봇 및 무인 패키징',
       kpis: [
         { label: '스마트 설비', value: '12개 라인' },
         { label: '클린룸 등급', value: 'Class 1000' },
@@ -170,6 +190,9 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
       summary:
         '국내외 8대 고객사 레퍼런스를 인포그래픽으로 일목요연하게 정리했습니다.',
       source: '회사소개서_기존본.pptx',
+      photoUrl:
+        'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=1200&auto=format&fit=crop&q=80',
+      photoCaption: '글로벌 고객사 출하 및 물류 인프라',
       kpis: [
         { label: '주요 고객사', value: '8대 대기업' },
         { label: '해외 수출', value: '42%' },
@@ -186,6 +209,9 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
       summary:
         '공식 영업 채널 및 공장 방문 접수처 정보가 정확히 기재되어 있는지 사전 검증을 마쳤습니다.',
       source: '기업 인터뷰.txt',
+      photoUrl:
+        'https://images.unsplash.com/photo-1497366216548-37526070297c?w=1200&auto=format&fit=crop&q=80',
+      photoCaption: '영업본부 및 테크니컬 지원 센터',
       kpis: [
         { label: '대표 번호', value: '02-555-1234' },
         { label: '공식 메일', value: 'contact@geosan.com' },
@@ -344,141 +370,477 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
             </div>
           </div>
 
-          {/* 3단 분할 뷰 메인 컨테이너 */}
-          <div className="flex flex-col bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            {/* 상단 상태 & 제어 바 */}
-            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 bg-slate-50 border-b border-slate-200">
-              <div className="flex items-center gap-2 min-w-0">
-                <FileText className="h-5 w-5 text-[#007A78] shrink-0" />
-                <div className="flex flex-col min-w-0">
-                  <h2 className="text-xs font-bold text-slate-900 truncate">
-                    {companyName} 회사소개서 2025 (신규 고객 소개용)
-                  </h2>
-                  <span className="text-[10px] text-slate-400">
-                    문서 버전 v2.4 · 팩트 검증 완료 초안
-                  </span>
+          {/* 1. 3단 분할 뷰 (viewMode === 'split') */}
+          {viewMode === 'split' && (
+            <div className="flex flex-col bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden animate-fade-in">
+              {/* 상단 상태 & 제어 바 */}
+              <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 bg-slate-50 border-b border-slate-200">
+                <div className="flex items-center gap-2 min-w-0">
+                  <FileText className="h-5 w-5 text-[#007A78] shrink-0" />
+                  <div className="flex flex-col min-w-0">
+                    <h2 className="text-xs font-bold text-slate-900 truncate">
+                      {companyName} 회사소개서 2025 (신규 고객 소개용)
+                    </h2>
+                    <span className="text-[10px] text-slate-400">
+                      문서 버전 v2.4 · 팩트 검증 완료 초안
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="inline-flex items-center gap-1 bg-white px-2 py-1 rounded-lg border border-slate-200 shadow-2xs">
+                    <button
+                      type="button"
+                      onClick={() => stepPage(-1)}
+                      disabled={currentPage <= 1}
+                      className="w-5 h-5 rounded flex items-center justify-center text-slate-600 hover:bg-slate-100 disabled:opacity-30 cursor-pointer"
+                    >
+                      <ChevronLeft className="h-3.5 w-3.5" />
+                    </button>
+                    <span className="text-xs font-semibold px-1 text-slate-800">
+                      <span className="text-[#007A78] font-bold">
+                        {currentPage}
+                      </span>{' '}
+                      / 8
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => stepPage(1)}
+                      disabled={currentPage >= 8}
+                      className="w-5 h-5 rounded flex items-center justify-center text-slate-600 hover:bg-slate-100 disabled:opacity-30 cursor-pointer"
+                    >
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleExport}
+                    className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-[#007A78] hover:bg-[#0F766E] text-white text-xs font-bold transition-colors shadow-2xs cursor-pointer"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    <span>
+                      {exportFormat === 'DOCX' ? 'Word 저장' : 'PDF 빠른저장'}
+                    </span>
+                  </button>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                <div className="inline-flex items-center gap-1 bg-white px-2 py-1 rounded-lg border border-slate-200 shadow-2xs">
-                  <button
-                    type="button"
-                    onClick={() => stepPage(-1)}
-                    disabled={currentPage <= 1}
-                    className="w-5 h-5 rounded flex items-center justify-center text-slate-600 hover:bg-slate-100 disabled:opacity-30 cursor-pointer"
-                  >
-                    <ChevronLeft className="h-3.5 w-3.5" />
-                  </button>
-                  <span className="text-xs font-semibold px-1 text-slate-800">
-                    <span className="text-[#007A78] font-bold">
-                      {currentPage}
-                    </span>{' '}
-                    / 8
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => stepPage(1)}
-                    disabled={currentPage >= 8}
-                    className="w-5 h-5 rounded flex items-center justify-center text-slate-600 hover:bg-slate-100 disabled:opacity-30 cursor-pointer"
-                  >
-                    <ChevronRight className="h-3.5 w-3.5" />
-                  </button>
+              {/* 3단 분할 바디: 좌측(목차) / 중앙(읽기) / 우측(맥락) */}
+              <div className="grid grid-cols-12 min-h-[580px] divide-y md:divide-y-0 md:divide-x divide-slate-200 bg-slate-50/50">
+                {/* [좌측: 전체 구성 목차] (3 cols) */}
+                <div className="col-span-12 md:col-span-3 bg-white flex flex-col p-2 space-y-1.5 overflow-y-auto max-h-[640px]">
+                  <div className="px-2 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                    <span>목차 및 페이지 구성</span>
+                    <span className="text-[#007A78]">8쪽 전체</span>
+                  </div>
+
+                  {Array.from({ length: 8 }).map((_, idx) => {
+                    const pNum = idx + 1
+                    const isSelected = currentPage === pNum
+                    const pageInfo = splitPageData[pNum]
+
+                    return (
+                      <div
+                        key={pNum}
+                        onClick={() => setCurrentPage(pNum)}
+                        className={`p-1.5 rounded-lg transition-all flex items-center gap-2 cursor-pointer ${
+                          isSelected
+                            ? 'border-2 border-[#007A78] bg-[#E6F4F1]/60 shadow-2xs'
+                            : 'border border-slate-200 bg-white hover:bg-slate-50'
+                        }`}
+                      >
+                        <div
+                          className={`w-9 h-11 rounded border flex flex-col justify-between p-1 shrink-0 ${
+                            isSelected
+                              ? 'bg-white border-[#007A78]/50'
+                              : 'bg-slate-50 border-slate-200'
+                          }`}
+                        >
+                          <div
+                            className={`w-4 h-1 rounded ${
+                              isSelected ? 'bg-[#007A78]' : 'bg-slate-400'
+                            }`}
+                          ></div>
+                          <div className="w-5 h-3 bg-teal-50 rounded flex items-center justify-center">
+                            <span className="text-[8px] text-[#007A78] font-bold">
+                              {pNum}
+                            </span>
+                          </div>
+                          <div className="w-4 h-0.5 bg-slate-200 rounded"></div>
+                        </div>
+
+                        <div className="flex flex-col min-w-0 flex-1">
+                          <div className="flex items-center justify-between">
+                            <span
+                              className={`text-[11px] font-bold truncate ${
+                                isSelected ? 'text-[#007A78]' : 'text-slate-800'
+                              }`}
+                            >
+                              0{pNum} {pageInfo.title.split('\n')[0]}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-slate-400 truncate">
+                            {pageInfo.sub}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
 
-                <button
-                  type="button"
-                  onClick={handleExport}
-                  className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-[#007A78] hover:bg-[#0F766E] text-white text-xs font-bold transition-colors shadow-2xs cursor-pointer"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  <span>
-                    {exportFormat === 'DOCX' ? 'Word 저장' : 'PDF 빠른저장'}
-                  </span>
-                </button>
+                {/* [중앙: 실제 A4 시트 읽기] (6 cols) */}
+                <div className="col-span-12 md:col-span-6 p-4 overflow-y-auto max-h-[640px] flex justify-center bg-[#F1F5F9]">
+                  <div className="w-full max-w-[480px] bg-white rounded-xl shadow-md p-6 flex flex-col justify-between min-h-[580px] border border-slate-200 transition-all">
+                    <div className="flex flex-col gap-3.5">
+                      {/* Sheet Header */}
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-[#007A78]">
+                          {companyName.toUpperCase() || 'GEOSAN CHEMICAL'}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-semibold">
+                          {activeData.header}
+                        </span>
+                      </div>
+
+                      {/* Title & Subtitle */}
+                      <div className="space-y-0.5">
+                        <h3 className="text-xl font-bold text-slate-900 tracking-tight leading-snug">
+                          {activeData.title.split('\n').map((line, lIdx) => (
+                            <React.Fragment key={lIdx}>
+                              {line}
+                              <br />
+                            </React.Fragment>
+                          ))}
+                        </h3>
+                        <p className="text-xs text-slate-500 font-medium">
+                          {activeData.sub}
+                        </p>
+                      </div>
+
+                      {/* Graphic / Process Photo Section */}
+                      <div className="rounded-lg bg-slate-100 overflow-hidden border border-slate-200 shadow-2xs">
+                        <div className="relative w-full h-32 bg-slate-900 flex flex-col items-center justify-center overflow-hidden">
+                          <img
+                            className="w-full h-full object-cover opacity-90 transition-all duration-300"
+                            alt={activeData.photoCaption}
+                            src={activeData.photoUrl}
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent"></div>
+                          <div className="relative z-10 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/95 backdrop-blur-sm shadow-xs">
+                            <Verified className="h-3.5 w-3.5 text-[#007A78]" />
+                            <span className="text-[10px] text-slate-900 font-bold">
+                              {companyName} · {activeData.photoCaption}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="px-3 py-1 bg-slate-50 flex items-center justify-between text-[10px] text-slate-500">
+                          <span>인쇄 규격 300DPI 매핑</span>
+                          <span className="text-emerald-700 font-bold">
+                            정상 렌더링
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Narrative Copy */}
+                      <div className="space-y-1 pt-0.5">
+                        <h4 className="text-xs font-bold text-slate-900">
+                          {activeData.bodyTitle}
+                        </h4>
+                        <p className="text-[11px] text-slate-700 leading-relaxed">
+                          {activeData.bodyText}
+                        </p>
+                      </div>
+
+                      {/* KPI Visual Strip */}
+                      <div className="grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+                        {activeData.kpis.map((kpi, kIdx) => (
+                          <div key={kIdx} className="flex flex-col">
+                            <span className="text-[9px] text-slate-400 font-medium">
+                              {kpi.label}
+                            </span>
+                            <span className="text-xs font-bold text-[#007A78]">
+                              {kpi.value}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Sheet Footer */}
+                    <div className="pt-3 mt-3 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
+                      <span>{companyName} 공식 승인본</span>
+                      <span className="font-bold text-slate-800">
+                        PAGE 0{currentPage}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* [우측: 맥락 & 행동] (3 cols) */}
+                <div className="col-span-12 md:col-span-3 bg-white flex flex-col p-4 justify-between space-y-4 overflow-y-auto max-h-[640px]">
+                  <div className="flex flex-col gap-3">
+                    <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase">
+                        페이지 상세 맥락
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full">
+                        <Check className="h-3 w-3" />
+                        검수 완료
+                      </span>
+                    </div>
+
+                    {/* Summary Box */}
+                    <div className="flex flex-col gap-1 p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+                      <div className="flex items-center gap-1 text-[#007A78] text-[11px] font-bold">
+                        <FileCheck className="h-3.5 w-3.5" />
+                        <span>페이지 핵심 요약</span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 leading-snug">
+                        {activeData.summary}
+                      </p>
+                    </div>
+
+                    {/* Verified Metrics */}
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-[10px] font-bold text-slate-400">
+                        검증된 핵심 수치
+                      </span>
+                      <div className="space-y-1.5 text-[11px]">
+                        <div className="p-2 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-between">
+                          <span className="text-slate-500">원천 출처</span>
+                          <span className="text-slate-900 font-bold truncate max-w-[110px]">
+                            {activeData.source}
+                          </span>
+                        </div>
+                        <div className="p-2 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-between">
+                          <span className="text-slate-500">검증 상태</span>
+                          <span className="text-emerald-700 font-bold flex items-center gap-0.5">
+                            <Check className="h-3 w-3" />
+                            오차 0건
+                          </span>
+                        </div>
+                        <div className="p-2 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-between">
+                          <span className="text-slate-500">해상도</span>
+                          <span className="text-[#007A78] font-semibold">
+                            300DPI 적합
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex flex-col gap-2 pt-2 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={onBackToDraft}
+                      className="w-full inline-flex items-center justify-center gap-1 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-[#007A78] text-xs font-semibold border border-slate-200 transition-colors cursor-pointer"
+                    >
+                      <Edit className="h-3.5 w-3.5" />
+                      <span>초안에서 이 페이지 수정</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        alert(
+                          `원천 근거 파일 [${activeData.source}]과 데이터가 동기화되어 있습니다.`,
+                        )
+                      }
+                      className="w-full inline-flex items-center justify-center gap-1 px-3 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium border border-slate-200 transition-colors cursor-pointer shadow-2xs"
+                    >
+                      <Search className="h-3.5 w-3.5" />
+                      <span>근거 원천 자료 보기</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => stepPage(1)}
+                      className="w-full inline-flex items-center justify-center gap-1 px-3 py-2 rounded-xl bg-[#E6F4F1] hover:bg-teal-100 text-[#007A78] text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      <span>다음 페이지 검토</span>
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
+          )}
 
-            {/* 3단 분할 바디: 좌측(목차) / 중앙(읽기) / 우측(맥락) */}
-            <div className="grid grid-cols-12 min-h-[580px] divide-y md:divide-y-0 md:divide-x divide-slate-200 bg-slate-50/50">
-              {/* [좌측: 전체 구성 목차] (3 cols) */}
-              <div className="col-span-12 md:col-span-3 bg-white flex flex-col p-2 space-y-1.5 overflow-y-auto max-h-[640px]">
-                <div className="px-2 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
-                  <span>목차 및 페이지 구성</span>
-                  <span className="text-[#007A78]">8쪽 전체</span>
+          {/* 2. 카드형 8쪽 한눈에 조망 뷰 (viewMode === 'grid') */}
+          {viewMode === 'grid' && (
+            <div className="flex flex-col bg-white rounded-xl border border-slate-200 shadow-sm p-4 sm:p-5 gap-4 animate-fade-in">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <LayoutGrid className="h-4 w-4 text-[#007A78]" />
+                  <h3 className="text-xs font-bold text-slate-900">
+                    전체 8쪽 카드형 조망
+                  </h3>
+                  <span className="text-[11px] text-slate-400">
+                    카드를 클릭하면 상세 검토 페이지로 선택됩니다.
+                  </span>
                 </div>
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 text-[11px] font-bold flex items-center gap-1">
+                  <Check className="h-3 w-3" />
+                  8개 페이지 검수 완료
+                </span>
+              </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5">
                 {Array.from({ length: 8 }).map((_, idx) => {
                   const pNum = idx + 1
+                  const pData = splitPageData[pNum]
                   const isSelected = currentPage === pNum
-                  const pageInfo = splitPageData[pNum]
 
                   return (
                     <div
                       key={pNum}
-                      onClick={() => setCurrentPage(pNum)}
-                      className={`p-1.5 rounded-lg transition-all flex items-center gap-2 cursor-pointer ${
+                      onClick={() => {
+                        setCurrentPage(pNum)
+                      }}
+                      className={`group rounded-xl border p-3 flex flex-col justify-between transition-all cursor-pointer relative bg-white ${
                         isSelected
-                          ? 'border-2 border-[#007A78] bg-[#E6F4F1]/60 shadow-2xs'
-                          : 'border border-slate-200 bg-white hover:bg-slate-50'
+                          ? 'border-2 border-[#007A78] shadow-md ring-2 ring-[#007A78]/20 bg-[#E6F4F1]/20'
+                          : 'border-slate-200 hover:border-slate-300 hover:shadow-sm'
                       }`}
                     >
-                      <div
-                        className={`w-9 h-11 rounded border flex flex-col justify-between p-1 shrink-0 ${
-                          isSelected
-                            ? 'bg-white border-[#007A78]/50'
-                            : 'bg-slate-50 border-slate-200'
-                        }`}
-                      >
-                        <div
-                          className={`w-4 h-1 rounded ${
-                            isSelected ? 'bg-[#007A78]' : 'bg-slate-400'
-                          }`}
-                        ></div>
-                        <div className="w-5 h-3 bg-teal-50 rounded flex items-center justify-center">
-                          <span className="text-[8px] text-[#007A78] font-bold">
-                            {pNum}
-                          </span>
-                        </div>
-                        <div className="w-4 h-0.5 bg-slate-200 rounded"></div>
-                      </div>
-
-                      <div className="flex flex-col min-w-0 flex-1">
+                      <div className="flex flex-col gap-2">
+                        {/* Card Header & Page Number Badge */}
                         <div className="flex items-center justify-between">
                           <span
-                            className={`text-[11px] font-bold truncate ${
-                              isSelected ? 'text-[#007A78]' : 'text-slate-800'
+                            className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                              isSelected
+                                ? 'bg-[#007A78] text-white'
+                                : 'bg-slate-100 text-slate-700'
                             }`}
                           >
-                            0{pNum} {pageInfo.title.split('\n')[0]}
+                            PAGE 0{pNum}
+                          </span>
+                          <span className="text-[10px] text-emerald-700 font-semibold flex items-center gap-0.5">
+                            <Check className="h-3 w-3" /> 검증완료
                           </span>
                         </div>
-                        <span className="text-[10px] text-slate-400 truncate">
-                          {pageInfo.sub}
+
+                        {/* Thumbnail Image */}
+                        <div className="relative w-full h-24 rounded-lg overflow-hidden bg-slate-900 shadow-2xs">
+                          <img
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            alt={pData.photoCaption}
+                            src={pData.photoUrl}
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+                          <span className="absolute bottom-1 left-2 text-[9px] text-white font-medium truncate max-w-[90%]">
+                            {pData.photoCaption}
+                          </span>
+                        </div>
+
+                        {/* Title & Sub */}
+                        <div className="space-y-0.5">
+                          <h4 className="text-xs font-bold text-slate-900 truncate">
+                            {pData.title.replace('\n', ' ')}
+                          </h4>
+                          <p className="text-[10px] text-slate-500 line-clamp-1">
+                            {pData.sub}
+                          </p>
+                        </div>
+
+                        {/* KPIs strip */}
+                        <div className="grid grid-cols-3 gap-1 bg-slate-50 p-1.5 rounded-lg border border-slate-100 text-center">
+                          {pData.kpis.map((kpi, kIdx) => (
+                            <div key={kIdx} className="flex flex-col">
+                              <span className="text-[8px] text-slate-400 truncate">
+                                {kpi.label}
+                              </span>
+                              <span className="text-[10px] font-bold text-[#007A78] truncate">
+                                {kpi.value}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="pt-2 mt-2 border-t border-slate-100 flex items-center justify-between text-[10px]">
+                        <span className="text-slate-400 truncate max-w-[120px]">
+                          {pData.source}
+                        </span>
+                        <span
+                          className={`font-bold ${
+                            isSelected ? 'text-[#007A78]' : 'text-slate-500'
+                          }`}
+                        >
+                          {isSelected ? '선택됨 ✓' : '선택'}
                         </span>
                       </div>
                     </div>
                   )
                 })}
               </div>
+            </div>
+          )}
 
-              {/* [중앙: 실제 A4 시트 읽기] (6 cols) */}
-              <div className="col-span-12 md:col-span-6 p-4 overflow-y-auto max-h-[640px] flex justify-center bg-[#F1F5F9]">
-                <div className="w-full max-w-[480px] bg-white rounded-xl shadow-md p-6 flex flex-col justify-between min-h-[580px] border border-slate-200 transition-all">
-                  <div className="flex flex-col gap-3.5">
-                    {/* Sheet Header */}
+          {/* 3. 단일 페이지 포커스 미리보기 뷰 (viewMode === 'single') */}
+          {viewMode === 'single' && (
+            <div className="flex flex-col bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden animate-fade-in">
+              {/* 상단 컨트롤 바 */}
+              <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 bg-slate-50 border-b border-slate-200">
+                <div className="flex items-center gap-2 min-w-0">
+                  <FileText className="h-5 w-5 text-[#007A78] shrink-0" />
+                  <span className="text-xs font-bold text-slate-900 truncate">
+                    PAGE 0{currentPage} / 08 ·{' '}
+                    {activeData.title.replace('\n', ' ')}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="inline-flex items-center gap-1 bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs">
+                    <button
+                      type="button"
+                      onClick={() => stepPage(-1)}
+                      disabled={currentPage <= 1}
+                      className="w-5 h-5 rounded flex items-center justify-center text-slate-600 hover:bg-slate-100 disabled:opacity-30 cursor-pointer"
+                    >
+                      <ChevronLeft className="h-3.5 w-3.5" />
+                    </button>
+                    <span className="text-xs font-bold px-2 text-slate-800">
+                      {currentPage} / 8쪽
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => stepPage(1)}
+                      disabled={currentPage >= 8}
+                      className="w-5 h-5 rounded flex items-center justify-center text-slate-600 hover:bg-slate-100 disabled:opacity-30 cursor-pointer"
+                    >
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleExport}
+                    className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-[#007A78] hover:bg-[#0F766E] text-white text-xs font-bold transition-colors shadow-2xs cursor-pointer"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    <span>
+                      {exportFormat === 'DOCX' ? 'Word 저장' : 'PDF 저장'}
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Centered Large A4 Sheet */}
+              <div className="p-6 sm:p-8 bg-[#F1F5F9] flex justify-center items-center min-h-[620px]">
+                <div className="w-full max-w-[560px] bg-white rounded-2xl shadow-lg p-8 flex flex-col justify-between min-h-[620px] border border-slate-200 transition-all">
+                  <div className="flex flex-col gap-4">
                     <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#007A78]">
+                      <span className="text-xs font-bold uppercase tracking-wider text-[#007A78]">
                         {companyName.toUpperCase() || 'GEOSAN CHEMICAL'}
                       </span>
-                      <span className="text-[10px] text-slate-400 font-semibold">
+                      <span className="text-xs text-slate-400 font-semibold">
                         {activeData.header}
                       </span>
                     </div>
 
-                    {/* Title & Subtitle */}
-                    <div className="space-y-0.5">
-                      <h3 className="text-xl font-bold text-slate-900 tracking-tight leading-snug">
+                    <div className="space-y-1">
+                      <h3 className="text-2xl font-bold text-slate-900 tracking-tight leading-snug">
                         {activeData.title.split('\n').map((line, lIdx) => (
                           <React.Fragment key={lIdx}>
                             {line}
@@ -491,48 +853,46 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
                       </p>
                     </div>
 
-                    {/* Graphic / Process Photo Section */}
-                    <div className="rounded-lg bg-slate-100 overflow-hidden border border-slate-200 shadow-2xs">
-                      <div className="relative w-full h-32 bg-slate-900 flex flex-col items-center justify-center overflow-hidden">
+                    {/* Large Photo Display */}
+                    <div className="rounded-xl bg-slate-100 overflow-hidden border border-slate-200 shadow-2xs">
+                      <div className="relative w-full h-44 bg-slate-900 flex flex-col items-center justify-center overflow-hidden">
                         <img
-                          className="w-full h-full object-cover opacity-90"
-                          alt="공정 설비"
-                          src="https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=800&auto=format&fit=crop&q=80"
+                          className="w-full h-full object-cover opacity-90 transition-all duration-300"
+                          alt={activeData.photoCaption}
+                          src={activeData.photoUrl}
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent"></div>
-                        <div className="relative z-10 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/95 backdrop-blur-sm shadow-xs">
-                          <Verified className="h-3.5 w-3.5 text-[#007A78]" />
-                          <span className="text-[10px] text-slate-900 font-bold">
-                            {companyName} 스마트 공정 라인
+                        <div className="relative z-10 flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/95 backdrop-blur-sm shadow-xs">
+                          <Verified className="h-4 w-4 text-[#007A78]" />
+                          <span className="text-xs text-slate-900 font-bold">
+                            {companyName} · {activeData.photoCaption}
                           </span>
                         </div>
                       </div>
-                      <div className="px-3 py-1 bg-slate-50 flex items-center justify-between text-[10px] text-slate-500">
-                        <span>인쇄 규격 300DPI 매핑</span>
+                      <div className="px-4 py-1.5 bg-slate-50 flex items-center justify-between text-xs text-slate-500">
+                        <span>인쇄 규격 300DPI 매핑 완료</span>
                         <span className="text-emerald-700 font-bold">
-                          정상 렌더링
+                          ✓ 정상 렌더링
                         </span>
                       </div>
                     </div>
 
-                    {/* Narrative Copy */}
-                    <div className="space-y-1 pt-0.5">
-                      <h4 className="text-xs font-bold text-slate-900">
+                    <div className="space-y-1 pt-1">
+                      <h4 className="text-sm font-bold text-slate-900">
                         {activeData.bodyTitle}
                       </h4>
-                      <p className="text-[11px] text-slate-700 leading-relaxed">
+                      <p className="text-xs text-slate-700 leading-relaxed">
                         {activeData.bodyText}
                       </p>
                     </div>
 
-                    {/* KPI Visual Strip */}
-                    <div className="grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+                    <div className="grid grid-cols-3 gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200">
                       {activeData.kpis.map((kpi, kIdx) => (
                         <div key={kIdx} className="flex flex-col">
-                          <span className="text-[9px] text-slate-400 font-medium">
+                          <span className="text-[10px] text-slate-400 font-medium">
                             {kpi.label}
                           </span>
-                          <span className="text-xs font-bold text-[#007A78]">
+                          <span className="text-sm font-bold text-[#007A78]">
                             {kpi.value}
                           </span>
                         </div>
@@ -540,103 +900,16 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
                     </div>
                   </div>
 
-                  {/* Sheet Footer */}
-                  <div className="pt-3 mt-3 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
+                  <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400">
                     <span>{companyName} 공식 승인본</span>
                     <span className="font-bold text-slate-800">
-                      PAGE 0{currentPage}
+                      PAGE 0{currentPage} / 08
                     </span>
                   </div>
-                </div>
-              </div>
-
-              {/* [우측: 맥락 & 행동] (3 cols) */}
-              <div className="col-span-12 md:col-span-3 bg-white flex flex-col p-4 justify-between space-y-4 overflow-y-auto max-h-[640px]">
-                <div className="flex flex-col gap-3">
-                  <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase">
-                      페이지 상세 맥락
-                    </span>
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full">
-                      <Check className="h-3 w-3" />
-                      검수 완료
-                    </span>
-                  </div>
-
-                  {/* Summary Box */}
-                  <div className="flex flex-col gap-1 p-2.5 rounded-xl bg-slate-50 border border-slate-200">
-                    <div className="flex items-center gap-1 text-[#007A78] text-[11px] font-bold">
-                      <FileCheck className="h-3.5 w-3.5" />
-                      <span>페이지 핵심 요약</span>
-                    </div>
-                    <p className="text-[11px] text-slate-600 leading-snug">
-                      {activeData.summary}
-                    </p>
-                  </div>
-
-                  {/* Verified Metrics */}
-                  <div className="flex flex-col gap-1.5">
-                    <span className="text-[10px] font-bold text-slate-400">
-                      검증된 핵심 수치
-                    </span>
-                    <div className="space-y-1.5 text-[11px]">
-                      <div className="p-2 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-between">
-                        <span className="text-slate-500">원천 출처</span>
-                        <span className="text-slate-900 font-bold truncate max-w-[110px]">
-                          {activeData.source}
-                        </span>
-                      </div>
-                      <div className="p-2 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-between">
-                        <span className="text-slate-500">검증 상태</span>
-                        <span className="text-emerald-700 font-bold flex items-center gap-0.5">
-                          <Check className="h-3 w-3" />
-                          오차 0건
-                        </span>
-                      </div>
-                      <div className="p-2 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-between">
-                        <span className="text-slate-500">해상도</span>
-                        <span className="text-[#007A78] font-semibold">
-                          300DPI 적합
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Actions */}
-                <div className="flex flex-col gap-2 pt-2 border-t border-slate-100">
-                  <button
-                    type="button"
-                    onClick={onBackToDraft}
-                    className="w-full inline-flex items-center justify-center gap-1 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-[#007A78] text-xs font-semibold border border-slate-200 transition-colors cursor-pointer"
-                  >
-                    <Edit className="h-3.5 w-3.5" />
-                    <span>초안에서 이 페이지 수정</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      alert(
-                        `원천 근거 파일 [${activeData.source}]과 데이터가 동기화되어 있습니다.`,
-                      )
-                    }
-                    className="w-full inline-flex items-center justify-center gap-1 px-3 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium border border-slate-200 transition-colors cursor-pointer shadow-2xs"
-                  >
-                    <Search className="h-3.5 w-3.5" />
-                    <span>근거 원천 자료 보기</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => stepPage(1)}
-                    className="w-full inline-flex items-center justify-center gap-1 px-3 py-2 rounded-xl bg-[#E6F4F1] hover:bg-teal-100 text-[#007A78] text-xs font-bold transition-colors cursor-pointer"
-                  >
-                    <span>다음 페이지 검토</span>
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </button>
                 </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* RIGHT: Inspector / Approval Control Deck (5 cols on lg) */}

@@ -19,7 +19,37 @@ interface PageData {
   bodyText: string
   summary: string
   source: string
+  photoUrl: string
+  photoCaption: string
   kpis: Array<{ label: string; value: string }>
+}
+
+/**
+ * 브라우저 이미지 비동기 로딩 헬퍼 (CORS 및 타임아웃 방어)
+ */
+function loadBrowserImage(src: string): Promise<HTMLImageElement | null> {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+
+    img.onload = () => {
+      resolve(img)
+    }
+
+    img.onerror = () => {
+      console.warn(`[PDF Export] 이미지 로딩 실패 (폴백 적용): ${src}`)
+      resolve(null)
+    }
+
+    // 최대 3.5초 대기 후 타임아웃 시 안전하게 null 반환
+    setTimeout(() => {
+      if (!img.complete) {
+        resolve(null)
+      }
+    }, 3500)
+
+    img.src = src
+  })
 }
 
 /**
@@ -106,11 +136,12 @@ function drawCanvasRoundRect(
 }
 
 /**
- * 단일 A4 페이지를 고해상도 Canvas(1200x1697)로 렌더링
+ * 단일 A4 페이지를 고해상도 Canvas(1200x1697)로 렌더링 (실물 사진 렌더링 포함)
  */
 function renderPageToCanvas(
   p: PageData,
   companyName: string,
+  loadedImg: HTMLImageElement | null,
 ): HTMLCanvasElement {
   const canvas = document.createElement('canvas')
   // A4 비율 1:1.4142 @ ~150DPI
@@ -170,76 +201,142 @@ function renderPageToCanvas(
   ctx.fillStyle = '#475569'
   ctx.fillText(p.subtitle, 80, currentY)
 
-  // 5. 비주얼 그래픽 / 도식 섹션 박스
+  // 5. 비주얼 그래픽 / 실물 설비 사진 섹션 박스
   currentY += 35
   const boxX = 80
   const boxWidth = width - 160
-  const boxHeight = 310
+  const boxHeight = 330
 
   // 외부 카드 배경
   ctx.fillStyle = '#F8FAFC'
-  ctx.strokeStyle = '#E2E8F0'
+  ctx.strokeStyle = '#CBD5E1'
   ctx.lineWidth = 1.5
   drawCanvasRoundRect(ctx, boxX, currentY, boxWidth, boxHeight, 16, true, true)
 
-  // 내부 그래디언트 배너
-  const bannerY = currentY + 20
-  const bannerHeight = 210
-  const bannerWidth = boxWidth - 40
-  const bannerGrad = ctx.createLinearGradient(
-    boxX + 20,
-    bannerY,
-    boxX + 20 + bannerWidth,
-    bannerY + bannerHeight,
-  )
-  bannerGrad.addColorStop(0, '#0F172A')
-  bannerGrad.addColorStop(0.5, '#134E4A')
-  bannerGrad.addColorStop(1, '#007A78')
+  // 사진 컨테이너 좌표
+  const photoX = boxX + 16
+  const photoY = currentY + 16
+  const photoW = boxWidth - 32
+  const photoH = 240
 
-  ctx.fillStyle = bannerGrad
-  drawCanvasRoundRect(
-    ctx,
-    boxX + 20,
-    bannerY,
-    bannerWidth,
-    bannerHeight,
-    12,
-    true,
-    false,
-  )
+  if (loadedImg && loadedImg.width > 0 && loadedImg.height > 0) {
+    // 실물 사진 렌더링 (클리핑 패스 적용)
+    ctx.save()
+    ctx.beginPath()
+    ctx.moveTo(photoX + 12, photoY)
+    ctx.lineTo(photoX + photoW - 12, photoY)
+    ctx.quadraticCurveTo(photoX + photoW, photoY, photoX + photoW, photoY + 12)
+    ctx.lineTo(photoX + photoW, photoY + photoH - 12)
+    ctx.quadraticCurveTo(
+      photoX + photoW,
+      photoY + photoH,
+      photoX + photoW - 12,
+      photoY + photoH,
+    )
+    ctx.lineTo(photoX + 12, photoY + photoH)
+    ctx.quadraticCurveTo(photoX, photoY + photoH, photoX, photoY + photoH - 12)
+    ctx.lineTo(photoX, photoY + 12)
+    ctx.quadraticCurveTo(photoX, photoY, photoX + 12, photoY)
+    ctx.closePath()
+    ctx.clip()
 
-  // 배너 내부 검증 배지 & 텍스트
-  const centerBannerX = boxX + 20 + bannerWidth / 2
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'
-  drawCanvasRoundRect(
-    ctx,
-    centerBannerX - 220,
-    bannerY + 50,
-    440,
-    46,
-    23,
-    true,
-    false,
-  )
+    // Object-fit: cover 비율 계산
+    const imgRatio = loadedImg.width / loadedImg.height
+    const targetRatio = photoW / photoH
+    let sx = 0
+    let sy = 0
+    let sWidth = loadedImg.width
+    let sHeight = loadedImg.height
 
-  ctx.font =
-    'bold 18px "Pretendard", -apple-system, BlinkMacSystemFont, "Malgun Gothic", "맑은 고딕", sans-serif'
-  ctx.fillStyle = '#007A78'
-  ctx.textAlign = 'center'
-  ctx.fillText(
-    `[ ${companyName} 스마트 공정 & 팩트 검증 완료 ]`,
-    centerBannerX,
-    bannerY + 79,
-  )
+    if (imgRatio > targetRatio) {
+      sWidth = loadedImg.height * targetRatio
+      sx = (loadedImg.width - sWidth) / 2
+    } else {
+      sHeight = loadedImg.width / targetRatio
+      sy = (loadedImg.height - sHeight) / 2
+    }
 
-  ctx.font =
-    '500 16px "Pretendard", -apple-system, BlinkMacSystemFont, "Malgun Gothic", "맑은 고딕", sans-serif'
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.85)'
-  ctx.fillText(
-    '인쇄 표준 300DPI 매핑 · 팩트 그라운딩 AI 초안 엔진',
-    centerBannerX,
-    bannerY + 135,
-  )
+    ctx.drawImage(
+      loadedImg,
+      sx,
+      sy,
+      sWidth,
+      sHeight,
+      photoX,
+      photoY,
+      photoW,
+      photoH,
+    )
+
+    // 하단 텍스트 가독성을 위한 부드러운 다크 그래디언트 오버레이
+    const grad = ctx.createLinearGradient(
+      photoX,
+      photoY + photoH - 100,
+      photoX,
+      photoY + photoH,
+    )
+    grad.addColorStop(0, 'rgba(0, 0, 0, 0)')
+    grad.addColorStop(1, 'rgba(0, 0, 0, 0.75)')
+    ctx.fillStyle = grad
+    ctx.fillRect(photoX, photoY, photoW, photoH)
+
+    ctx.restore()
+
+    // 사진 좌측 하단 캡션 플로팅 배지
+    const badgeX = photoX + 16
+    const badgeY = photoY + photoH - 44
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'
+    drawCanvasRoundRect(ctx, badgeX, badgeY, 360, 32, 16, true, false)
+
+    ctx.font =
+      'bold 14px "Pretendard", -apple-system, BlinkMacSystemFont, "Malgun Gothic", "맑은 고딕", sans-serif'
+    ctx.fillStyle = '#007A78'
+    ctx.textAlign = 'left'
+    ctx.fillText(
+      `📷 ${companyName} · ${p.photoCaption}`,
+      badgeX + 14,
+      badgeY + 21,
+    )
+  } else {
+    // 이미지 로딩 실패 시 테크니컬 그래디언트 배너 폴백
+    ctx.save()
+    const bannerGrad = ctx.createLinearGradient(
+      photoX,
+      photoY,
+      photoX + photoW,
+      photoY + photoH,
+    )
+    bannerGrad.addColorStop(0, '#0F172A')
+    bannerGrad.addColorStop(0.5, '#134E4A')
+    bannerGrad.addColorStop(1, '#007A78')
+
+    ctx.fillStyle = bannerGrad
+    drawCanvasRoundRect(ctx, photoX, photoY, photoW, photoH, 12, true, false)
+
+    const centerBannerX = photoX + photoW / 2
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'
+    drawCanvasRoundRect(
+      ctx,
+      centerBannerX - 220,
+      photoY + 80,
+      440,
+      46,
+      23,
+      true,
+      false,
+    )
+
+    ctx.font =
+      'bold 18px "Pretendard", -apple-system, BlinkMacSystemFont, "Malgun Gothic", "맑은 고딕", sans-serif'
+    ctx.fillStyle = '#007A78'
+    ctx.textAlign = 'center'
+    ctx.fillText(
+      `[ ${companyName} · ${p.photoCaption} ]`,
+      centerBannerX,
+      photoY + 109,
+    )
+    ctx.restore()
+  }
 
   // 카드 하단 상태 스트립
   const stripY = currentY + boxHeight - 48
@@ -255,23 +352,27 @@ function renderPageToCanvas(
     '500 15px "Pretendard", -apple-system, BlinkMacSystemFont, "Malgun Gothic", "맑은 고딕", sans-serif'
   ctx.fillStyle = '#64748B'
   ctx.textAlign = 'left'
-  ctx.fillText('인쇄 규격 300DPI 적합 판정 완료', boxX + 24, stripY + 30)
+  ctx.fillText('인쇄 규격 300DPI 실물 설비 사진 매핑', boxX + 24, stripY + 30)
 
   ctx.font =
     'bold 15px "Pretendard", -apple-system, BlinkMacSystemFont, "Malgun Gothic", "맑은 고딕", sans-serif'
   ctx.fillStyle = '#047857'
   ctx.textAlign = 'right'
-  ctx.fillText('✓ 검증 통과 (오차 0건)', boxX + boxWidth - 24, stripY + 30)
+  ctx.fillText(
+    '✓ 사진·캡션 정합성 확인 완료',
+    boxX + boxWidth - 24,
+    stripY + 30,
+  )
 
   // 6. 본문 설명 섹션 (Narrative Body)
-  currentY += boxHeight + 45
+  currentY += boxHeight + 40
   ctx.textAlign = 'left'
   ctx.font =
     'bold 23px "Pretendard", -apple-system, BlinkMacSystemFont, "Malgun Gothic", "맑은 고딕", sans-serif'
   ctx.fillStyle = '#0F172A'
   ctx.fillText(p.bodyTitle, 80, currentY)
 
-  currentY += 20
+  currentY += 18
   ctx.font =
     '400 18px "Pretendard", -apple-system, BlinkMacSystemFont, "Malgun Gothic", "맑은 고딕", sans-serif'
   ctx.fillStyle = '#334155'
@@ -283,7 +384,7 @@ function renderPageToCanvas(
   }
 
   // 7. KPI 지표 3개 카드 스트립
-  currentY += 45
+  currentY += 40
   const kpiCount = p.kpis.length
   const kpiGap = 20
   const totalKpiWidth = width - 160
@@ -327,7 +428,7 @@ function renderPageToCanvas(
   })
 
   // 8. 출처 근거 및 팩트 인증 주석
-  currentY += kpiCardHeight + 50
+  currentY += kpiCardHeight + 45
   ctx.font =
     '400 14px "Pretendard", -apple-system, BlinkMacSystemFont, "Malgun Gothic", "맑은 고딕", sans-serif'
   ctx.fillStyle = '#94A3B8'
@@ -387,6 +488,9 @@ export async function generateAndDownloadPdf(
         '공식 CI와 2025년도 주요 지향 가치, 그리고 글로벌 시장을 향한 정밀 화학 원료 공급 비전을 표지에 집약했습니다. 신뢰할 수 있는 파트너십을 바탕으로 차세대 정밀 화학 소재의 표준을 세워갑니다.',
       summary: `${companyName}의 대표 CI, 브랜드 슬로건 및 2025년 공식 비전을 첫 페이지에 품격 있게 배치한 커버 섹션입니다.`,
       source: '회사소개서_기존본.pptx',
+      photoUrl:
+        'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1200&auto=format&fit=crop&q=80',
+      photoCaption: '글로벌 엔터프라이즈 사옥 전경',
       kpis: [
         { label: '설립 연도', value: '2012년' },
         { label: '글로벌 거점', value: '4개국' },
@@ -403,6 +507,9 @@ export async function generateAndDownloadPdf(
       summary:
         '주요 연혁 5대 마일스톤과 전국 생산 거점 맵을 요약하여 회사의 안정적인 성장 궤적을 제시합니다.',
       source: '기업 인터뷰.txt',
+      photoUrl:
+        'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=1200&auto=format&fit=crop&q=80',
+      photoCaption: '군산·안산 스마트 팩토리 전경',
       kpis: [
         { label: '국내 거점', value: '2개 공장' },
         { label: '연구 인력', value: '45명' },
@@ -420,6 +527,9 @@ export async function generateAndDownloadPdf(
       summary:
         '군산 제2 스마트 팩토리의 정밀 공정 라인과 99.4% 자동화 성과 지표를 결합하여 신규 고객에게 기술 신뢰성을 입증하는 핵심 페이지입니다.',
       source: '공정설명서_v3.pdf',
+      photoUrl:
+        'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=1200&auto=format&fit=crop&q=80',
+      photoCaption: '정밀 자동화 제어 공정 설비',
       kpis: [
         { label: '공정 자동화율', value: '99.4%' },
         { label: '무사고 일수', value: '1,820일' },
@@ -437,6 +547,9 @@ export async function generateAndDownloadPdf(
       summary:
         '배합-반응-정제-패키징의 4단계를 알기 쉬운 흐름도와 아이콘으로 구성하여 기술력을 어필합니다.',
       source: '공정설명서_v3.pdf',
+      photoUrl:
+        'https://images.unsplash.com/photo-1581092335397-9583fe92d232?w=1200&auto=format&fit=crop&q=80',
+      photoCaption: '4단계 촉매 반응 및 정제 파이프라인',
       kpis: [
         { label: '배합 정밀도', value: '±0.01%' },
         { label: '정제 순도', value: '99.999%' },
@@ -454,6 +567,9 @@ export async function generateAndDownloadPdf(
       summary:
         '인증서 3건의 실물 번호와 유효 기간이 대조 완료되어 신뢰성 검토를 마친 상태입니다.',
       source: '품질인증서_ISO9001.pdf',
+      photoUrl:
+        'https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?w=1200&auto=format&fit=crop&q=80',
+      photoCaption: 'ISO 공인 정밀 분석 연구소',
       kpis: [
         { label: 'ISO 인증', value: '9001/14001' },
         { label: '품질 검사주기', value: '실시간/전수' },
@@ -471,6 +587,9 @@ export async function generateAndDownloadPdf(
       summary:
         '인쇄 시 깨짐 없는 고해상도(300DPI) 실물 설비 사진을 활용하여 공장 인프라의 완성도를 보여줍니다.',
       source: '공정_자동화라인_사진.jpg',
+      photoUrl:
+        'https://images.unsplash.com/photo-1581092580497-e0d23cbdf1dc?w=1200&auto=format&fit=crop&q=80',
+      photoCaption: '클린룸 이송 로봇 및 무인 패키징',
       kpis: [
         { label: '스마트 설비', value: '12개 라인' },
         { label: '클린룸 등급', value: 'Class 1000' },
@@ -488,6 +607,9 @@ export async function generateAndDownloadPdf(
       summary:
         '국내외 8대 고객사 레퍼런스를 인포그래픽으로 일목요연하게 정리했습니다.',
       source: '회사소개서_기존본.pptx',
+      photoUrl:
+        'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=1200&auto=format&fit=crop&q=80',
+      photoCaption: '글로벌 고객사 출하 및 물류 인프라',
       kpis: [
         { label: '주요 고객사', value: '8대 대기업' },
         { label: '해외 수출비중', value: '42%' },
@@ -505,6 +627,9 @@ export async function generateAndDownloadPdf(
       summary:
         '공식 영업 채널 및 공장 방문 접수처 정보가 정확히 기재되어 있는지 사전 검증을 마쳤습니다.',
       source: '기업 인터뷰.txt',
+      photoUrl:
+        'https://images.unsplash.com/photo-1497366216548-37526070297c?w=1200&auto=format&fit=crop&q=80',
+      photoCaption: '영업본부 및 테크니컬 지원 센터',
       kpis: [
         { label: '고객센터', value: '02-555-1234' },
         { label: '공식 이메일', value: 'contact@geosan.com' },
@@ -512,6 +637,11 @@ export async function generateAndDownloadPdf(
       ],
     },
   ]
+
+  // 모든 페이지 이미지 비동기 병렬 프리로딩
+  const loadedImages = await Promise.all(
+    pagesData.map((p) => loadBrowserImage(p.photoUrl)),
+  )
 
   // jsPDF A4 세로 인쇄 규격 초기화 (210 x 297 mm)
   const doc = new jsPDF({
@@ -527,7 +657,11 @@ export async function generateAndDownloadPdf(
       doc.addPage()
     }
 
-    const pageCanvas = renderPageToCanvas(pagesData[i], companyName)
+    const pageCanvas = renderPageToCanvas(
+      pagesData[i],
+      companyName,
+      loadedImages[i],
+    )
     const imgData = pageCanvas.toDataURL('image/jpeg', 0.95)
 
     // A4 규격(210x297mm)에 꽉 차게 배치
