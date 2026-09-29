@@ -5,6 +5,8 @@ import {
   ArrowRight,
   Check,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Edit2,
   FileText,
   GripVertical,
@@ -64,8 +66,15 @@ export const DraftEditorView: React.FC<DraftEditorViewProps> = ({
   )
   const [isAiLoading, setIsAiLoading] = useState(false)
 
-  // 페이지 목록 정의
-  const pageList = [
+  // 페이지 항목 인터페이스
+  interface PageItem {
+    num: number
+    id: string
+    title: string
+  }
+
+  // 페이지 목록 상태 (드래그 앤 드롭 및 순서 변경 지원)
+  const [pages, setPages] = useState<PageItem[]>([
     { num: 1, id: '01', title: '표지' },
     { num: 2, id: '02', title: '회사 개요' },
     { num: 3, id: '03', title: '우리의 강점' },
@@ -74,7 +83,99 @@ export const DraftEditorView: React.FC<DraftEditorViewProps> = ({
     { num: 6, id: '06', title: '설비와 사진' },
     { num: 7, id: '07', title: '협력 사례' },
     { num: 8, id: '08', title: '문의 안내' },
-  ]
+  ])
+
+  // 드래그 앤 드롭 상태
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
+  const [orderToast, setOrderToast] = useState<string | null>(null)
+
+  // 페이지 순서 재배치 핸들러
+  const handleReorder = (fromIndex: number, toIndex: number) => {
+    if (
+      fromIndex === toIndex ||
+      fromIndex < 0 ||
+      toIndex < 0 ||
+      fromIndex >= pages.length ||
+      toIndex >= pages.length
+    ) {
+      return
+    }
+
+    const movedTitle = pages[fromIndex]?.title || '페이지'
+
+    setPages((prevPages) => {
+      const nextPages = [...prevPages]
+      const [movedItem] = nextPages.splice(fromIndex, 1)
+      nextPages.splice(toIndex, 0, movedItem)
+
+      return nextPages.map((item, idx) => ({
+        ...item,
+        num: idx + 1,
+        id: String(idx + 1).padStart(2, '0'),
+      }))
+    })
+
+    setActivePage(toIndex + 1)
+    setOrderToast(
+      `[순서 변경] "${movedTitle}" 항목이 ${toIndex + 1}번째로 이동되었습니다.`,
+    )
+    setTimeout(() => setOrderToast(null), 3000)
+  }
+
+  // HTML5 Drag & Drop 이벤트 핸들러
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedIndex(index)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', String(index))
+  }
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    if (dragOverIndex !== index) {
+      setDragOverIndex(index)
+    }
+  }
+
+  const handleDrop = (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault()
+    if (draggedIndex !== null && draggedIndex !== targetIndex) {
+      handleReorder(draggedIndex, targetIndex)
+    }
+    setDraggedIndex(null)
+    setDragOverIndex(null)
+  }
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null)
+    setDragOverIndex(null)
+  }
+
+  // 한 단계 위/아래 이동 핸들러
+  const handleMoveStep = (
+    index: number,
+    direction: 'up' | 'down',
+    e: React.MouseEvent,
+  ) => {
+    e.stopPropagation()
+    const targetIndex = direction === 'up' ? index - 1 : index + 1
+    handleReorder(index, targetIndex)
+  }
+
+  // 새 페이지 추가 핸들러
+  const handleAddPage = () => {
+    const nextNum = pages.length + 1
+    const newPage: PageItem = {
+      num: nextNum,
+      id: String(nextNum).padStart(2, '0'),
+      title: `추가 섹션 ${nextNum}`,
+    }
+    setPages((prev) => [...prev, newPage])
+    setActivePage(nextNum)
+    setOrderToast(`새 페이지 [추가 섹션 ${nextNum}]이 추가되었습니다.`)
+    setTimeout(() => setOrderToast(null), 3000)
+  }
 
   // 사진 후보 리스트
   const photoCandidates = [
@@ -192,38 +293,65 @@ export const DraftEditorView: React.FC<DraftEditorViewProps> = ({
       {/* 3-Column Workbench Workspace */}
       <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* LEFT COLUMN: 목차 구조 & 1:1 레이아웃 블록 (Col 3 on lg) */}
-        <aside className="lg:col-span-3 bg-white rounded-2xl shadow-xs border border-slate-200 p-4 flex flex-col gap-4">
+        <aside className="lg:col-span-3 bg-white rounded-2xl shadow-xs border border-slate-200 p-4 flex flex-col gap-3">
           <div className="flex items-center justify-between pb-2 border-b border-slate-100">
             <div className="flex items-center gap-2">
               <h2 className="text-base font-bold text-slate-900">목차 구조</h2>
               <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[11px] font-bold">
-                8쪽 중 {activePage}쪽
+                {pages.length}쪽 중 {activePage}쪽
               </span>
             </div>
             <button
               type="button"
-              onClick={() => alert('새 페이지 블록이 추가되었습니다.')}
-              className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition-colors cursor-pointer"
+              onClick={handleAddPage}
+              className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 hover:bg-[#E6F4F1] hover:text-[#007A78] transition-colors cursor-pointer"
               title="새 페이지 추가"
             >
               <Plus className="h-4 w-4" />
             </button>
           </div>
 
-          {/* Page Tree List */}
-          <nav aria-label="문서 목차" className="flex flex-col gap-1">
-            {pageList.map((item) => {
+          {/* Reorder Notification Toast Banner */}
+          {orderToast && (
+            <div className="px-3 py-1.5 rounded-xl bg-[#E6F4F1] text-[#007A78] text-[11px] font-semibold flex items-center gap-1.5 animate-fade-in border border-[#007A78]/20">
+              <Sparkles className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">{orderToast}</span>
+            </div>
+          )}
+
+          {/* Page Tree List (HTML5 Drag & Drop Supported) */}
+          <nav aria-label="문서 목차" className="flex flex-col gap-1.5">
+            {pages.map((item, index) => {
               const isActive = activePage === item.num
+              const isDragging = draggedIndex === index
+              const isOver = dragOverIndex === index && draggedIndex !== index
 
               if (isActive) {
                 return (
                   <div
                     key={item.id}
-                    className="flex flex-col rounded-xl bg-[#E6F4F1]/60 border border-[#007A78]/30 shadow-2xs p-1.5 gap-1.5"
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, index)}
+                    onDragOver={(e) => handleDragOver(e, index)}
+                    onDrop={(e) => handleDrop(e, index)}
+                    onDragEnd={handleDragEnd}
+                    className={`flex flex-col rounded-xl transition-all p-1.5 gap-1.5 select-none ${
+                      isDragging
+                        ? 'opacity-40 border-2 border-dashed border-[#007A78] bg-slate-50'
+                        : isOver
+                          ? 'border-2 border-[#007A78] bg-[#E6F4F1] scale-[1.01] shadow-sm'
+                          : 'bg-[#E6F4F1]/60 border border-[#007A78]/30 shadow-2xs'
+                    }`}
                   >
-                    <div className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-white text-[#007A78] shadow-2xs">
+                    <div className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-white text-[#007A78] shadow-2xs group">
                       <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <GripVertical className="h-4 w-4 text-[#007A78] cursor-grab" />
+                        <button
+                          type="button"
+                          className="cursor-grab active:cursor-grabbing p-0.5 rounded hover:bg-slate-100 text-[#007A78] transition-colors"
+                          title="위아래로 드래그하여 순서 변경"
+                        >
+                          <GripVertical className="h-4 w-4 shrink-0" />
+                        </button>
                         <span className="text-[11px] font-bold w-5">
                           {item.id}
                         </span>
@@ -231,7 +359,31 @@ export const DraftEditorView: React.FC<DraftEditorViewProps> = ({
                           {item.title}
                         </span>
                       </div>
-                      <span className="w-2 h-2 rounded-full bg-[#007A78]"></span>
+
+                      <div className="flex items-center gap-1">
+                        {/* Up / Down Quick Action Buttons on Hover */}
+                        <div className="opacity-0 group-hover:opacity-100 flex items-center transition-opacity">
+                          <button
+                            type="button"
+                            disabled={index === 0}
+                            onClick={(e) => handleMoveStep(index, 'up', e)}
+                            className="p-1 rounded hover:bg-slate-100 text-slate-500 hover:text-slate-900 disabled:opacity-20 cursor-pointer"
+                            title="위로 이동"
+                          >
+                            <ChevronUp className="h-3 w-3" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={index === pages.length - 1}
+                            onClick={(e) => handleMoveStep(index, 'down', e)}
+                            className="p-1 rounded hover:bg-slate-100 text-slate-500 hover:text-slate-900 disabled:opacity-20 cursor-pointer"
+                            title="아래로 이동"
+                          >
+                            <ChevronDown className="h-3 w-3" />
+                          </button>
+                        </div>
+                        <span className="w-2 h-2 rounded-full bg-[#007A78]"></span>
+                      </div>
                     </div>
 
                     {/* 1:1 Synchronized Layout Block Children */}
@@ -264,16 +416,57 @@ export const DraftEditorView: React.FC<DraftEditorViewProps> = ({
               return (
                 <div
                   key={item.id}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, index)}
+                  onDragOver={(e) => handleDragOver(e, index)}
+                  onDrop={(e) => handleDrop(e, index)}
+                  onDragEnd={handleDragEnd}
                   onClick={() => setActivePage(item.num)}
-                  className="group flex items-center gap-2 px-2.5 py-2 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer text-slate-700"
+                  className={`group flex items-center justify-between px-2.5 py-2 rounded-xl transition-all cursor-pointer text-slate-700 select-none ${
+                    isDragging
+                      ? 'opacity-40 border-2 border-dashed border-[#007A78] bg-slate-50'
+                      : isOver
+                        ? 'border-2 border-[#007A78] bg-[#E6F4F1] scale-[1.01] shadow-sm'
+                        : 'border border-transparent hover:bg-slate-100'
+                  }`}
                 >
-                  <GripVertical className="h-4 w-4 text-slate-400 opacity-40 group-hover:opacity-100 cursor-grab" />
-                  <span className="text-[11px] font-semibold text-slate-400 w-5">
-                    {item.id}
-                  </span>
-                  <span className="text-xs font-semibold text-slate-800 flex-1 truncate">
-                    {item.title}
-                  </span>
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <button
+                      type="button"
+                      className="cursor-grab active:cursor-grabbing p-0.5 rounded text-slate-400 opacity-60 group-hover:opacity-100 hover:text-slate-800 transition-colors"
+                      title="위아래로 드래그하여 순서 변경"
+                    >
+                      <GripVertical className="h-4 w-4 shrink-0" />
+                    </button>
+                    <span className="text-[11px] font-semibold text-slate-400 w-5">
+                      {item.id}
+                    </span>
+                    <span className="text-xs font-semibold text-slate-800 flex-1 truncate">
+                      {item.title}
+                    </span>
+                  </div>
+
+                  {/* Up / Down Quick Buttons on Inactive Rows */}
+                  <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 transition-opacity">
+                    <button
+                      type="button"
+                      disabled={index === 0}
+                      onClick={(e) => handleMoveStep(index, 'up', e)}
+                      className="p-1 rounded hover:bg-slate-200 text-slate-500 hover:text-slate-900 disabled:opacity-20 cursor-pointer"
+                      title="위로 이동"
+                    >
+                      <ChevronUp className="h-3 w-3" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={index === pages.length - 1}
+                      onClick={(e) => handleMoveStep(index, 'down', e)}
+                      className="p-1 rounded hover:bg-slate-200 text-slate-500 hover:text-slate-900 disabled:opacity-20 cursor-pointer"
+                      title="아래로 이동"
+                    >
+                      <ChevronDown className="h-3 w-3" />
+                    </button>
+                  </div>
                 </div>
               )
             })}
@@ -286,7 +479,7 @@ export const DraftEditorView: React.FC<DraftEditorViewProps> = ({
           <div className="w-full bg-white rounded-2xl shadow-xs border border-slate-200 px-4 py-2 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 text-xs font-bold">
-                {activePage} / 8쪽
+                {activePage} / {pages.length}쪽
               </span>
               <div className="h-4 w-px bg-slate-200 mx-1"></div>
               <div className="flex items-center bg-slate-100 rounded-lg p-0.5 gap-1">
@@ -552,7 +745,9 @@ export const DraftEditorView: React.FC<DraftEditorViewProps> = ({
             {/* Page Footer Meta Stamp */}
             <div className="pt-4 flex items-center justify-between text-[10px] text-slate-400 border-t border-slate-100 mt-6">
               <span>{companyName || '거산케미칼'} 회사소개서 · 초안</span>
-              <span className="font-bold text-slate-900">03</span>
+              <span className="font-bold text-slate-900">
+                {String(activePage).padStart(2, '0')}
+              </span>
             </div>
           </article>
         </main>
