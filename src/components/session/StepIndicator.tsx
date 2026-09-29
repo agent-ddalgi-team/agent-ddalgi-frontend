@@ -6,11 +6,13 @@ export type WizardStep = 1 | 2 | 3
 interface StepIndicatorProps {
   currentStep: WizardStep
   onStepChange?: (step: WizardStep) => void
+  maxStep?: WizardStep
 }
 
 export const StepIndicator: React.FC<StepIndicatorProps> = ({
   currentStep,
   onStepChange,
+  maxStep = 3,
 }) => {
   const steps = [
     { number: 1, label: '자료 선택·사전 확인' },
@@ -33,8 +35,16 @@ export const StepIndicator: React.FC<StepIndicatorProps> = ({
               <React.Fragment key={s.number}>
                 <button
                   type="button"
+                  aria-label={`${s.number}단계 ${s.label}`}
+                  aria-current={isActive ? 'step' : undefined}
+                  disabled={s.number > maxStep}
+                  title={
+                    s.number > maxStep
+                      ? '자료를 점검하고 초안을 먼저 생성해 주세요.'
+                      : undefined
+                  }
                   onClick={() => onStepChange?.(s.number as WizardStep)}
-                  className={`px-3.5 sm:px-4 py-1.5 rounded-full text-xs font-semibold transition-all flex items-center gap-2 cursor-pointer ${
+                  className={`px-3.5 sm:px-4 py-1.5 rounded-full text-xs font-semibold transition-all flex items-center gap-2 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
                     isActive
                       ? 'bg-[#E6F4F1] text-[#007A78] font-bold shadow-xs scale-[1.02]'
                       : isCompleted

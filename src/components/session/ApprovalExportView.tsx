@@ -242,7 +242,7 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
           splitPageData,
         ).map((p, idx) => ({
           section_id: `sec-${idx + 1}`,
-          key: `overview`,
+          key: 'company_summary',
           title: p.title.replace('\n', ' - '),
           paragraphs: [
             {
