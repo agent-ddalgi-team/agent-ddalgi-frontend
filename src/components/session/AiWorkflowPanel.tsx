@@ -1,3 +1,4 @@
+import { readableIssueMessage } from '../../constants/profileLabels'
 import {
   AlertTriangle,
   Check,
@@ -436,7 +437,24 @@ export function AiWorkflowPanel({
                           ? '주의'
                           : '안내'}
                     </span>
-                    {issue.message}
+                    {readableIssueMessage(issue.message)}
+                    {facts
+                      .filter((fact) => issue.fact_ids?.includes(fact.fact_id))
+                      .map((fact) => (
+                        <div
+                          key={fact.fact_id}
+                          className="mt-2 rounded-md bg-white/70 p-2 text-slate-700"
+                        >
+                          <p>
+                            <strong>확인할 내용:</strong>{' '}
+                            {fact.value || '자료별 내용 비교가 필요합니다.'}
+                          </p>
+                          <Evidence
+                            refs={fact.evidence_refs}
+                            sources={sources}
+                          />
+                        </div>
+                      ))}
                   </li>
                 ))}
               </ul>

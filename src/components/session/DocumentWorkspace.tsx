@@ -27,6 +27,7 @@ import {
   X,
 } from 'lucide-react'
 import type { DraftBlock, DraftResult } from '../../api/aiWorkflow'
+import { readableIssueMessage } from '../../constants/profileLabels'
 import { canAcknowledge } from '../../api/publication'
 import { usePublication } from '../../hooks/usePublication'
 import type { WizardStep } from './StepIndicator'
@@ -78,20 +79,25 @@ function ManuscriptInput(props: ComponentProps<'textarea'>) {
     const input = ref.current
     if (!input) return
     let width = 0
+    let frame = 0
     const fit = () => {
       if (!input.clientWidth) return
+      width = input.clientWidth
       input.style.height = 'auto'
       input.style.height = `${input.scrollHeight}px`
     }
     fit()
     const observer = new ResizeObserver(() => {
       if (input.clientWidth !== width) {
-        width = input.clientWidth
-        fit()
+        cancelAnimationFrame(frame)
+        frame = requestAnimationFrame(fit)
       }
     })
     observer.observe(input)
-    return () => observer.disconnect()
+    return () => {
+      observer.disconnect()
+      cancelAnimationFrame(frame)
+    }
   }, [props.value])
   return <textarea {...props} ref={ref} rows={1} />
 }
@@ -726,6 +732,20 @@ export function DocumentWorkspace({
                   key={item.page_id}
                   hidden={currentIndex !== index}
                   data-editor-page={item.page_id}
+                  data-layout={
+                    [
+                      'cover_photo',
+                      'text_photo',
+                      'process_steps',
+                      'product_grid',
+                      'contact_photo',
+                    ].includes(item.layout_key)
+                      ? item.layout_key
+                      : 'text'
+                  }
+                  data-multi-photo={
+                    item.blocks.filter((b) => b.type === 'image').length > 1
+                  }
                   className={`editor-paper flex flex-col ${reading ? 'reading' : 'editing'}`}
                   style={{ width: `${zoom}%` }}
                 >
@@ -741,160 +761,177 @@ export function DocumentWorkspace({
                   {item.blocks[0]?.type !== 'heading' && (
                     <h2 className="editor-page-title">{item.title}</h2>
                   )}
-                  {item.blocks.map((block, blockIndex) => {
-                    const editable =
-                      ['heading', 'paragraph', 'image'].includes(block.type) ||
-                      (block.type === 'list' &&
-                        Array.isArray(block.content.items) &&
-                        block.content.items.every((v) => typeof v === 'string'))
-                    const removed = work.removed.includes(block.block_id)
-                    const on = selectedBlock?.block_id === block.block_id
-                    const issues = openIssues.filter((i) =>
-                      i.block_ids.includes(block.block_id),
-                    )
-                    return (
-                      <div
-                        key={block.block_id}
-                        data-block-id={block.block_id}
-                        data-block-type={block.type}
-                        data-hero={block.type === 'heading' && blockIndex === 0}
-                        className={`editor-block relative ${on ? 'selected' : ''} ${removed ? 'removed' : ''}`}
-                        onFocus={() => setBlockId(block.block_id)}
-                        onClick={() => setBlockId(block.block_id)}
-                      >
-                        <div className="editor-block-tools flex flex-wrap items-center justify-between gap-2 text-[11px]">
-                          <span
-                            className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-bold ${on ? 'bg-white text-[#007A78] shadow-2xs ring-1 ring-slate-200' : 'text-slate-500'}`}
-                          >
-                            {blockLabel[block.type]}
-                            {removed ? ' · 삭제 예정' : ''}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            {!!issues.length && (
-                              <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
-                                <AlertTriangle className="h-3 w-3" />
-                                확인 필요 {issues.length}
-                              </span>
-                            )}
-                            {isPhoto(block) && (
+                  <div className="editor-page-body">
+                    {item.blocks.map((block, blockIndex) => {
+                      const editable =
+                        ['heading', 'paragraph', 'image'].includes(
+                          block.type,
+                        ) ||
+                        (block.type === 'list' &&
+                          Array.isArray(block.content.items) &&
+                          block.content.items.every(
+                            (v) => typeof v === 'string',
+                          ))
+                      const removed = work.removed.includes(block.block_id)
+                      const on = selectedBlock?.block_id === block.block_id
+                      const issues = openIssues.filter((i) =>
+                        i.block_ids.includes(block.block_id),
+                      )
+                      return (
+                        <div
+                          key={block.block_id}
+                          data-block-id={block.block_id}
+                          data-block-type={block.type}
+                          data-hero={
+                            block.type === 'heading' && blockIndex === 0
+                          }
+                          className={`editor-block relative ${on ? 'selected' : ''} ${removed ? 'removed' : ''}`}
+                          onFocus={() => setBlockId(block.block_id)}
+                          onClick={() => setBlockId(block.block_id)}
+                        >
+                          <div className="editor-block-tools flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                            <span
+                              className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-bold ${on ? 'bg-white text-[#007A78] shadow-2xs ring-1 ring-slate-200' : 'text-slate-500'}`}
+                            >
+                              {blockLabel[block.type]}
+                              {removed ? ' · 삭제 예정' : ''}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              {!!issues.length && (
+                                <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                                  <AlertTriangle className="h-3 w-3" />
+                                  확인 필요 {issues.length}
+                                </span>
+                              )}
+                              {isPhoto(block) && (
+                                <button
+                                  type="button"
+                                  className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-0.5 font-semibold text-[#007A78] shadow-2xs hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                  disabled={
+                                    work.busy ||
+                                    !!work.saved.job ||
+                                    work.dirty ||
+                                    work.actionBlocked ||
+                                    work.proposal?.status === 'proposed'
+                                  }
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setBlockId(block.block_id)
+                                    setInspector(true)
+                                    void work.requestPhotos(block.block_id)
+                                  }}
+                                >
+                                  <ImageIcon className="h-3 w-3" />
+                                  사진 교체
+                                </button>
+                              )}
                               <button
                                 type="button"
-                                className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-0.5 font-semibold text-[#007A78] shadow-2xs hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                                disabled={
-                                  work.busy ||
-                                  !!work.saved.job ||
-                                  work.dirty ||
-                                  work.actionBlocked ||
-                                  work.proposal?.status === 'proposed'
-                                }
+                                className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-[#E6F4F1] px-2 py-0.5 font-bold text-[#007A78]"
                                 onClick={(e) => {
                                   e.stopPropagation()
                                   setBlockId(block.block_id)
                                   setInspector(true)
-                                  void work.requestPhotos(block.block_id)
                                 }}
                               >
-                                <ImageIcon className="h-3 w-3" />
-                                사진 교체
+                                <Sparkles className="h-3 w-3" />
+                                근거·편집 보조
                               </button>
+                            </span>
+                          </div>
+                          {block.type === 'image' &&
+                            typeof block.content.asset_id === 'string' && (
+                              <figure className="editor-photo">
+                                <img
+                                  src={assetUrl(block.content.asset_id)}
+                                  data-fit={
+                                    block.content.fit === 'crop'
+                                      ? 'crop'
+                                      : 'contain'
+                                  }
+                                  alt={String(
+                                    block.content.alt ||
+                                      block.content.caption ||
+                                      '선택 자료의 사진',
+                                  )}
+                                />
+                              </figure>
                             )}
+                          {reading && editable ? (
+                            block.type === 'heading' ? (
+                              <h2 className="editor-text">
+                                {work.edits[block.block_id] ?? blockText(block)}
+                              </h2>
+                            ) : block.type === 'list' ? (
+                              <ul className="editor-text list-disc pl-5">
+                                {(
+                                  work.edits[block.block_id] ?? blockText(block)
+                                )
+                                  .split('\n')
+                                  .map((line, i) => (
+                                    <li key={i}>{line}</li>
+                                  ))}
+                              </ul>
+                            ) : (
+                              <p className="editor-text">
+                                {work.edits[block.block_id] ?? blockText(block)}
+                              </p>
+                            )
+                          ) : editable ? (
+                            <ManuscriptInput
+                              data-edit-block={block.block_id}
+                              aria-label={`${index + 1}쪽 ${block.type === 'heading' ? '제목' : block.type === 'image' ? '사진 설명' : '본문'} ${block.block_id}`}
+                              value={
+                                work.edits[block.block_id] ?? blockText(block)
+                              }
+                              disabled={work.blocked || removed}
+                              onChange={(e) =>
+                                work.edit(block.block_id, e.target.value)
+                              }
+                              className="editor-text w-full resize-none overflow-hidden bg-transparent outline-none disabled:opacity-60"
+                            />
+                          ) : (
+                            renderBlock(block)
+                          )}
+                          <div className="editor-block-meta flex items-center justify-between gap-2 text-[11px]">
+                            <span className="inline-flex items-center gap-1 text-slate-500">
+                              <Link2 className="h-3.5 w-3.5 text-[#007A78]" />
+                              {block.evidence_refs.length
+                                ? `원문 근거 ${block.evidence_refs.length}개 연결`
+                                : '연결된 원문 근거 없음'}
+                            </span>
                             <button
                               type="button"
-                              className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-[#E6F4F1] px-2 py-0.5 font-bold text-[#007A78]"
+                              className="inline-flex cursor-pointer items-center gap-1 text-red-700 hover:underline disabled:cursor-not-allowed disabled:opacity-40"
+                              disabled={work.blocked}
                               onClick={(e) => {
                                 e.stopPropagation()
-                                setBlockId(block.block_id)
-                                setInspector(true)
+                                work.toggleRemove(block.block_id)
                               }}
                             >
-                              <Sparkles className="h-3 w-3" />
-                              근거·편집 보조
+                              <Trash2 className="h-3 w-3" />
+                              {removed
+                                ? '삭제 취소'
+                                : block.type === 'image_placeholder'
+                                  ? '사진 자리 삭제'
+                                  : '이 블록 삭제'}
                             </button>
-                          </span>
+                          </div>
+                          {!reading &&
+                            work.proposal?.kind === 'image' &&
+                            photoTarget?.block_id === block.block_id && (
+                              <div
+                                className="mt-5"
+                                onClick={(event) => event.stopPropagation()}
+                                onFocus={(event) => event.stopPropagation()}
+                              >
+                                {photoProposalPanel}
+                              </div>
+                            )}
                         </div>
-                        {block.type === 'image' &&
-                          typeof block.content.asset_id === 'string' && (
-                            <figure className="editor-photo">
-                              <img
-                                src={assetUrl(block.content.asset_id)}
-                                alt={String(
-                                  block.content.caption || '선택 자료의 사진',
-                                )}
-                              />
-                            </figure>
-                          )}
-                        {reading && editable ? (
-                          block.type === 'heading' ? (
-                            <h2 className="editor-text">
-                              {work.edits[block.block_id] ?? blockText(block)}
-                            </h2>
-                          ) : block.type === 'list' ? (
-                            <ul className="editor-text list-disc pl-5">
-                              {(work.edits[block.block_id] ?? blockText(block))
-                                .split('\n')
-                                .map((line, i) => (
-                                  <li key={i}>{line}</li>
-                                ))}
-                            </ul>
-                          ) : (
-                            <p className="editor-text">
-                              {work.edits[block.block_id] ?? blockText(block)}
-                            </p>
-                          )
-                        ) : editable ? (
-                          <ManuscriptInput
-                            data-edit-block={block.block_id}
-                            aria-label={`${index + 1}쪽 ${block.type === 'heading' ? '제목' : block.type === 'image' ? '사진 설명' : '본문'} ${block.block_id}`}
-                            value={
-                              work.edits[block.block_id] ?? blockText(block)
-                            }
-                            disabled={work.blocked || removed}
-                            onChange={(e) =>
-                              work.edit(block.block_id, e.target.value)
-                            }
-                            className="editor-text w-full resize-none overflow-hidden bg-transparent outline-none disabled:opacity-60"
-                          />
-                        ) : (
-                          renderBlock(block)
-                        )}
-                        <div className="editor-block-meta flex items-center justify-between gap-2 text-[11px]">
-                          <span className="inline-flex items-center gap-1 text-slate-500">
-                            <Link2 className="h-3.5 w-3.5 text-[#007A78]" />
-                            {block.evidence_refs.length
-                              ? `원문 근거 ${block.evidence_refs.length}개 연결`
-                              : '연결된 원문 근거 없음'}
-                          </span>
-                          <button
-                            type="button"
-                            className="inline-flex cursor-pointer items-center gap-1 text-red-700 hover:underline disabled:cursor-not-allowed disabled:opacity-40"
-                            disabled={work.blocked}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              work.toggleRemove(block.block_id)
-                            }}
-                          >
-                            <Trash2 className="h-3 w-3" />
-                            {removed
-                              ? '삭제 취소'
-                              : block.type === 'image_placeholder'
-                                ? '사진 자리 삭제'
-                                : '이 블록 삭제'}
-                          </button>
-                        </div>
-                        {!reading &&
-                          work.proposal?.kind === 'image' &&
-                          photoTarget?.block_id === block.block_id && (
-                            <div
-                              className="mt-5"
-                              onClick={(event) => event.stopPropagation()}
-                              onFocus={(event) => event.stopPropagation()}
-                            >
-                              {photoProposalPanel}
-                            </div>
-                          )}
-                      </div>
-                    )
-                  })}
+                      )
+                    })}
+                  </div>
                   {!reading &&
                     !item.blocks.some(isPhoto) &&
                     item.blocks.length > 0 && (
@@ -1470,10 +1507,15 @@ export function DocumentWorkspace({
                                 src={assetUrl(previews[index])}
                               />
                             ) : (
-                              <div className="aspect-[210/297] overflow-hidden p-3">
-                                <p className="mb-2 line-clamp-2 text-xs font-bold text-slate-900">
-                                  {item.title}
-                                </p>
+                              <div
+                                data-review-card={item.page_id}
+                                className="aspect-[210/297] overflow-hidden p-3"
+                              >
+                                {item.blocks[0]?.type !== 'heading' && (
+                                  <p className="mb-2 line-clamp-2 text-xs font-bold text-slate-900">
+                                    {item.title}
+                                  </p>
+                                )}
                                 {item.blocks.slice(0, 4).map((block) => (
                                   <p
                                     key={block.block_id}
@@ -1637,7 +1679,10 @@ export function DocumentWorkspace({
                       </a>
                     ) : (
                       page && (
-                        <article className="w-full rounded-xl border border-slate-200 bg-white p-6 shadow-md">
+                        <article
+                          data-review-page={page.page_id}
+                          className="w-full rounded-xl border border-slate-200 bg-white p-6 shadow-md"
+                        >
                           <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-2">
                             <span className="truncate text-[10px] font-bold uppercase tracking-wider text-[#007A78]">
                               {doc.title}
@@ -1646,9 +1691,11 @@ export function DocumentWorkspace({
                               PAGE {String(currentIndex + 1).padStart(2, '0')}
                             </span>
                           </div>
-                          <h3 className="mb-5 text-xl font-bold">
-                            {page.title}
-                          </h3>
+                          {page.blocks[0]?.type !== 'heading' && (
+                            <h3 className="mb-5 text-xl font-bold">
+                              {page.title}
+                            </h3>
+                          )}
                           {page.blocks.map((block) => (
                             <div key={block.block_id} className="my-4">
                               {renderBlock(block)}
@@ -1705,7 +1752,7 @@ export function DocumentWorkspace({
                         key={issue.issue_id}
                         className="rounded-lg bg-amber-50 p-2 text-[11px] leading-snug text-amber-900"
                       >
-                        {issue.message}
+                        {readableIssueMessage(issue.message)}
                       </p>
                     ))}
                     <div className="mt-auto flex flex-col gap-1.5 border-t border-slate-100 pt-2">
@@ -1920,7 +1967,7 @@ export function DocumentWorkspace({
                       )}
                     </p>
                     <p className="mt-1.5 whitespace-pre-wrap leading-relaxed">
-                      {issue.message}
+                      {readableIssueMessage(issue.message)}
                     </p>
                     {issue.resolution?.reason && (
                       <p className="mt-1.5 text-[11px] text-slate-500">

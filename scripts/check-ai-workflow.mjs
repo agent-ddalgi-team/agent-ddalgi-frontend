@@ -1331,6 +1331,43 @@ finally:
       )
     }
     await screen(3)
+    const readable = await evaluate(
+      `import('/src/constants/profileLabels.ts').then(m => m.readableIssueMessage('lead_time의 의미·조건을 원문에서 추가 확인해야 합니다.'))`,
+    )
+    assert.ok(
+      readable.includes('납기') &&
+        readable.includes('자료를 보완') &&
+        !readable.includes('lead_time'),
+    )
+    const checkTitles = async () => {
+      const state = await documentState()
+      for (const page of state.document.pages) {
+        if (page.blocks[0]?.type !== 'heading') continue
+        const card = await evaluate(
+          `document.querySelector('[data-review-card="${page.page_id}"]') ? Array.from(document.querySelector('[data-review-card="${page.page_id}"]').children).map(p => p.textContent) : null`,
+        )
+        assert.ok(card)
+        const title = page.blocks[0].content.text
+        assert.equal(
+          card.filter((text) => text === title).length,
+          1,
+          'first heading occurs once inside draft card',
+        )
+      }
+    }
+    await checkTitles()
+    await click('페이지 보기')
+    assert.equal(
+      await evaluate(
+        `document.querySelector('[data-review-page] > h3') !== null`,
+      ),
+      false,
+      'heading block supplies page title',
+    )
+    await click('카드 보기')
+    checks.push(
+      'draft cards and page view do not repeat headings; old field-key errors have Korean actions',
+    )
     await screenshot('s03-cards-before-check.png')
     await click('내용 검증 실행')
     await until(
