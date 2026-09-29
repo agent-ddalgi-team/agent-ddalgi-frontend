@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import type { ReactNode } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
+import type { ComponentProps, ReactNode } from 'react'
 import {
   AlertTriangle,
   ArrowLeft,
@@ -72,6 +72,30 @@ const isText = (block: DraftBlock | undefined) =>
 const isPhoto = (block: DraftBlock | undefined) =>
   !!block && ['image', 'image_placeholder'].includes(block.type)
 
+function ManuscriptInput(props: ComponentProps<'textarea'>) {
+  const ref = useRef<HTMLTextAreaElement>(null)
+  useLayoutEffect(() => {
+    const input = ref.current
+    if (!input) return
+    let width = 0
+    const fit = () => {
+      if (!input.clientWidth) return
+      input.style.height = 'auto'
+      input.style.height = `${input.scrollHeight}px`
+    }
+    fit()
+    const observer = new ResizeObserver(() => {
+      if (input.clientWidth !== width) {
+        width = input.clientWidth
+        fit()
+      }
+    })
+    observer.observe(input)
+    return () => observer.disconnect()
+  }, [props.value])
+  return <textarea {...props} ref={ref} rows={1} />
+}
+
 function Banner({
   tone,
   children,
@@ -116,6 +140,7 @@ export function DocumentWorkspace({
   const [inspector, setInspector] = useState(false)
   const [view, setView] = useState<'cards' | 'split'>('cards')
   const [zoom, setZoom] = useState(100)
+  const [reading, setReading] = useState(false)
   const [instruction, setInstruction] = useState('')
   const [photoChoice, setPhotoChoice] = useState({
     proposalId: '',
@@ -170,8 +195,11 @@ export function DocumentWorkspace({
     setView('split')
   }
   const focusBlock = (id: string) => {
+    setReading(false)
     setBlockId(id)
-    document.querySelector<HTMLElement>(`[data-edit-block="${id}"]`)?.focus()
+    requestAnimationFrame(() =>
+      document.querySelector<HTMLElement>(`[data-edit-block="${id}"]`)?.focus(),
+    )
   }
   const pageIssues = (index: number) =>
     openIssues.filter((issue) =>
@@ -313,6 +341,124 @@ export function DocumentWorkspace({
     </>
   )
 
+  const photoProposalPanel = work.proposal?.kind === 'image' &&
+    ['proposed', 'stale'].includes(work.proposal.status) && (
+      <section
+        data-testid="photo-proposal"
+        className="photo-choices flex flex-col gap-3 rounded-xl border border-teal-100 bg-white p-4 shadow-lg"
+        aria-label="사진 후보 선택"
+      >
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-bold text-slate-900">사진 후보 선택</h3>
+          <span
+            role="status"
+            className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600"
+          >
+            {
+              {
+                proposed: '선택 대기',
+                applied: '적용됨',
+                rejected: '취소됨',
+                stale: '기준 변경',
+              }[work.proposal.status]
+            }
+          </span>
+        </div>
+        <p className="text-[11px] font-semibold text-[#007A78]">
+          요청 당시 문서 버전 {work.proposal.base_document_revision} ·{' '}
+          {photoTarget && photoTargetPage
+            ? `${doc.pages.indexOf(photoTargetPage) + 1}쪽 ${blockLabel[photoTarget.type]} · ${isPhoto(photoTarget) ? '사진 교체' : '이 블록 뒤에 추가'}`
+            : '이전 선택 영역'}
+        </p>
+        <p className="text-[11px] leading-relaxed text-slate-500">
+          {work.proposal.rationale}
+        </p>
+        {!work.proposal.candidates?.length && (
+          <p className="rounded-lg bg-amber-50 p-2 text-[11px] text-amber-900">
+            사용할 수 있는 사진 후보가 없습니다. 자료 선택에서 사진을 첨부하거나
+            글 중심으로 구성해 주세요.
+          </p>
+        )}
+        <div className="grid max-h-96 grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-3">
+          {work.proposal.candidates?.map((candidate) => {
+            const asset = candidate.changes.find((c) => c.op === 'insert_block')
+              ?.block?.content.asset_id
+            const on = chosenPhoto === candidate.candidate_id
+            return (
+              <label
+                key={candidate.candidate_id}
+                className={`cursor-pointer rounded-xl border p-2 text-[11px] transition-all ${on ? 'border-[#007A78] bg-[#E6F4F1]/60 ring-1 ring-[#007A78]/20' : 'border-slate-200 hover:border-slate-300'}`}
+              >
+                {typeof asset === 'string' && (
+                  <img
+                    src={assetUrl(asset)}
+                    alt={candidate.label}
+                    className="mb-2 h-24 w-full rounded-lg bg-slate-800 object-cover"
+                    loading="lazy"
+                  />
+                )}
+                <span className="flex items-start gap-1.5">
+                  <input
+                    type="radio"
+                    name="photo-candidate"
+                    className="mt-0.5 accent-[#007A78]"
+                    value={candidate.candidate_id}
+                    checked={on}
+                    disabled={!work.canApplyProposal}
+                    onChange={() =>
+                      setPhotoChoice({
+                        proposalId: work.proposal!.proposal_id,
+                        candidateId: candidate.candidate_id,
+                      })
+                    }
+                  />
+                  <span className="break-words font-semibold text-slate-800">
+                    {candidate.label}
+                  </span>
+                </span>
+              </label>
+            )
+          })}
+        </div>
+        {!work.proposalCurrent && work.proposal.status === 'proposed' && (
+          <p className="rounded-lg bg-amber-50 p-2 text-[11px] text-amber-800">
+            문서가 바뀌었습니다. 후보를 취소하고 다시 요청해 주세요.
+          </p>
+        )}
+        {!work.proposalReadable && (
+          <p className="text-[11px] text-red-800">
+            사진 후보의 변경 내용을 확인할 수 없습니다.
+          </p>
+        )}
+        <p className="text-[11px] leading-relaxed text-slate-500">
+          실제 회사 사진을 AI로 만들지 않고 첨부한 사진 중에서만 제안합니다.
+          교체 시 이전 사진의 설명은 지워지므로 적용 후 사진 설명을 입력하고
+          다시 검증해 주세요.
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            className={primary}
+            disabled={!work.canApplyProposal || !chosenPhoto}
+            onClick={() => void work.applyProposal(chosenPhoto)}
+          >
+            선택한 사진 적용
+          </button>
+          <button
+            type="button"
+            className={ghost}
+            disabled={
+              work.blocked ||
+              !['proposed', 'stale'].includes(work.proposal.status)
+            }
+            onClick={() => void work.rejectProposal()}
+          >
+            사진 후보 취소
+          </button>
+        </div>
+      </section>
+    )
+
   return (
     <section
       id="draft-preview"
@@ -388,7 +534,7 @@ export function DocumentWorkspace({
         </div>
 
         <div className="editor-layout">
-          {/* 왼쪽: 목차 구조 */}
+          {/* 왼쪽: 문서 목차 */}
           <nav
             className={`${panel} document-toc flex flex-col gap-3`}
             aria-label="문서 목차"
@@ -431,7 +577,10 @@ export function DocumentWorkspace({
                       >
                         {String(index + 1).padStart(2, '0')}
                       </span>
-                      <span className="min-w-0 flex-1 truncate text-xs font-semibold">
+                      <span
+                        title={item.title}
+                        className="min-w-0 flex-1 break-words text-xs font-semibold leading-relaxed"
+                      >
                         {item.title}
                       </span>
                       {!!pageIssues(index).length && (
@@ -446,51 +595,63 @@ export function DocumentWorkspace({
                         <span className="h-2 w-2 shrink-0 rounded-full bg-[#007A78]" />
                       )}
                     </button>
-                    {active && (
-                      <ul className="flex flex-col gap-1 py-1 pl-3 pr-1 text-[11px]">
-                        {item.blocks.map((block, blockIndex) => {
-                          const on = selectedBlock?.block_id === block.block_id
-                          const removed = work.removed.includes(block.block_id)
-                          return (
-                            <li key={block.block_id}>
-                              <button
-                                type="button"
-                                aria-pressed={on}
-                                data-block-select={block.block_id}
-                                onClick={() => focusBlock(block.block_id)}
-                                className={`flex w-full cursor-pointer items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left transition-all ${
-                                  on
-                                    ? 'border border-[#007A78] bg-white font-bold text-[#007A78] shadow-2xs ring-1 ring-[#007A78]/20'
-                                    : 'border border-transparent bg-white/80 text-slate-700 hover:border-slate-200 hover:bg-white'
-                                } ${removed ? 'line-through opacity-60' : ''}`}
-                              >
-                                <span className="truncate">
-                                  블록 {blockIndex + 1} ·{' '}
-                                  {blockLabel[block.type]}
-                                  {removed ? ' · 삭제 예정' : ''}
-                                </span>
-                                {on ? (
-                                  <Check className="h-3.5 w-3.5 shrink-0" />
-                                ) : (
-                                  isPhoto(block) && (
-                                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">
-                                      사진
-                                    </span>
-                                  )
-                                )}
-                              </button>
-                            </li>
-                          )
-                        })}
-                      </ul>
-                    )}
                   </li>
                 )
               })}
             </ol>
+            {page && (
+              <div className="min-h-0 border-t border-slate-100 pt-3">
+                <h3 className="mb-2 text-[11px] font-semibold text-slate-500">
+                  현재 페이지 내용 · {page.blocks.length}개
+                </h3>
+                <ul className="toc-contents flex flex-col gap-1">
+                  {page.blocks.map((block) => {
+                    const on = selectedBlock?.block_id === block.block_id
+                    const removed = work.removed.includes(block.block_id)
+                    const text = (
+                      work.edits[block.block_id] ?? blockText(block)
+                    )
+                      .replace(/\s+/g, ' ')
+                      .trim()
+                    const label = text || `${blockLabel[block.type]} 내용 없음`
+                    return (
+                      <li key={block.block_id}>
+                        <button
+                          type="button"
+                          aria-pressed={on}
+                          aria-label={`${blockLabel[block.type]}: ${label}${removed ? ' · 삭제 예정' : ''}`}
+                          title={label}
+                          data-block-select={block.block_id}
+                          onClick={() => focusBlock(block.block_id)}
+                          className={`flex w-full cursor-pointer items-start gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors ${
+                            on
+                              ? 'border-[#007A78]/40 bg-[#E6F4F1] text-[#007A78]'
+                              : 'border-transparent text-slate-700 hover:bg-slate-50'
+                          } ${removed ? 'line-through opacity-60' : ''}`}
+                        >
+                          <span className="min-w-0 flex-1">
+                            <span className="mb-0.5 block text-[10px] text-slate-500">
+                              {blockLabel[block.type]}
+                              {removed ? ' · 삭제 예정' : ''}
+                            </span>
+                            <span
+                              className={`line-clamp-2 break-words text-xs leading-relaxed ${block.type === 'heading' ? 'font-semibold' : ''}`}
+                            >
+                              {label}
+                            </span>
+                          </span>
+                          {on && (
+                            <Check className="mt-1 h-3.5 w-3.5 shrink-0" />
+                          )}
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+            )}
             <p className="text-[11px] leading-relaxed text-slate-500">
-              페이지와 블록을 고르면 가운데 편집 캔버스와 오른쪽 편집 보조가
-              같은 블록을 가리킵니다.
+              페이지를 선택한 뒤 내용을 누르면 해당 편집 위치로 이동합니다.
             </p>
           </nav>
 
@@ -527,6 +688,15 @@ export function DocumentWorkspace({
                 </span>
               </div>
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className={button}
+                  aria-pressed={reading}
+                  onClick={() => setReading(!reading)}
+                >
+                  {reading ? <Edit3 size={14} /> : <FileText size={14} />}
+                  {reading ? '편집하기' : '문서 보기'}
+                </button>
                 <label className="flex items-center gap-1 text-[11px] text-slate-500">
                   배율
                   <select
@@ -556,21 +726,21 @@ export function DocumentWorkspace({
                   key={item.page_id}
                   hidden={currentIndex !== index}
                   data-editor-page={item.page_id}
-                  className="editor-paper flex flex-col"
+                  className={`editor-paper flex flex-col ${reading ? 'reading' : 'editing'}`}
                   style={{ width: `${zoom}%` }}
                 >
-                  <div className="mb-5 flex items-center justify-between border-b border-slate-100 pb-2">
-                    <span className="truncate text-[11px] font-bold uppercase tracking-widest text-[#007A78]">
+                  <div className="editor-page-header">
+                    <span className="editor-brand" title={doc.title}>
                       {doc.title}
                     </span>
-                    <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
-                      {initial.demo ? '시연 문서' : '회사소개서'} · PAGE{' '}
+                    <span className="shrink-0">
+                      {initial.demo ? '시연 문서' : '회사소개서'} ·{' '}
                       {String(index + 1).padStart(2, '0')}
                     </span>
                   </div>
-                  <h2 className="mb-5 text-2xl font-bold leading-snug tracking-tight text-slate-900">
-                    {item.title}
-                  </h2>
+                  {item.blocks[0]?.type !== 'heading' && (
+                    <h2 className="editor-page-title">{item.title}</h2>
+                  )}
                   {item.blocks.map((block, blockIndex) => {
                     const editable =
                       ['heading', 'paragraph', 'image'].includes(block.type) ||
@@ -586,15 +756,17 @@ export function DocumentWorkspace({
                       <div
                         key={block.block_id}
                         data-block-id={block.block_id}
+                        data-block-type={block.type}
+                        data-hero={block.type === 'heading' && blockIndex === 0}
                         className={`editor-block relative ${on ? 'selected' : ''} ${removed ? 'removed' : ''}`}
                         onFocus={() => setBlockId(block.block_id)}
                         onClick={() => setBlockId(block.block_id)}
                       >
-                        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                        <div className="editor-block-tools flex flex-wrap items-center justify-between gap-2 text-[11px]">
                           <span
                             className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-bold ${on ? 'bg-white text-[#007A78] shadow-2xs ring-1 ring-slate-200' : 'text-slate-500'}`}
                           >
-                            블록 {blockIndex + 1} · {blockLabel[block.type]}
+                            {blockLabel[block.type]}
                             {removed ? ' · 삭제 예정' : ''}
                           </span>
                           <span className="flex items-center gap-1">
@@ -640,9 +812,37 @@ export function DocumentWorkspace({
                             </button>
                           </span>
                         </div>
-                        {block.type === 'image' && renderBlock(block)}
-                        {editable ? (
-                          <textarea
+                        {block.type === 'image' &&
+                          typeof block.content.asset_id === 'string' && (
+                            <figure className="editor-photo">
+                              <img
+                                src={assetUrl(block.content.asset_id)}
+                                alt={String(
+                                  block.content.caption || '선택 자료의 사진',
+                                )}
+                              />
+                            </figure>
+                          )}
+                        {reading && editable ? (
+                          block.type === 'heading' ? (
+                            <h2 className="editor-text">
+                              {work.edits[block.block_id] ?? blockText(block)}
+                            </h2>
+                          ) : block.type === 'list' ? (
+                            <ul className="editor-text list-disc pl-5">
+                              {(work.edits[block.block_id] ?? blockText(block))
+                                .split('\n')
+                                .map((line, i) => (
+                                  <li key={i}>{line}</li>
+                                ))}
+                            </ul>
+                          ) : (
+                            <p className="editor-text">
+                              {work.edits[block.block_id] ?? blockText(block)}
+                            </p>
+                          )
+                        ) : editable ? (
+                          <ManuscriptInput
                             data-edit-block={block.block_id}
                             aria-label={`${index + 1}쪽 ${block.type === 'heading' ? '제목' : block.type === 'image' ? '사진 설명' : '본문'} ${block.block_id}`}
                             value={
@@ -652,28 +852,12 @@ export function DocumentWorkspace({
                             onChange={(e) =>
                               work.edit(block.block_id, e.target.value)
                             }
-                            rows={
-                              block.type === 'heading'
-                                ? 2
-                                : Math.max(
-                                    3,
-                                    Math.min(
-                                      12,
-                                      Math.ceil(
-                                        (
-                                          work.edits[block.block_id] ??
-                                          blockText(block)
-                                        ).length / 35,
-                                      ),
-                                    ),
-                                  )
-                            }
-                            className={`w-full resize-y rounded-md bg-transparent px-1 py-2 leading-7 outline-[#007A78] disabled:opacity-50 ${block.type === 'heading' ? 'text-lg font-bold' : 'text-sm text-slate-800'}`}
+                            className="editor-text w-full resize-none overflow-hidden bg-transparent outline-none disabled:opacity-60"
                           />
                         ) : (
                           renderBlock(block)
                         )}
-                        <div className="mt-2 flex items-center justify-between gap-2 border-t border-slate-100 pt-2 text-[11px]">
+                        <div className="editor-block-meta flex items-center justify-between gap-2 text-[11px]">
                           <span className="inline-flex items-center gap-1 text-slate-500">
                             <Link2 className="h-3.5 w-3.5 text-[#007A78]" />
                             {block.evidence_refs.length
@@ -697,14 +881,54 @@ export function DocumentWorkspace({
                                 : '이 블록 삭제'}
                           </button>
                         </div>
+                        {!reading &&
+                          work.proposal?.kind === 'image' &&
+                          photoTarget?.block_id === block.block_id && (
+                            <div
+                              className="mt-5"
+                              onClick={(event) => event.stopPropagation()}
+                              onFocus={(event) => event.stopPropagation()}
+                            >
+                              {photoProposalPanel}
+                            </div>
+                          )}
                       </div>
                     )
                   })}
-                  <div className="mt-auto flex items-center justify-between border-t border-slate-100 pt-4 text-[10px] text-slate-400">
-                    <span>{doc.title} · 초안 편집 미리보기</span>
-                    <span className="font-bold text-slate-900">
-                      {String(index + 1).padStart(2, '0')}
+                  {!reading &&
+                    !item.blocks.some(isPhoto) &&
+                    item.blocks.length > 0 && (
+                      <button
+                        type="button"
+                        className="editor-add-photo"
+                        disabled={
+                          work.actionBlocked ||
+                          work.proposal?.status === 'proposed'
+                        }
+                        onClick={() => {
+                          const target =
+                            item.blocks.find(
+                              (block) => block.type === 'paragraph',
+                            ) || item.blocks[0]
+                          setBlockId(target.block_id)
+                          void work.requestPhotos(target.block_id)
+                        }}
+                      >
+                        <ImageIcon size={22} />
+                        <span>
+                          <strong>이 페이지에 사진 넣기</strong>
+                          <small>
+                            선택한 자료의 사진을 확인하고 직접 적용합니다
+                          </small>
+                        </span>
+                        <ArrowRight size={16} />
+                      </button>
+                    )}
+                  <div className="editor-page-footer">
+                    <span>
+                      회사소개서 · {reading ? '문서 보기' : '편집 중'}
                     </span>
+                    <span>{String(index + 1).padStart(2, '0')}</span>
                   </div>
                 </article>
               ))}
@@ -979,126 +1203,9 @@ export function DocumentWorkspace({
               </section>
             )}
 
-            {work.proposal?.kind === 'image' && (
-              <section
-                data-testid="photo-proposal"
-                className="flex flex-col gap-2.5 border-t border-slate-100 pt-3"
-                aria-label="사진 후보 선택"
-              >
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-bold text-slate-900">
-                    사진 후보 선택
-                  </h3>
-                  <span
-                    role="status"
-                    className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600"
-                  >
-                    {
-                      {
-                        proposed: '선택 대기',
-                        applied: '적용됨',
-                        rejected: '취소됨',
-                        stale: '기준 변경',
-                      }[work.proposal.status]
-                    }
-                  </span>
-                </div>
-                <p className="text-[11px] font-semibold text-[#007A78]">
-                  요청 당시 문서 버전 {work.proposal.base_document_revision} ·{' '}
-                  {photoTarget && photoTargetPage
-                    ? `${doc.pages.indexOf(photoTargetPage) + 1}쪽 ${blockLabel[photoTarget.type]} · ${isPhoto(photoTarget) ? '사진 교체' : '이 블록 뒤에 추가'}`
-                    : '이전 선택 영역'}
-                </p>
-                <p className="text-[11px] leading-relaxed text-slate-500">
-                  {work.proposal.rationale}
-                </p>
-                {!work.proposal.candidates?.length && (
-                  <p className="rounded-lg bg-amber-50 p-2 text-[11px] text-amber-900">
-                    사용할 수 있는 사진 후보가 없습니다. 자료 선택에서 사진을
-                    첨부하거나 글 중심으로 구성해 주세요.
-                  </p>
-                )}
-                <div className="grid max-h-96 grid-cols-2 gap-2 overflow-y-auto">
-                  {work.proposal.candidates?.map((candidate) => {
-                    const asset = candidate.changes.find(
-                      (c) => c.op === 'insert_block',
-                    )?.block?.content.asset_id
-                    const on = chosenPhoto === candidate.candidate_id
-                    return (
-                      <label
-                        key={candidate.candidate_id}
-                        className={`cursor-pointer rounded-xl border p-2 text-[11px] transition-all ${on ? 'border-[#007A78] bg-[#E6F4F1]/60 ring-1 ring-[#007A78]/20' : 'border-slate-200 hover:border-slate-300'}`}
-                      >
-                        {typeof asset === 'string' && (
-                          <img
-                            src={assetUrl(asset)}
-                            alt={candidate.label}
-                            className="mb-2 h-24 w-full rounded-lg bg-slate-800 object-cover"
-                            loading="lazy"
-                          />
-                        )}
-                        <span className="flex items-start gap-1.5">
-                          <input
-                            type="radio"
-                            name="photo-candidate"
-                            className="mt-0.5 accent-[#007A78]"
-                            value={candidate.candidate_id}
-                            checked={on}
-                            disabled={!work.canApplyProposal}
-                            onChange={() =>
-                              setPhotoChoice({
-                                proposalId: work.proposal!.proposal_id,
-                                candidateId: candidate.candidate_id,
-                              })
-                            }
-                          />
-                          <span className="break-words font-semibold text-slate-800">
-                            {candidate.label}
-                          </span>
-                        </span>
-                      </label>
-                    )
-                  })}
-                </div>
-                {!work.proposalCurrent &&
-                  work.proposal.status === 'proposed' && (
-                    <p className="rounded-lg bg-amber-50 p-2 text-[11px] text-amber-800">
-                      문서가 바뀌었습니다. 후보를 취소하고 다시 요청해 주세요.
-                    </p>
-                  )}
-                {!work.proposalReadable && (
-                  <p className="text-[11px] text-red-800">
-                    사진 후보의 변경 내용을 확인할 수 없습니다.
-                  </p>
-                )}
-                <p className="text-[11px] leading-relaxed text-slate-500">
-                  실제 회사 사진을 AI로 만들지 않고 첨부한 사진 중에서만
-                  제안합니다. 교체 시 이전 사진의 설명은 지워지므로 적용 후 사진
-                  설명을 입력하고 다시 검증해 주세요.
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    className={primary}
-                    disabled={!work.canApplyProposal || !chosenPhoto}
-                    onClick={() => void work.applyProposal(chosenPhoto)}
-                  >
-                    선택한 사진 적용
-                  </button>
-                  <button
-                    type="button"
-                    className={ghost}
-                    disabled={
-                      work.blocked ||
-                      !['proposed', 'stale'].includes(work.proposal.status)
-                    }
-                    onClick={() => void work.rejectProposal()}
-                  >
-                    사진 후보 취소
-                  </button>
-                </div>
-              </section>
-            )}
+            {work.proposal?.kind === 'image' &&
+              photoTargetPage?.page_id !== page?.page_id &&
+              photoProposalPanel}
 
             {selectedBlock && (
               <section className="flex flex-col gap-2 border-t border-slate-100 pt-3">
