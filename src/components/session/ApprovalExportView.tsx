@@ -24,6 +24,8 @@ import {
   generateAndDownloadPdf,
   triggerBrowserPdfPrint,
 } from '../../utils/pdfExport'
+import { exportClientDocument } from '../../utils/documentExport'
+import type { EditableDraftSection } from '../../types/session'
 
 interface ApprovalExportViewProps {
   companyName: string
@@ -202,19 +204,55 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
     setCurrentPage(next)
   }
 
-  // 최종 PDF 생성 및 다운로드 핸들러
-  const handleExportPdf = async () => {
+  // 최종 문서(PDF/DOCX) 생성 및 다운로드 핸들러
+  const handleExport = async () => {
     if (isExporting || !isApproved) return
     setIsExporting(true)
-    setExportStatus('PDF 고해상도 인쇄용 문서를 생성하고 있습니다...')
 
+    if (exportFormat === 'DOCX') {
+      setExportStatus('Word(DOCX) 문서를 생성하고 있습니다...')
+      try {
+        const sections: EditableDraftSection[] = Object.values(
+          splitPageData,
+        ).map((p, idx) => ({
+          section_id: `sec-${idx + 1}`,
+          key: `overview`,
+          title: p.title.replace('\n', ' - '),
+          paragraphs: [
+            {
+              paragraph_id: `p-${idx + 1}-1`,
+              text: `${p.bodyTitle}: ${p.bodyText}`,
+              original_text: p.bodyText,
+            },
+          ],
+        }))
+        const fileName = await exportClientDocument(
+          sections,
+          companyName || '거산케미칼',
+          'docx',
+        )
+        setExportStatus(
+          `[저장 완료] ${fileName} 파일이 정상 다운로드되었습니다.`,
+        )
+        setTimeout(() => setExportStatus(null), 5000)
+      } catch (err) {
+        console.error('DOCX Export Error:', err)
+        setExportStatus('[오류] Word 문서 생성 중 문제가 발생했습니다.')
+      } finally {
+        setIsExporting(false)
+      }
+      return
+    }
+
+    setExportStatus('PDF 고해상도 인쇄용 문서를 생성하고 있습니다...')
     try {
       const fileName = await generateAndDownloadPdf({
         companyName: companyName || '거산케미칼',
       })
       setExportStatus(`[저장 완료] ${fileName} 파일이 정상 다운로드되었습니다.`)
       setTimeout(() => setExportStatus(null), 5000)
-    } catch {
+    } catch (err) {
+      console.error('PDF Export Error:', err)
       setExportStatus('[오류] PDF 생성 중 문제가 발생했습니다.')
     } finally {
       setIsExporting(false)
@@ -350,11 +388,13 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
 
                 <button
                   type="button"
-                  onClick={handleExportPdf}
+                  onClick={handleExport}
                   className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-[#007A78] hover:bg-[#0F766E] text-white text-xs font-bold transition-colors shadow-2xs cursor-pointer"
                 >
                   <Download className="h-3.5 w-3.5" />
-                  <span>PDF 빠른저장</span>
+                  <span>
+                    {exportFormat === 'DOCX' ? 'Word 저장' : 'PDF 빠른저장'}
+                  </span>
                 </button>
               </div>
             </div>
@@ -797,7 +837,9 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
             <span className="w-2 h-2 rounded-full bg-[#007A78] animate-pulse"></span>
             <span>
               {exportStatus ||
-                'PDF 배치 확인 완료 · 승인 후 완성본을 생성합니다.'}
+                (exportFormat === 'DOCX'
+                  ? 'Word 문서 형식 준비 완료 · 승인 후 완성본을 생성합니다.'
+                  : 'PDF 배치 확인 완료 · 승인 후 완성본을 생성합니다.')}
             </span>
           </div>
 
@@ -814,7 +856,7 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
             <button
               type="button"
               disabled={!isApproved || isExporting}
-              onClick={handleExportPdf}
+              onClick={handleExport}
               className="inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#007A78] to-[#0F766E] hover:brightness-105 active:scale-[0.99] text-white text-xs font-bold shadow-sm transition-all disabled:bg-slate-300 disabled:text-slate-400 disabled:shadow-none cursor-pointer"
             >
               {isExporting ? (
@@ -823,7 +865,9 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
                 <Download className="h-4 w-4" />
               )}
               <span>
-                {isExporting ? 'PDF 생성 중...' : '승인하고 PDF 만들기'}
+                {isExporting
+                  ? `${exportFormat} 생성 중...`
+                  : `승인하고 ${exportFormat} 만들기`}
               </span>
             </button>
           </div>
