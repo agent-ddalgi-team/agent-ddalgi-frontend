@@ -56,6 +56,10 @@ export const WebPhotoCollector: React.FC<WebPhotoCollectorProps> = ({
       setFeedback(
         `웹 사이트(${query}) 및 관련 소스에서 고화질 기업 사진 ${results.length}건을 탐색 완료했습니다.`,
       )
+    } catch (cause) {
+      setPhotos([])
+      setSelectedIds(new Set())
+      setFeedback(cause instanceof Error ? cause.message : '사진을 불러오지 못했습니다.')
     } finally {
       setIsSearching(false)
     }

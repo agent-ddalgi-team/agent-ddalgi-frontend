@@ -3,10 +3,6 @@ import { aiApi } from '../api/aiWorkflow'
 import type { AiJob, DraftResult, Preflight } from '../api/aiWorkflow'
 import { sourceApi, SourceApiError } from '../api/sources'
 import type { SourceSession } from '../api/sources'
-import {
-  getFallbackDraft,
-  getFallbackPreflight,
-} from '../services/mockBackend'
 
 const STORAGE = 'ddalgi.sources.v1.ai'
 type Attempt = {
@@ -137,14 +133,14 @@ export function useAiWorkflow(session: SourceSession | null) {
           preflight,
           document,
           busy: false,
-          watch: !!restored.attempt?.jobId && !preflight && !document,
+          watch: !!restored.attempt?.jobId,
         })
-      } catch {
+      } catch (cause) {
         if (!cancelled && epoch.current === version)
           setState({
             ...initial,
             busy: false,
-            error: '',
+            error: message(cause),
             watch: false,
           })
       }
@@ -299,33 +295,6 @@ export function useAiWorkflow(session: SourceSession | null) {
       }))
     } catch (cause) {
       if (epoch.current !== version) return
-
-      // 백엔드 미연결/네트워크 실패 시 로컬 스탠드얼론 데이터로 자동 복구
-      if (attempt.kind === 'preflight') {
-        const preflight = getFallbackPreflight(saved.sessionId)
-        setState((s) => ({
-          ...s,
-          preflight,
-          busy: false,
-          watch: false,
-          error: '',
-          notice: '✓ 사전 점검을 완료했습니다. 점검 결과를 확인하고 초안을 생성해 주세요.',
-          confirmed: true,
-        }))
-        return
-      } else if (attempt.kind === 'draft') {
-        const document = getFallbackDraft(saved.sessionId)
-        setState((s) => ({
-          ...s,
-          document,
-          busy: false,
-          watch: false,
-          error: '',
-          notice: '✓ 초안 생성을 완료했습니다. 2단계 초안 편집으로 이동합니다.',
-        }))
-        return
-      }
-
       // 4xx 확정 거부는 재요청 키를 버린다. 응답 유실/5xx는 같은 키로만 재전송한다.
       const definitive =
         cause instanceof SourceApiError &&
@@ -367,36 +336,55 @@ export function useAiWorkflow(session: SourceSession | null) {
   }
 
   const attempt = current.saved?.attempt
+  const terminalFailure =
+    current.job?.status === 'failed' || current.job?.status === 'cancelled'
   const locked =
     !!session &&
     (state.sessionId !== sid ||
       state.revision !== revision ||
-      current.busy)
+      current.busy ||
+      (!!attempt && !terminalFailure))
+  const draftFailed = terminalFailure && attempt?.kind === 'draft'
   return {
     ...current,
     locked,
     pendingResponse: !!attempt && !attempt.jobId,
-    canConfirm: !!current.preflight,
+    canConfirm:
+      !!current.preflight?.can_generate &&
+      !locked &&
+      !draftFailed &&
+      !current.document &&
+      !documentId,
     setConfirmed: (confirmed: boolean) =>
       setState((s) => ({ ...s, confirmed })),
     analyze: () => {
-      if (!session) return
+      if (!session || locked || current.document || documentId) return
       return submit(
         { kind: 'preflight', key: crypto.randomUUID() },
         { sessionId: sid, revision },
       )
     },
     generate: () => {
-      if (!session) return
+      if (
+        !session ||
+        locked ||
+        !current.confirmed ||
+        !current.preflight?.can_generate ||
+        draftFailed ||
+        current.document ||
+        documentId
+      )
+        return
       return submit(
         {
           kind: 'draft',
           key: crypto.randomUUID(),
-          preflightId: current.preflight?.preflight_id || 'pf-default',
+          preflightId: current.preflight.preflight_id,
         },
         {
           sessionId: sid,
-          revision: revision + 1,
+          revision,
+          preflightId: current.preflight.preflight_id,
         },
       )
     },

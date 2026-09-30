@@ -23,12 +23,9 @@ import {
 import type { SourceBrief, WorkSource } from '../../api/sources'
 import { useSources } from '../../hooks/useSources'
 import { useAiWorkflow } from '../../hooks/useAiWorkflow'
-import { AiWorkflowPanel } from './AiWorkflowPanel'
-import { DraftEditorView } from './DraftEditorView'
-import { ApprovalExportView } from './ApprovalExportView'
+import { AiWorkflowPanel, Block } from './AiWorkflowPanel'
+import { DocumentWorkspace } from './DocumentWorkspace'
 import type { WizardStep } from './StepIndicator'
-import { WebPhotoCollector } from './WebPhotoCollector'
-import { getFallbackDraft } from '../../services/mockBackend'
 
 const statusText = {
   queued: '읽기 대기',
@@ -115,26 +112,19 @@ export function SourceSelectionView({
   const [deleteSource, setDeleteSource] = useState<WorkSource | null>(null)
   const [inspectorOpen, setInspectorOpen] = useState(false)
   const selected = new Set(work.session?.selected_source_ids || [])
-  const activeDocument =
-    ai.document ||
-    (step > 1
-      ? getFallbackDraft(
-          work.session?.session_id || 'session-demo-standalone',
-          work.brief.purpose ? '거산케미칼' : '새 회사소개서',
-        )
-      : null)
-  const hasDocument = !!work.session?.document_summary || !!activeDocument
+  const hasDocument = !!work.session?.document_summary || !!ai.document
   useEffect(() => {
-    onDraftAvailable?.(!!activeDocument)
-  }, [activeDocument, onDraftAvailable])
+    onDraftAvailable?.(!!ai.document)
+  }, [ai.document, onDraftAvailable])
   useEffect(() => {
-    const rawTitle = activeDocument?.document.title || '거산케미칼'
-    const cleanName =
-      rawTitle.replace(/\s*(공식\s*)?회사소개서(\s*\d{4})?.*$/, '').trim() ||
-      '거산케미칼'
-    onCompanyChange(cleanName)
-  }, [activeDocument?.document.title, onCompanyChange])
-  const locked = !!work.busy
+    const title = ai.document?.document.title
+    onCompanyChange(
+      title?.replace(/\s*(공식\s*)?회사소개서(\s*\d{4})?.*$/, '').trim() ||
+        title ||
+        '새 회사소개서',
+    )
+  }, [ai.document?.document.title, onCompanyChange])
+  const locked = !!work.busy || ai.locked || hasDocument
   const isDemo = work.session ? work.session.demo : work.demo
   const counts = {
     registered: work.sources.filter((s) => s.scope === 'registered').length,
@@ -152,9 +142,11 @@ export function SourceSelectionView({
   const aiBlocked =
     !work.session ||
     !!work.busy ||
+    work.briefDirty ||
     work.pendingUpload ||
     pending > 0
-  const canAnalyze = !aiBlocked && selected.size > 0
+  const canAnalyze =
+    !aiBlocked && !ai.locked && !hasDocument && selected.size > 0
   const openInspector = (target = 'ai-workflow') => {
     setInspectorOpen(true)
     document
@@ -163,9 +155,6 @@ export function SourceSelectionView({
   }
   const analyze = () => {
     if (!canAnalyze) return
-    if (work.briefDirty) {
-      void work.saveBrief()
-    }
     void ai.analyze()
     openInspector()
   }
@@ -194,21 +183,21 @@ export function SourceSelectionView({
     : ai.locked
       ? 'AI 작업 확인 중'
       : ai.preflight
-        ? '확인한 자료로 초안 만들기'
+        ? ai.confirmed
+          ? '확인하고 초안 만들기'
+          : '점검 결과 확인 · 초안 만들기'
         : 'AI 자료 점검'
   const dockAction = hasDocument
     ? () => onNavigate(2)
     : ai.preflight
-      ? () => {
-          ai.setConfirmed(true)
-          void ai.generate()
-          onNavigate(2)
-        }
+      ? ai.confirmed && ai.canConfirm && !aiBlocked
+        ? () => void ai.generate()
+        : () => openInspector()
       : analyze
   const dockDisabled = hasDocument
-    ? !activeDocument
+    ? !ai.document
     : ai.preflight
-      ? false
+      ? aiBlocked || ai.locked
       : !canAnalyze
 
   const renderSource = (source: WorkSource) => {
@@ -528,7 +517,7 @@ export function SourceSelectionView({
             </div>
             <fieldset
               disabled={locked}
-              className="flex flex-col gap-5"
+              className="flex flex-col gap-5 disabled:opacity-60"
             >
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="brief-purpose" className={label}>
@@ -741,7 +730,7 @@ export function SourceSelectionView({
                 <button
                   type="button"
                   className={primary}
-                  disabled={locked}
+                  disabled={!work.briefDirty}
                   onClick={() => void work.saveBrief()}
                 >
                   작성 조건 저장
@@ -844,14 +833,6 @@ export function SourceSelectionView({
                   이번 작업에서만 임시 보관
                 </span>
               </div>
-
-              {/* 웹 사이트 및 회사 홈페이지 사진 자동 수집기 */}
-              <WebPhotoCollector
-                companyName={work.brief.purpose ? '거산케미칼' : '회사'}
-                onAddPhotos={work.addWebPhotos}
-                disabled={!!work.busy}
-              />
-
               <input
                 ref={fileInput}
                 type="file"
@@ -859,7 +840,7 @@ export function SourceSelectionView({
                 accept=".txt,.md,.pdf,.docx,.pptx,.jpg,.jpeg,.png"
                 aria-label="자료 파일 선택"
                 className="sr-only"
-                disabled={!work.session || !!work.busy}
+                disabled={!work.session || locked}
                 onChange={(e) => {
                   chooseFiles(Array.from(e.target.files || []))
                   e.target.value = ''
@@ -873,13 +854,13 @@ export function SourceSelectionView({
                 }`}
                 onDragOver={(e) => {
                   e.preventDefault()
-                  if (work.session && !work.busy) setDragging(true)
+                  if (work.session && !locked) setDragging(true)
                 }}
                 onDragLeave={() => setDragging(false)}
                 onDrop={(e) => {
                   e.preventDefault()
                   setDragging(false)
-                  if (work.session && !work.busy)
+                  if (work.session && !locked)
                     chooseFiles(Array.from(e.dataTransfer.files))
                 }}
               >
@@ -889,7 +870,7 @@ export function SourceSelectionView({
                 <button
                   type="button"
                   className={button}
-                  disabled={!work.session || !!work.busy}
+                  disabled={!work.session || locked}
                   onClick={() => fileInput.current?.click()}
                 >
                   <Plus className="h-3.5 w-3.5 text-[#007A78]" />
@@ -941,14 +922,9 @@ export function SourceSelectionView({
               session={work.session}
               selectedCount={selected.size}
               readableCount={readable}
-              blocked={false}
+              blocked={aiBlocked || selected.size === 0}
               canAnalyze={canAnalyze}
               onAnalyze={analyze}
-              onGenerate={() => {
-                ai.setConfirmed(true)
-                void ai.generate()
-                onNavigate(2)
-              }}
             />
             <details className={`${panel} text-xs`} open={!ai.preflight}>
               <summary className="cursor-pointer font-bold text-slate-700">
@@ -1038,26 +1014,20 @@ export function SourceSelectionView({
         </div>
       </div>
 
-      {step === 2 && (
-        <DraftEditorView
-          companyName={
-            activeDocument?.document.title
-              ?.replace(/\s*(공식\s*)?회사소개서(\s*\d{4})?.*$/, '')
-              .trim() || '거산케미칼'
-          }
-          onBackToSources={() => onNavigate(1)}
-          onProceedToApproval={() => onNavigate(3)}
-        />
-      )}
-
-      {step === 3 && (
-        <ApprovalExportView
-          companyName={
-            activeDocument?.document.title
-              ?.replace(/\s*(공식\s*)?회사소개서(\s*\d{4})?.*$/, '')
-              .trim() || '거산케미칼'
-          }
-          onBackToDraft={() => onNavigate(2)}
+      {ai.document && (
+        <DocumentWorkspace
+          key={ai.document.document.document_id}
+          initial={ai.document}
+          step={step}
+          onNavigate={onNavigate}
+          onClose={() => setConfirmClose(true)}
+          renderBlock={(block) => (
+            <Block
+              block={block}
+              sid={ai.document!.document.session_id}
+              sources={work.sources}
+            />
+          )}
         />
       )}
       {(confirmClose || deleteSource) && (
