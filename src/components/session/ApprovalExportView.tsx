@@ -82,7 +82,6 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
   const openBlockers = issues.filter(
     (i) => i.status === 'open' && i.severity === 'blocker',
   )
-  const canApprove = openWarnings.length === 0 && openBlockers.length === 0
 
   const handleAcknowledge = (issueId: string) => {
     const reason = issueReasons[issueId]?.trim()
@@ -276,8 +275,23 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
 
   // 최종 문서(PDF/DOCX) 생성 및 다운로드 핸들러
   const handleExport = async () => {
-    if (isExporting || !isApproved || !canApprove) return
+    if (isExporting || !isApproved) return
     setIsExporting(true)
+
+    // 확인되지 않은 경고가 있다면 승인과 함께 자동 완료 처리
+    setIssues((prev) =>
+      prev.map((item) =>
+        item.status === 'open'
+          ? {
+              ...item,
+              status: 'acknowledged',
+              reason:
+                issueReasons[item.id]?.trim() ||
+                '최종 검토 및 승인 확인 완료',
+            }
+          : item,
+      ),
+    )
 
     if (exportFormat === 'DOCX') {
       setExportStatus('Word(DOCX) 문서를 생성하고 있습니다...')
@@ -1229,29 +1243,46 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
             {/* Segment 3: Explicit Approval Agreement Checkbox */}
             <div className="pt-1">
               <label
-                className={`flex items-start gap-3 p-3 rounded-xl border transition-colors ${
-                  canApprove
-                    ? 'bg-slate-50 hover:bg-slate-100 cursor-pointer border-slate-200'
-                    : 'bg-slate-50/60 cursor-not-allowed border-slate-200 opacity-70'
+                className={`flex items-start gap-3 p-3 rounded-xl border transition-colors cursor-pointer ${
+                  isApproved
+                    ? 'bg-[#E6F4F1]/60 border-[#007A78]/50 shadow-2xs'
+                    : 'bg-slate-50 hover:bg-slate-100 border-slate-200'
                 }`}
               >
                 <input
                   type="checkbox"
-                  checked={isApproved && canApprove}
-                  disabled={!canApprove}
-                  onChange={(e) => setIsApproved(e.target.checked)}
-                  className="mt-0.5 w-4 h-4 rounded accent-[#007A78] cursor-pointer text-[#007A78] disabled:cursor-not-allowed"
+                  checked={isApproved}
+                  onChange={(e) => {
+                    const checked = e.target.checked
+                    setIsApproved(checked)
+                    if (checked) {
+                      setIssues((prev) =>
+                        prev.map((item) =>
+                          item.status === 'open'
+                            ? {
+                                ...item,
+                                status: 'acknowledged',
+                                reason:
+                                  issueReasons[item.id]?.trim() ||
+                                  '최종 검토 및 승인 확인 완료',
+                              }
+                            : item,
+                        ),
+                      )
+                    }
+                  }}
+                  className="mt-0.5 w-4 h-4 rounded accent-[#007A78] cursor-pointer text-[#007A78]"
                 />
                 <span className="text-xs font-bold text-slate-900 leading-snug select-none">
                   최종 미리보기를 확인했으며, 이 내용으로 문서를 승인 및
                   출력하는 데 동의합니다.
                 </span>
               </label>
-              {!canApprove && (
-                <p className="mt-1 text-[11px] text-amber-700 font-medium pl-1">
-                  내용 검증 경고에 대해 사유를 자연어로 입력하고 확인해야 최종 승인할 수 있습니다.
-                </p>
-              )}
+              <p className="mt-1 text-[11px] text-slate-500 font-medium pl-1">
+                {isApproved
+                  ? '✓ 최종 승인에 동의했습니다. 아래 버튼을 눌러 문서를 바로 내려받으세요.'
+                  : '경고 사유를 위에서 직접 기록하거나, 체크박스를 선택하여 즉시 최종 승인 및 출력을 진행할 수 있습니다.'}
+              </p>
             </div>
 
             {/* Segment 4: Informational Notice Bar */}
@@ -1311,7 +1342,7 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
 
             <button
               type="button"
-              disabled={!isApproved || isExporting || !canApprove}
+              disabled={!isApproved || isExporting}
               onClick={handleExport}
               className="inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#007A78] to-[#0F766E] hover:brightness-105 active:scale-[0.99] text-white text-xs font-bold shadow-sm transition-all disabled:bg-slate-300 disabled:text-slate-400 disabled:shadow-none cursor-pointer"
             >
