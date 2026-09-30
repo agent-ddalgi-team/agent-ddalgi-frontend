@@ -22,7 +22,6 @@ function App() {
   }
   const onDraftAvailable = useCallback((available: boolean) => {
     setHasDraft(available)
-    setStep((current) => (available ? (current === 1 ? 2 : current) : 1))
   }, [])
   return (
     <div className="flex min-h-screen flex-col bg-[#F1F5F9] font-sans text-[#0F172A] antialiased">
@@ -72,10 +71,10 @@ function App() {
         </div>
       </header>
 
-      {/* 2. 3단계 진행 표시 */}
+      {/* 2. 3단계 진행 표시 (1단계, 2단계, 3단계 상시 활성화) */}
       <StepIndicator
         currentStep={step}
-        maxStep={hasDraft ? 3 : 1}
+        maxStep={3}
         onStepChange={navigate}
       />
 

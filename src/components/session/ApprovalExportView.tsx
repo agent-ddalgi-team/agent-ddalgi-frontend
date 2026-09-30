@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import {
+  AlertTriangle,
   ArrowLeft,
   ArrowRight,
   Check,
@@ -46,12 +47,54 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
   // 3. 출력 형식 (PDF 기본 선택)
   const [exportFormat, setExportFormat] = useState<'PDF' | 'DOCX'>('PDF')
 
-  // 4. 최종 승인 동의 체크박스
-  const [isApproved, setIsApproved] = useState<boolean>(true)
+  // 4. 최종 승인 동의 체크박스 (미확인 경고가 있으면 승인 불가)
+  const [isApproved, setIsApproved] = useState<boolean>(false)
 
   // 5. 다운로드/생성 중 로딩 상태 및 피드백
   const [isExporting, setIsExporting] = useState<boolean>(false)
   const [exportStatus, setExportStatus] = useState<string | null>(null)
+
+  // 6. 내용 검증 경고 및 오류(자연어 사유 입력이 필요한 이슈)
+  const [issues, setIssues] = useState<
+    Array<{
+      id: string
+      code: string
+      severity: 'warning' | 'blocker'
+      message: string
+      status: 'open' | 'acknowledged'
+      reason?: string
+    }>
+  >([
+    {
+      id: 'issue-demo-01',
+      code: 'DEMO_VALUE',
+      severity: 'warning',
+      message:
+        '일부 지표(공정 자동화율 99.4%, 오차 허용률 0.02ppm 등)에 시연용 수치가 포함되어 있습니다. 확인 사유를 입력하세요.',
+      status: 'open',
+    },
+  ])
+  const [issueReasons, setIssueReasons] = useState<Record<string, string>>({})
+
+  const openWarnings = issues.filter(
+    (i) => i.status === 'open' && i.severity === 'warning',
+  )
+  const openBlockers = issues.filter(
+    (i) => i.status === 'open' && i.severity === 'blocker',
+  )
+  const canApprove = openWarnings.length === 0 && openBlockers.length === 0
+
+  const handleAcknowledge = (issueId: string) => {
+    const reason = issueReasons[issueId]?.trim()
+    if (!reason) return
+    setIssues((prev) =>
+      prev.map((item) =>
+        item.id === issueId
+          ? { ...item, status: 'acknowledged', reason }
+          : item,
+      ),
+    )
+  }
 
   // 8쪽 분할 데이터
   const splitPageData: Record<
@@ -233,7 +276,7 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
 
   // 최종 문서(PDF/DOCX) 생성 및 다운로드 핸들러
   const handleExport = async () => {
-    if (isExporting || !isApproved) return
+    if (isExporting || !isApproved || !canApprove) return
     setIsExporting(true)
 
     if (exportFormat === 'DOCX') {
@@ -998,9 +1041,31 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
             <div className="flex flex-col gap-2 pt-1 border-t border-slate-100">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-bold text-slate-900">확인 결과</h3>
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 text-xs font-semibold">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                  필수 문제 0개
+                <span
+                  className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                    openBlockers.length
+                      ? 'bg-red-50 text-red-800'
+                      : openWarnings.length
+                        ? 'bg-amber-50 text-amber-800'
+                        : 'bg-emerald-50 text-emerald-800'
+                  }`}
+                >
+                  {openBlockers.length ? (
+                    <>
+                      <AlertTriangle className="h-3.5 w-3.5 text-red-600" />
+                      필수 문제 {openBlockers.length}개
+                    </>
+                  ) : openWarnings.length ? (
+                    <>
+                      <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+                      미확인 경고 {openWarnings.length}개
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                      모든 검수 통과
+                    </>
+                  )}
                 </span>
               </div>
 
@@ -1064,22 +1129,125 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
                   </div>
                 </div>
               </div>
+
+              {/* 확인할 문제와 경고 (자연어 사유 입력 영역) */}
+              {issues.length > 0 && (
+                <div className="mt-2 flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-slate-900">
+                      확인할 문제와 경고 ({issues.length})
+                    </h4>
+                    <span className="text-[10px] text-slate-400">
+                      경고 사유를 자연어로 입력해야 승인 가능
+                    </span>
+                  </div>
+
+                  {issues.map((issue) => {
+                    const isAcknowledged = issue.status === 'acknowledged'
+                    return (
+                      <article
+                        key={issue.id}
+                        data-issue-code={issue.code}
+                        className={`rounded-xl border p-3 text-xs transition-all ${
+                          isAcknowledged
+                            ? 'border-emerald-200 bg-emerald-50/40 text-slate-600'
+                            : issue.severity === 'blocker'
+                              ? 'border-red-200 bg-red-50/70 text-red-900'
+                              : 'border-amber-200 bg-amber-50/70 text-amber-900'
+                        }`}
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-1.5 font-bold">
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                                isAcknowledged
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : issue.severity === 'blocker'
+                                    ? 'bg-red-100 text-red-800'
+                                    : 'bg-amber-100 text-amber-800'
+                              }`}
+                            >
+                              {issue.severity === 'blocker'
+                                ? '필수 수정'
+                                : '경고'}
+                            </span>
+                            <span className="text-[11px]">
+                              {isAcknowledged ? '확인 완료 ✓' : '확인 필요'}
+                            </span>
+                            <span className="text-slate-400 text-[10px]">
+                              · {issue.code}
+                            </span>
+                          </div>
+                        </div>
+
+                        <p className="mt-1.5 whitespace-pre-wrap leading-relaxed text-slate-700">
+                          {issue.message}
+                        </p>
+
+                        {isAcknowledged && issue.reason && (
+                          <div className="mt-2 rounded-lg bg-white/80 p-2 border border-emerald-200/60 text-[11px] text-emerald-800">
+                            <span className="font-bold">기록된 확인 사유: </span>
+                            <span>{issue.reason}</span>
+                          </div>
+                        )}
+
+                        {!isAcknowledged && (
+                          <div className="mt-2.5 flex flex-wrap gap-2">
+                            <input
+                              className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs placeholder:text-slate-400 focus:border-[#007A78] focus:outline-none focus:ring-1 focus:ring-[#007A78]"
+                              aria-label={`경고 확인 사유 ${issue.id}`}
+                              placeholder="경고를 확인한 사유를 입력하세요 (예: 시연용 수치 확인 완료)"
+                              value={issueReasons[issue.id] || ''}
+                              onChange={(e) =>
+                                setIssueReasons((prev) => ({
+                                  ...prev,
+                                  [issue.id]: e.target.value,
+                                }))
+                              }
+                            />
+                            <button
+                              type="button"
+                              disabled={!issueReasons[issue.id]?.trim()}
+                              onClick={() => handleAcknowledge(issue.id)}
+                              className="inline-flex shrink-0 cursor-pointer items-center justify-center rounded-xl bg-[#007A78] px-3 py-1.5 text-xs font-bold text-white shadow-xs transition-all hover:bg-[#006663] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+                            >
+                              경고 확인 기록
+                            </button>
+                          </div>
+                        )}
+                      </article>
+                    )
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Segment 3: Explicit Approval Agreement Checkbox */}
             <div className="pt-1">
-              <label className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer border border-slate-200">
+              <label
+                className={`flex items-start gap-3 p-3 rounded-xl border transition-colors ${
+                  canApprove
+                    ? 'bg-slate-50 hover:bg-slate-100 cursor-pointer border-slate-200'
+                    : 'bg-slate-50/60 cursor-not-allowed border-slate-200 opacity-70'
+                }`}
+              >
                 <input
                   type="checkbox"
-                  checked={isApproved}
+                  checked={isApproved && canApprove}
+                  disabled={!canApprove}
                   onChange={(e) => setIsApproved(e.target.checked)}
-                  className="mt-0.5 w-4 h-4 rounded accent-[#007A78] cursor-pointer text-[#007A78]"
+                  className="mt-0.5 w-4 h-4 rounded accent-[#007A78] cursor-pointer text-[#007A78] disabled:cursor-not-allowed"
                 />
                 <span className="text-xs font-bold text-slate-900 leading-snug select-none">
                   최종 미리보기를 확인했으며, 이 내용으로 문서를 승인 및
                   출력하는 데 동의합니다.
                 </span>
               </label>
+              {!canApprove && (
+                <p className="mt-1 text-[11px] text-amber-700 font-medium pl-1">
+                  내용 검증 경고에 대해 사유를 자연어로 입력하고 확인해야 최종 승인할 수 있습니다.
+                </p>
+              )}
             </div>
 
             {/* Segment 4: Informational Notice Bar */}
@@ -1139,7 +1307,7 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
 
             <button
               type="button"
-              disabled={!isApproved || isExporting}
+              disabled={!isApproved || isExporting || !canApprove}
               onClick={handleExport}
               className="inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#007A78] to-[#0F766E] hover:brightness-105 active:scale-[0.99] text-white text-xs font-bold shadow-sm transition-all disabled:bg-slate-300 disabled:text-slate-400 disabled:shadow-none cursor-pointer"
             >
