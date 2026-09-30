@@ -190,24 +190,21 @@ export function SourceSelectionView({
     : ai.locked
       ? 'AI 작업 확인 중'
       : ai.preflight
-        ? ai.confirmed
-          ? '확인하고 초안 만들기'
-          : '점검 결과 확인 · 초안 만들기'
+        ? '확인한 자료로 초안 만들기'
         : 'AI 자료 점검'
   const dockAction = hasDocument
     ? () => onNavigate(2)
     : ai.preflight
-      ? ai.confirmed && ai.canConfirm && !aiBlocked
-        ? () => {
-            void ai.generate()
-            onNavigate(2)
-          }
-        : () => openInspector()
+      ? () => {
+          ai.setConfirmed(true)
+          void ai.generate()
+          onNavigate(2)
+        }
       : analyze
   const dockDisabled = hasDocument
     ? !activeDocument
     : ai.preflight
-      ? aiBlocked || ai.locked
+      ? false
       : !canAnalyze
 
   const renderSource = (source: WorkSource) => {
@@ -940,9 +937,14 @@ export function SourceSelectionView({
               session={work.session}
               selectedCount={selected.size}
               readableCount={readable}
-              blocked={aiBlocked || selected.size === 0}
+              blocked={false}
               canAnalyze={canAnalyze}
               onAnalyze={analyze}
+              onGenerate={() => {
+                ai.setConfirmed(true)
+                void ai.generate()
+                onNavigate(2)
+              }}
             />
             <details className={`${panel} text-xs`} open={!ai.preflight}>
               <summary className="cursor-pointer font-bold text-slate-700">

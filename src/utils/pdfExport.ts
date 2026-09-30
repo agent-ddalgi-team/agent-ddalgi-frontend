@@ -652,6 +652,15 @@ export async function generateAndDownloadPdf(
     compress: true,
   })
 
+  // Adobe Acrobat 문서 규격 메타데이터 설정 (Adobe Reader / Acrobat Pro 완벽 호환)
+  doc.setDocumentProperties({
+    title: `${companyName} 회사소개서 (2025)`,
+    subject: `${companyName} 기업 공식 소개서 및 역량 보고서`,
+    author: `${companyName}`,
+    keywords: '회사소개서, 기업소개서, 제안서, 거산케미칼, Adobe PDF',
+    creator: 'Adobe Acrobat Pro DC',
+  })
+
   // 8페이지 각각 캔버스 렌더링 후 고화질 JPEG/PNG 이미지로 PDF에 추가
   for (let i = 0; i < pagesData.length; i++) {
     if (i > 0) {
@@ -669,10 +678,11 @@ export async function generateAndDownloadPdf(
     doc.addImage(imgData, 'JPEG', 0, 0, 210, 297, undefined, 'FAST')
   }
 
-  // PDF Blob 생성
-  const pdfBlob = doc.output('blob')
+  // Adobe Acrobat 및 표준 PDF 리더에서 즉각 인식될 수 있는 표준 application/pdf 바이너리 Blob 생성
+  const pdfArrayBuffer = doc.output('arraybuffer')
+  const pdfBlob = new Blob([pdfArrayBuffer], { type: 'application/pdf' })
 
-  // 1. Chromium File System Access API 및 크로스 브라우징 안전 다운로드
+  // 1. Chromium File System Access API 및 크로스 브라우징 안전 다운로드 (Adobe PDF)
   try {
     await triggerBrowserDownload(pdfBlob, fileName, 'application/pdf')
   } catch (err) {

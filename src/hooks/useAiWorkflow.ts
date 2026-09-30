@@ -137,7 +137,7 @@ export function useAiWorkflow(session: SourceSession | null) {
           preflight,
           document,
           busy: false,
-          watch: !!restored.attempt?.jobId,
+          watch: !!restored.attempt?.jobId && !preflight && !document,
         })
       } catch {
         if (!cancelled && epoch.current === version)
@@ -367,25 +367,16 @@ export function useAiWorkflow(session: SourceSession | null) {
   }
 
   const attempt = current.saved?.attempt
-  const terminalFailure =
-    current.job?.status === 'failed' || current.job?.status === 'cancelled'
   const locked =
     !!session &&
     (state.sessionId !== sid ||
       state.revision !== revision ||
-      current.busy ||
-      (!!attempt && !terminalFailure))
-  const draftFailed = terminalFailure && attempt?.kind === 'draft'
+      current.busy)
   return {
     ...current,
     locked,
     pendingResponse: !!attempt && !attempt.jobId,
-    canConfirm:
-      !!current.preflight?.can_generate &&
-      !locked &&
-      !draftFailed &&
-      !current.document &&
-      !documentId,
+    canConfirm: !!current.preflight,
     setConfirmed: (confirmed: boolean) =>
       setState((s) => ({ ...s, confirmed })),
     analyze: () => {

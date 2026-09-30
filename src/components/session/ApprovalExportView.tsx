@@ -324,12 +324,16 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
       return
     }
 
-    setExportStatus('PDF 고해상도 인쇄용 문서를 생성하고 있습니다...')
+    setExportStatus(
+      'Adobe Acrobat 호환 고해상도 PDF 문서를 생성하고 있습니다...',
+    )
     try {
       const fileName = await generateAndDownloadPdf({
         companyName: companyName || '거산케미칼',
       })
-      setExportStatus(`[저장 완료] ${fileName} 파일이 정상 다운로드되었습니다.`)
+      setExportStatus(
+        `[저장 완료] ${fileName} (Adobe Acrobat 규격) 정상 다운로드되었습니다.`,
+      )
       setTimeout(() => setExportStatus(null), 5000)
     } catch (err) {
       console.error('PDF Export Error:', err)
@@ -991,13 +995,13 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
                         <span className="w-1.5 h-1.5 rounded-full bg-white"></span>
                       </span>
                       <span className="text-xs font-bold text-slate-900">
-                        PDF
+                        Adobe PDF
                       </span>
                     </div>
                     <FileText className="h-4 w-4 text-[#007A78]" />
                   </div>
                   <p className="text-[11px] text-slate-500 pl-6">
-                    배포·인쇄용 (권장)
+                    Adobe Acrobat / Reader 호환 인쇄·배포용 (권장)
                   </p>
                 </button>
 
@@ -1318,8 +1322,8 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
               )}
               <span>
                 {isExporting
-                  ? `${exportFormat} 생성 중...`
-                  : `승인하고 ${exportFormat} 만들기`}
+                  ? `${exportFormat === 'PDF' ? 'Adobe PDF' : 'Word'} 생성 중...`
+                  : `승인하고 ${exportFormat === 'PDF' ? 'Adobe PDF' : 'Word'} 다운로드`}
               </span>
             </button>
           </div>
