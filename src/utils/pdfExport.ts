@@ -27,33 +27,72 @@ interface PageData {
 
 /**
  * 브라우저 이미지 비동기 로딩 헬퍼 (CORS 및 타임아웃 방어)
+ * 로컬 정적 에셋은 fetch -> Blob -> URL.createObjectURL로 변환하여 CORS 제한 및 Canvas 오염을 완벽히 방지합니다.
  */
-function loadBrowserImage(src: string): Promise<HTMLImageElement | null> {
-  return new Promise((resolve) => {
-    const img = new Image()
-    img.crossOrigin = 'anonymous'
+async function loadBrowserImage(src: string): Promise<HTMLImageElement | null> {
+  if (!src) return null
 
-    img.onload = () => {
-      resolve(img)
+  // 1. 상대 경로 또는 로컬 에셋인 경우, fetch로 Blob을 직접 생성하여 로드 (CORS 100% 방지)
+  const isRelative = !src.startsWith('http://') && !src.startsWith('https://')
+
+  if (isRelative && typeof window !== 'undefined' && typeof window.fetch === 'function') {
+    try {
+      const response = await fetch(src)
+      if (response.ok) {
+        const blob = await response.blob()
+        const objectUrl = URL.createObjectURL(blob)
+        return new Promise<HTMLImageElement | null>((resolve) => {
+          const img = new Image()
+          img.onload = () => resolve(img)
+          img.onerror = () => {
+            console.warn(`[PDF Export] Blob 이미지 생성 실패: ${src}`)
+            resolve(null)
+          }
+          img.src = objectUrl
+        })
+      }
+    } catch (e) {
+      console.warn(`[PDF Export] 로컬 에셋 fetch 실패 (${src}):`, e)
+    }
+  }
+
+  // 2. 외부 원격 이미지 또는 fetch 실패 시 직접 Image 객체로 로드
+  return new Promise<HTMLImageElement | null>((resolve) => {
+    const img = new Image()
+    if (src.startsWith('http://') || src.startsWith('https://')) {
+      img.crossOrigin = 'anonymous'
     }
 
+    let resolved = false
+    const onDone = (res: HTMLImageElement | null) => {
+      if (!resolved) {
+        resolved = true
+        resolve(res)
+      }
+    }
+
+    img.onload = () => onDone(img)
     img.onerror = () => {
       console.warn(`[PDF Export] 이미지 로딩 실패 (폴백 적용): ${src}`)
-      if (
-        !src.includes('geosan_catalytic_reactor_process.jpg')
-      ) {
-        img.src = '/assets/photos/geosan_catalytic_reactor_process.jpg'
+      // 로컬 안정 에셋으로 폴백 시도
+      if (src !== '/assets/photos/geosan_catalytic_reactor_process.jpg') {
+        const fallbackImg = new Image()
+        fallbackImg.onload = () => onDone(fallbackImg)
+        fallbackImg.onerror = () => onDone(null)
+        fallbackImg.src = '/assets/photos/geosan_catalytic_reactor_process.jpg'
       } else {
-        resolve(null)
+        onDone(null)
       }
     }
 
-    // 최대 3.5초 대기 후 타임아웃 시 안전하게 null 반환
+    // 최대 4.5초 대기 후 타임아웃 시 안전하게 반환
     setTimeout(() => {
-      if (!img.complete) {
-        resolve(null)
+      if (img.complete && img.naturalWidth > 0) {
+        onDone(img)
+      } else {
+        onDone(null)
       }
-    }, 3500)
+    }, 4500)
 
     img.src = src
   })
@@ -295,37 +334,46 @@ function renderPageToCanvas(
 
     ctx.restore()
 
-    // 사진 좌측 하단 캡션 플로팅 배지 (동적 너비 자동 계산 및 안전 클리핑)
+    // 사진 좌측 하단 캡션 플로팅 배지 (동적 너비 자동 계산, 여유 패딩 및 안전 클리핑)
     ctx.font =
-      'bold 14px "Pretendard", -apple-system, BlinkMacSystemFont, "Malgun Gothic", "맑은 고딕", sans-serif'
+      'bold 15px "Pretendard", -apple-system, BlinkMacSystemFont, "Malgun Gothic", "맑은 고딕", sans-serif'
     const badgeText = `📷 ${displayCompanyName} · ${p.photoCaption}`
     const textMetrics = ctx.measureText(badgeText)
     const textWidth = textMetrics.width
-    const badgePaddingX = 16
+    // 좌우 원형 캡 곡선(반지름 19px) 안쪽으로 글씨가 절대 튀어나가지 않도록 좌우 22px 여유 패딩과 안전 여백 부여
+    const badgePaddingX = 22
     const maxBadgeW = photoW - 32
-    const badgeW = Math.min(maxBadgeW, Math.ceil(textWidth + badgePaddingX * 2))
-    const badgeH = 34
-    const badgeRadius = 17
+    const badgeW = Math.min(maxBadgeW, Math.ceil(textWidth + badgePaddingX * 2 + 10))
+    const badgeH = 38
+    const badgeRadius = 19
     const badgeX = photoX + 16
-    const badgeY = photoY + photoH - 46
+    const badgeY = photoY + photoH - 52
 
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'
+    // 1. 배지 배경 (부드러운 그림자와 함께 둥근 캡슐 렌더링)
+    ctx.save()
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.28)'
+    ctx.shadowBlur = 8
+    ctx.shadowOffsetY = 2
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.98)'
     drawCanvasRoundRect(ctx, badgeX, badgeY, badgeW, badgeH, badgeRadius, true, false)
+    ctx.restore()
 
-    // 글씨가 도형 밖으로 튀어나가지 않도록 안전 클리핑 적용
+    // 2. 글씨가 도형 밖으로 튀어나가지 않도록 안전 클리핑 적용
     ctx.save()
     ctx.beginPath()
     drawCanvasRoundRect(ctx, badgeX, badgeY, badgeW, badgeH, badgeRadius, false, false)
     ctx.clip()
 
+    // 3. 텍스트 수직 중앙 정렬 및 렌더링
     ctx.font =
-      'bold 14px "Pretendard", -apple-system, BlinkMacSystemFont, "Malgun Gothic", "맑은 고딕", sans-serif'
+      'bold 15px "Pretendard", -apple-system, BlinkMacSystemFont, "Malgun Gothic", "맑은 고딕", sans-serif'
     ctx.fillStyle = '#007A78'
     ctx.textAlign = 'left'
+    ctx.textBaseline = 'middle'
     ctx.fillText(
       badgeText,
       badgeX + badgePaddingX,
-      badgeY + 22,
+      badgeY + badgeH / 2,
     )
     ctx.restore()
   } else {
@@ -349,15 +397,19 @@ function renderPageToCanvas(
       'bold 18px "Pretendard", -apple-system, BlinkMacSystemFont, "Malgun Gothic", "맑은 고딕", sans-serif'
     const fallbackText = `[ ${displayCompanyName} · ${p.photoCaption} ]`
     const fbMetrics = ctx.measureText(fallbackText)
-    const bannerPaddingX = 24
+    const bannerPaddingX = 26
     const maxBannerW = photoW - 40
-    const bannerW = Math.min(maxBannerW, Math.ceil(fbMetrics.width + bannerPaddingX * 2))
+    const bannerW = Math.min(maxBannerW, Math.ceil(fbMetrics.width + bannerPaddingX * 2 + 10))
     const bannerH = 46
     const bannerRadius = 23
     const bannerX = centerBannerX - bannerW / 2
     const bannerY = photoY + 80
 
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'
+    ctx.save()
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.25)'
+    ctx.shadowBlur = 6
+    ctx.shadowOffsetY = 2
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.96)'
     drawCanvasRoundRect(
       ctx,
       bannerX,
@@ -368,6 +420,7 @@ function renderPageToCanvas(
       true,
       false,
     )
+    ctx.restore()
 
     ctx.save()
     ctx.beginPath()
@@ -376,10 +429,11 @@ function renderPageToCanvas(
 
     ctx.fillStyle = '#007A78'
     ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
     ctx.fillText(
       fallbackText,
       centerBannerX,
-      bannerY + 29,
+      bannerY + bannerH / 2,
     )
     ctx.restore()
     ctx.restore()
@@ -520,7 +574,11 @@ function renderPageToCanvas(
 export async function generateAndDownloadPdf(
   options: PdfExportOptions = {},
 ): Promise<string> {
-  const companyName = (options.companyName || '거산케미칼').trim()
+  const rawCompanyName = (options.companyName || '거산케미칼').trim()
+  const companyName =
+    rawCompanyName
+      .replace(/\s*(공식\s*)?회사소개서(\s*\d{4})?.*$/, '')
+      .trim() || '거산케미칼'
   const today = new Date().toISOString().split('T')[0]
   const fileName = `${companyName}_회사소개서_2025_${today}.pdf`
 

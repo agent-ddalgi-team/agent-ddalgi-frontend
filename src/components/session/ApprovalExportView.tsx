@@ -119,12 +119,12 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
   > = {
     1: {
       header: 'COMPANY PROFILE 2025 · PAGE 01',
-      title: `${companyName}\n회사소개서 2025`,
+      title: `${cleanCompanyName}\n회사소개서 2025`,
       sub: '초고순도 화학 정밀 소재의 글로벌 솔루션 파트너',
       bodyTitle: '정밀 화학을 선도하는 혁신 프로필',
       bodyText:
         '공식 CI와 2025년도 주요 지향 가치, 그리고 글로벌 시장을 향한 정밀 화학 원료 공급 비전을 표지에 집약했습니다.',
-      summary: `${companyName}의 대표 CI, 브랜드 슬로건 및 2025년 공식 비전을 첫 페이지에 품격 있게 배치한 커버 섹션입니다.`,
+      summary: `${cleanCompanyName}의 대표 CI, 브랜드 슬로건 및 2025년 공식 비전을 첫 페이지에 품격 있게 배치한 커버 섹션입니다.`,
       source: '회사소개서_기존본.pptx',
       photoUrl: '/assets/photos/geosan_headquarters_facade.jpg',
       photoCaption: '글로벌 엔터프라이즈 본사 사옥 전경',
@@ -139,7 +139,7 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
       title: '경영 이념 및\n회사 주요 개요',
       sub: '설립 연혁 및 군산·안산 생산 거점 글로벌 네트워크',
       bodyTitle: '지속 가능한 친환경 케미칼 리더십',
-      bodyText: `${companyName}의 설립 배경부터 주요 인증 획득, 그리고 군산·안산 거점 간의 유기적 공급망 체계를 체계적으로 요약했습니다.`,
+      bodyText: `${cleanCompanyName}의 설립 배경부터 주요 인증 획득, 그리고 군산·안산 거점 간의 유기적 공급망 체계를 체계적으로 요약했습니다.`,
       summary:
         '주요 연혁 5대 마일스톤과 전국 생산 거점 맵을 요약하여 회사의 안정적인 성장 궤적을 제시합니다.',
       source: '기업 인터뷰.txt',
@@ -343,7 +343,7 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
     )
     try {
       const fileName = await generateAndDownloadPdf({
-        companyName: companyName || '거산케미칼',
+        companyName: cleanCompanyName,
       })
       setExportStatus(
         `[저장 완료] ${fileName} (Adobe Acrobat 규격) 정상 다운로드되었습니다.`,
@@ -645,7 +645,7 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
 
                     {/* Sheet Footer */}
                     <div className="pt-3 mt-3 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
-                      <span>{companyName} 공식 승인본</span>
+                      <span>{cleanCompanyName} 공식 승인본</span>
                       <span className="font-bold text-slate-800">
                         PAGE 0{currentPage}
                       </span>
