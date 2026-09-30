@@ -128,7 +128,11 @@ export function SourceSelectionView({
     onDraftAvailable?.(!!activeDocument)
   }, [activeDocument, onDraftAvailable])
   useEffect(() => {
-    onCompanyChange(activeDocument?.document.title || '거산케미칼')
+    const rawTitle = activeDocument?.document.title || '거산케미칼'
+    const cleanName =
+      rawTitle.replace(/\s*(공식\s*)?회사소개서(\s*\d{4})?.*$/, '').trim() ||
+      '거산케미칼'
+    onCompanyChange(cleanName)
   }, [activeDocument?.document.title, onCompanyChange])
   const locked = !!work.busy
   const isDemo = work.session ? work.session.demo : work.demo
@@ -1036,7 +1040,11 @@ export function SourceSelectionView({
 
       {step === 2 && (
         <DraftEditorView
-          companyName={activeDocument?.document.title || '거산케미칼'}
+          companyName={
+            activeDocument?.document.title
+              ?.replace(/\s*(공식\s*)?회사소개서(\s*\d{4})?.*$/, '')
+              .trim() || '거산케미칼'
+          }
           onBackToSources={() => onNavigate(1)}
           onProceedToApproval={() => onNavigate(3)}
         />
@@ -1044,7 +1052,11 @@ export function SourceSelectionView({
 
       {step === 3 && (
         <ApprovalExportView
-          companyName={activeDocument?.document.title || '거산케미칼'}
+          companyName={
+            activeDocument?.document.title
+              ?.replace(/\s*(공식\s*)?회사소개서(\s*\d{4})?.*$/, '')
+              .trim() || '거산케미칼'
+          }
           onBackToDraft={() => onNavigate(2)}
         />
       )}

@@ -38,6 +38,12 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
   companyName = '거산케미칼',
   onBackToDraft,
 }) => {
+  // 회사명 정제 ('거산케미칼 회사소개서 2025' -> '거산케미칼')
+  const cleanCompanyName =
+    (companyName || '거산케미칼')
+      .replace(/\s*(공식\s*)?회사소개서(\s*\d{4})?.*$/, '')
+      .trim() || '거산케미칼'
+
   // 1. 뷰 모드 전환 상태 (카드형 / 3단 분할 뷰 / 단일 페이지)
   const [viewMode, setViewMode] = useState<'split' | 'grid' | 'single'>('split')
 
@@ -562,7 +568,7 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
                       {/* Sheet Header */}
                       <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-[#007A78]">
-                          {companyName.toUpperCase() || 'GEOSAN CHEMICAL'}
+                          {cleanCompanyName.toUpperCase() || 'GEOSAN CHEMICAL'}
                         </span>
                         <span className="text-[10px] text-slate-400 font-semibold">
                           {activeData.header}
@@ -597,10 +603,10 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
                             }}
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent"></div>
-                          <div className="relative z-10 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/95 backdrop-blur-sm shadow-xs">
-                            <Verified className="h-3.5 w-3.5 text-[#007A78]" />
-                            <span className="text-[10px] text-slate-900 font-bold">
-                              {companyName} · {activeData.photoCaption}
+                          <div className="relative z-10 flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/95 backdrop-blur-sm shadow-xs max-w-[92%] overflow-hidden">
+                            <Verified className="h-3.5 w-3.5 text-[#007A78] shrink-0" />
+                            <span className="text-[10px] text-slate-900 font-bold truncate">
+                              {cleanCompanyName} · {activeData.photoCaption}
                             </span>
                           </div>
                         </div>
@@ -936,10 +942,10 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
                           src={activeData.photoUrl}
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent"></div>
-                        <div className="relative z-10 flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/95 backdrop-blur-sm shadow-xs">
-                          <Verified className="h-4 w-4 text-[#007A78]" />
-                          <span className="text-xs text-slate-900 font-bold">
-                            {companyName} · {activeData.photoCaption}
+                        <div className="relative z-10 flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/95 backdrop-blur-sm shadow-xs max-w-[92%] overflow-hidden">
+                          <Verified className="h-4 w-4 text-[#007A78] shrink-0" />
+                          <span className="text-xs text-slate-900 font-bold truncate">
+                            {cleanCompanyName} · {activeData.photoCaption}
                           </span>
                         </div>
                       </div>

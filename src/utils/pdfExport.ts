@@ -160,6 +160,12 @@ function renderPageToCanvas(
   const ctx = canvas.getContext('2d', { alpha: false })
   if (!ctx) return canvas
 
+  // 순수 회사명 추출 (예: '거산케미칼 회사소개서 2025' -> '거산케미칼')
+  const displayCompanyName =
+    (companyName || '거산케미칼')
+      .replace(/\s*(공식\s*)?회사소개서(\s*\d{4})?.*$/, '')
+      .trim() || '거산케미칼'
+
   // 1. 배경 흰색 채우기
   ctx.fillStyle = '#FFFFFF'
   ctx.fillRect(0, 0, width, height)
@@ -173,7 +179,7 @@ function renderPageToCanvas(
     'bold 18px "Pretendard", -apple-system, BlinkMacSystemFont, "Malgun Gothic", "맑은 고딕", sans-serif'
   ctx.fillStyle = '#007A78'
   ctx.textAlign = 'left'
-  ctx.fillText(companyName.toUpperCase() || 'GEOSAN CHEMICAL', 80, 95)
+  ctx.fillText(displayCompanyName.toUpperCase() || 'GEOSAN CHEMICAL', 80, 95)
 
   ctx.font =
     '600 16px "Pretendard", -apple-system, BlinkMacSystemFont, "Malgun Gothic", "맑은 고딕", sans-serif'
@@ -289,21 +295,39 @@ function renderPageToCanvas(
 
     ctx.restore()
 
-    // 사진 좌측 하단 캡션 플로팅 배지
+    // 사진 좌측 하단 캡션 플로팅 배지 (동적 너비 자동 계산 및 안전 클리핑)
+    ctx.font =
+      'bold 14px "Pretendard", -apple-system, BlinkMacSystemFont, "Malgun Gothic", "맑은 고딕", sans-serif'
+    const badgeText = `📷 ${displayCompanyName} · ${p.photoCaption}`
+    const textMetrics = ctx.measureText(badgeText)
+    const textWidth = textMetrics.width
+    const badgePaddingX = 16
+    const maxBadgeW = photoW - 32
+    const badgeW = Math.min(maxBadgeW, Math.ceil(textWidth + badgePaddingX * 2))
+    const badgeH = 34
+    const badgeRadius = 17
     const badgeX = photoX + 16
-    const badgeY = photoY + photoH - 44
+    const badgeY = photoY + photoH - 46
+
     ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'
-    drawCanvasRoundRect(ctx, badgeX, badgeY, 360, 32, 16, true, false)
+    drawCanvasRoundRect(ctx, badgeX, badgeY, badgeW, badgeH, badgeRadius, true, false)
+
+    // 글씨가 도형 밖으로 튀어나가지 않도록 안전 클리핑 적용
+    ctx.save()
+    ctx.beginPath()
+    drawCanvasRoundRect(ctx, badgeX, badgeY, badgeW, badgeH, badgeRadius, false, false)
+    ctx.clip()
 
     ctx.font =
       'bold 14px "Pretendard", -apple-system, BlinkMacSystemFont, "Malgun Gothic", "맑은 고딕", sans-serif'
     ctx.fillStyle = '#007A78'
     ctx.textAlign = 'left'
     ctx.fillText(
-      `📷 ${companyName} · ${p.photoCaption}`,
-      badgeX + 14,
-      badgeY + 21,
+      badgeText,
+      badgeX + badgePaddingX,
+      badgeY + 22,
     )
+    ctx.restore()
   } else {
     // 이미지 로딩 실패 시 테크니컬 그래디언트 배너 폴백
     ctx.save()
@@ -321,27 +345,43 @@ function renderPageToCanvas(
     drawCanvasRoundRect(ctx, photoX, photoY, photoW, photoH, 12, true, false)
 
     const centerBannerX = photoX + photoW / 2
+    ctx.font =
+      'bold 18px "Pretendard", -apple-system, BlinkMacSystemFont, "Malgun Gothic", "맑은 고딕", sans-serif'
+    const fallbackText = `[ ${displayCompanyName} · ${p.photoCaption} ]`
+    const fbMetrics = ctx.measureText(fallbackText)
+    const bannerPaddingX = 24
+    const maxBannerW = photoW - 40
+    const bannerW = Math.min(maxBannerW, Math.ceil(fbMetrics.width + bannerPaddingX * 2))
+    const bannerH = 46
+    const bannerRadius = 23
+    const bannerX = centerBannerX - bannerW / 2
+    const bannerY = photoY + 80
+
     ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'
     drawCanvasRoundRect(
       ctx,
-      centerBannerX - 220,
-      photoY + 80,
-      440,
-      46,
-      23,
+      bannerX,
+      bannerY,
+      bannerW,
+      bannerH,
+      bannerRadius,
       true,
       false,
     )
 
-    ctx.font =
-      'bold 18px "Pretendard", -apple-system, BlinkMacSystemFont, "Malgun Gothic", "맑은 고딕", sans-serif'
+    ctx.save()
+    ctx.beginPath()
+    drawCanvasRoundRect(ctx, bannerX, bannerY, bannerW, bannerH, bannerRadius, false, false)
+    ctx.clip()
+
     ctx.fillStyle = '#007A78'
     ctx.textAlign = 'center'
     ctx.fillText(
-      `[ ${companyName} · ${p.photoCaption} ]`,
+      fallbackText,
       centerBannerX,
-      photoY + 109,
+      bannerY + 29,
     )
+    ctx.restore()
     ctx.restore()
   }
 
@@ -441,7 +481,7 @@ function renderPageToCanvas(
   ctx.fillStyle = '#94A3B8'
   ctx.textAlign = 'left'
   ctx.fillText(
-    `출처 근거: GS-2025-04A 팩트 검증 완료 · 원천 파일 [${p.source}] · ${companyName} 공식 세션`,
+    `출처 근거: GS-2025-04A 팩트 검증 완료 · 원천 파일 [${p.source}] · ${displayCompanyName} 공식 세션`,
     80,
     currentY,
   )

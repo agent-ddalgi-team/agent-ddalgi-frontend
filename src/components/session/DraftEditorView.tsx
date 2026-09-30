@@ -1007,9 +1007,9 @@ export const DraftEditorView: React.FC<DraftEditorViewProps> = ({
                     }}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
-                  <div className="absolute bottom-2 left-3 flex items-center gap-1.5 px-2 py-0.5 rounded bg-white/95 backdrop-blur text-slate-900 text-[10px] font-semibold shadow-xs">
-                    <ImageIcon className="h-3 w-3 text-[#007A78]" />
-                    <span>{currentPageData.photoCaption}</span>
+                  <div className="absolute bottom-2 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/95 backdrop-blur text-slate-900 text-[10px] font-semibold shadow-xs max-w-[90%] overflow-hidden">
+                    <ImageIcon className="h-3 w-3 text-[#007A78] shrink-0" />
+                    <span className="truncate">{currentPageData.photoCaption}</span>
                   </div>
                 </div>
 
