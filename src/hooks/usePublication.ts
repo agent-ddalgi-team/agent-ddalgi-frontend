@@ -1037,7 +1037,7 @@ export function usePublication(initial: DraftResult) {
             ...(b.type === 'list'
               ? { items: edits[b.block_id].split('\n') }
               : b.type === 'image'
-                ? { caption: edits[b.block_id] }
+                ? { caption: edits[b.block_id], alt: edits[b.block_id] }
                 : { text: edits[b.block_id] }),
           }
           return [
