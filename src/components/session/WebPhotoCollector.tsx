@@ -230,7 +230,7 @@ export const WebPhotoCollector: React.FC<WebPhotoCollectorProps> = ({
                     alt={photo.caption}
                     onError={(e) => {
                       e.currentTarget.src =
-                        'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=400&auto=format&fit=crop&q=80'
+                        '/assets/photos/geosan_catalytic_reactor_process.jpg'
                     }}
                     className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                   />

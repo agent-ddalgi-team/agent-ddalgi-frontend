@@ -565,7 +565,7 @@ export function usePublication(initial: DraftResult) {
                     type: 'image' as const,
                     content: {
                       asset_id:
-                        'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=1200&auto=format&fit=crop&q=80',
+                        '/assets/photos/geosan_cleanroom_automated_pipes.jpg',
                       caption: '스마트팩토리 자동화 생산 설비 전경',
                     },
                     fact_ids: [],

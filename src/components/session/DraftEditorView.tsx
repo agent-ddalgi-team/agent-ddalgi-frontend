@@ -75,27 +75,26 @@ export const DraftEditorView: React.FC<DraftEditorViewProps> = ({
       title: `${cName || '거산케미칼'}\n회사소개서 2025`,
       sub: '초고순도 화학 정밀 소재의 글로벌 솔루션 파트너',
       block2Name: '표지 메인 비주얼',
-      photoUrl:
-        'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1200&auto=format&fit=crop&q=80',
-      photoCaption: '후보 1: 글로벌 엔터프라이즈 사옥 전경 · 권장 300DPI',
+      photoUrl: '/assets/photos/geosan_headquarters_facade.jpg',
+      photoCaption: '후보 1: 글로벌 엔터프라이즈 본사 사옥 전경 · 권장 300DPI',
       photoCandidates: [
         {
           id: 1,
           title: '후보 1 (사옥)',
-          caption: '글로벌 엔터프라이즈 사옥 전경',
-          url: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1200&auto=format&fit=crop&q=80',
+          caption: '글로벌 엔터프라이즈 본사 사옥 전경',
+          url: '/assets/photos/geosan_headquarters_facade.jpg',
         },
         {
           id: 2,
           title: '후보 2 (연구소)',
-          caption: '첨단 미래기술 R&D 캠퍼스',
-          url: 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=1200&auto=format&fit=crop&q=80',
+          caption: 'ISO공인 중앙기술연구소 분석실',
+          url: '/assets/photos/geosan_distillation_lab.jpg',
         },
         {
           id: 3,
-          title: '후보 3 (심볼)',
-          caption: '정밀 화학 이노베이션 심볼',
-          url: 'https://images.unsplash.com/photo-1507679799987-c73779587ccf?w=1200&auto=format&fit=crop&q=80',
+          title: '후보 3 (생산거점)',
+          caption: '군산 첨단 자동화 제어 공정 라인',
+          url: '/assets/photos/geosan_cleanroom_automated_pipes.jpg',
         },
       ],
       selectedPhotoCandidate: 1,
@@ -116,27 +115,26 @@ export const DraftEditorView: React.FC<DraftEditorViewProps> = ({
       title: '경영 이념 및\n회사 주요 개요',
       sub: '설립 연혁 및 군산·안산 생산 거점 글로벌 네트워크',
       block2Name: '스마트 팩토리 전경',
-      photoUrl:
-        'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=1200&auto=format&fit=crop&q=80',
+      photoUrl: '/assets/photos/geosan_cleanroom_automated_pipes.jpg',
       photoCaption: '후보 1: 군산·안산 스마트 팩토리 전경 · 권장 300DPI',
       photoCandidates: [
         {
           id: 1,
           title: '후보 1 (공장)',
           caption: '군산·안산 스마트 팩토리 전경',
-          url: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=1200&auto=format&fit=crop&q=80',
+          url: '/assets/photos/geosan_cleanroom_automated_pipes.jpg',
         },
         {
           id: 2,
-          title: '후보 2 (물류)',
-          caption: '수도권 고속 물류 센터',
-          url: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=1200&auto=format&fit=crop&q=80',
+          title: '후보 2 (반응기)',
+          caption: '고압 촉매 반응기 파일럿플랜트',
+          url: '/assets/photos/geosan_catalytic_reactor_process.jpg',
         },
         {
           id: 3,
           title: '후보 3 (사옥)',
           caption: '본사 경영기획 센터',
-          url: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1200&auto=format&fit=crop&q=80',
+          url: '/assets/photos/geosan_headquarters_facade.jpg',
         },
       ],
       selectedPhotoCandidate: 1,
@@ -155,28 +153,27 @@ export const DraftEditorView: React.FC<DraftEditorViewProps> = ({
       headerCategory: 'CORE STRENGTHS',
       title: '공정과 품질을\n한눈에',
       sub: '자료로 확인하는 우리 회사의 강점과 신뢰성 지표',
-      block2Name: '공정 설비 사진',
-      photoUrl:
-        'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=1200&auto=format&fit=crop&q=80',
-      photoCaption: '후보 1: 공정 설비 전경 · 권장 300DPI',
+      block2Name: '중앙연구소 및 공정 설비',
+      photoUrl: '/assets/photos/geosan_distillation_lab.jpg',
+      photoCaption: '후보 1: 중앙기술연구소 정밀 증류 분석 설비 · 권장 300DPI',
       photoCandidates: [
         {
           id: 1,
-          title: '후보 1 (설비)',
-          caption: '공정 설비 전경',
-          url: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=1200&auto=format&fit=crop&q=80',
+          title: '후보 1 (연구소)',
+          caption: '중앙기술연구소 정밀 증류 분석 설비',
+          url: '/assets/photos/geosan_distillation_lab.jpg',
         },
         {
           id: 2,
-          title: '후보 2 (라인)',
-          caption: '스마트 팩토리 라인 B',
-          url: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=1200&auto=format&fit=crop&q=80',
+          title: '후보 2 (공정)',
+          caption: '스마트 팩토리 자동화 라인',
+          url: '/assets/photos/geosan_cleanroom_automated_pipes.jpg',
         },
         {
           id: 3,
-          title: '후보 3 (연구)',
-          caption: '품질 연구소 정밀 분석',
-          url: 'https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?w=1200&auto=format&fit=crop&q=80',
+          title: '후보 3 (품질)',
+          caption: '0.02ppm 정밀 계측 챔버',
+          url: '/assets/photos/geosan_quality_testing_chamber.jpg',
         },
       ],
       selectedPhotoCandidate: 1,
@@ -197,28 +194,27 @@ export const DraftEditorView: React.FC<DraftEditorViewProps> = ({
       headerCategory: 'PROCESS FLOW',
       title: '정밀 화학 4단계\n프로세스 공정',
       sub: '원료 배합부터 촉매 반응, 무균 패키징까지 실시간 제어',
-      block2Name: '촉매 반응 파이프라인',
-      photoUrl:
-        'https://images.unsplash.com/photo-1581092795360-fd1ca04f0952?w=1200&auto=format&fit=crop&q=80',
-      photoCaption: '후보 1: 4단계 촉매 반응 및 정제 파이프라인 · 권장 300DPI',
+      block2Name: '고압 촉매 반응기 파일럿플랜트',
+      photoUrl: '/assets/photos/geosan_catalytic_reactor_process.jpg',
+      photoCaption: '후보 1: 고압 연속 촉매 반응기 및 첨단 공정 파이프라인 · 권장 300DPI',
       photoCandidates: [
         {
           id: 1,
           title: '후보 1 (반응기)',
-          caption: '4단계 촉매 반응 파이프라인',
-          url: 'https://images.unsplash.com/photo-1581092795360-fd1ca04f0952?w=1200&auto=format&fit=crop&q=80',
+          caption: '고압 연속 촉매 반응기 파일럿플랜트',
+          url: '/assets/photos/geosan_catalytic_reactor_process.jpg',
         },
         {
           id: 2,
-          title: '후보 2 (제어실)',
-          caption: 'DCS 중앙 공정 관제실',
-          url: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=1200&auto=format&fit=crop&q=80',
+          title: '후보 2 (제어설비)',
+          caption: '군산 첨단 자동화 제어 공정 라인',
+          url: '/assets/photos/geosan_cleanroom_automated_pipes.jpg',
         },
         {
           id: 3,
-          title: '후보 3 (패키징)',
-          caption: '무균 클린룸 자동 포장기',
-          url: 'https://images.unsplash.com/photo-1581092580497-e0d23cbdf1dc?w=1200&auto=format&fit=crop&q=80',
+          title: '후보 3 (정밀분석)',
+          caption: '중앙연구소 정밀 분석실',
+          url: '/assets/photos/geosan_distillation_lab.jpg',
         },
       ],
       selectedPhotoCandidate: 1,
@@ -239,28 +235,27 @@ export const DraftEditorView: React.FC<DraftEditorViewProps> = ({
       headerCategory: 'QUALITY ASSURANCE',
       title: 'ISO 인증 및\n품질 보증 체계',
       sub: 'ISO 9001/14001 공인 인증 및 0.02ppm 정밀 허용 기준',
-      block2Name: '정밀 분석 연구실',
-      photoUrl:
-        'https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?w=1200&auto=format&fit=crop&q=80',
-      photoCaption: '후보 1: ISO 공인 정밀 분석 연구소 · 권장 300DPI',
+      block2Name: '정밀 품질검사 챔버',
+      photoUrl: '/assets/photos/geosan_quality_testing_chamber.jpg',
+      photoCaption: '후보 1: ISO 공인 정밀 계측 및 품질검사 챔버 · 권장 300DPI',
       photoCandidates: [
         {
           id: 1,
-          title: '후보 1 (분석실)',
-          caption: 'ISO 공인 정밀 분석 연구소',
-          url: 'https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?w=1200&auto=format&fit=crop&q=80',
+          title: '후보 1 (품질챔버)',
+          caption: 'ISO 공인 정밀 계측 및 품질검사 챔버',
+          url: '/assets/photos/geosan_quality_testing_chamber.jpg',
         },
         {
           id: 2,
-          title: '후보 2 (인증서)',
-          caption: 'ISO 9001/14001 인증서 검증',
-          url: 'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=1200&auto=format&fit=crop&q=80',
+          title: '후보 2 (중앙연구소)',
+          caption: '중앙기술연구소 분석실',
+          url: '/assets/photos/geosan_distillation_lab.jpg',
         },
         {
           id: 3,
-          title: '후보 3 (현미경)',
-          caption: '0.02ppm 미세 불순물 스캔',
-          url: 'https://images.unsplash.com/photo-1579154204601-01588f351e67?w=1200&auto=format&fit=crop&q=80',
+          title: '후보 3 (청정설비)',
+          caption: '클린룸 자동화 공정 라인',
+          url: '/assets/photos/geosan_cleanroom_automated_pipes.jpg',
         },
       ],
       selectedPhotoCandidate: 1,
@@ -282,27 +277,26 @@ export const DraftEditorView: React.FC<DraftEditorViewProps> = ({
       title: '군산 스마트 팩토리\n설비 및 사진',
       sub: '반응기 군집 및 자동 포장 라인 고해상도 설비 갤러리',
       block2Name: '자동화 반응 설비',
-      photoUrl:
-        'https://images.unsplash.com/photo-1581092580497-e0d23cbdf1dc?w=1200&auto=format&fit=crop&q=80',
-      photoCaption: '후보 1: 클린룸 이송 로봇 및 무인 패키징 · 권장 300DPI',
+      photoUrl: '/assets/photos/geosan_cleanroom_automated_pipes.jpg',
+      photoCaption: '후보 1: 첨단 자동화 반응 설비 및 클린룸 라인 · 권장 300DPI',
       photoCandidates: [
         {
           id: 1,
-          title: '후보 1 (로봇)',
-          caption: '클린룸 이송 로봇 및 무인 패키징',
-          url: 'https://images.unsplash.com/photo-1581092580497-e0d23cbdf1dc?w=1200&auto=format&fit=crop&q=80',
+          title: '후보 1 (자동화설비)',
+          caption: '첨단 자동화 반응 설비 및 클린룸 라인',
+          url: '/assets/photos/geosan_cleanroom_automated_pipes.jpg',
         },
         {
           id: 2,
           title: '후보 2 (반응기)',
-          caption: '고압 수소화 반응기 군집',
-          url: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=1200&auto=format&fit=crop&q=80',
+          caption: '고압 연속 촉매 반응기 파일럿플랜트',
+          url: '/assets/photos/geosan_catalytic_reactor_process.jpg',
         },
         {
           id: 3,
-          title: '후보 3 (모니터)',
-          caption: '중앙 집중식 통합 설비 모니터링',
-          url: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=1200&auto=format&fit=crop&q=80',
+          title: '후보 3 (품질챔버)',
+          caption: '정밀 계측 챔버',
+          url: '/assets/photos/geosan_quality_testing_chamber.jpg',
         },
       ],
       selectedPhotoCandidate: 1,
@@ -419,15 +413,14 @@ export const DraftEditorView: React.FC<DraftEditorViewProps> = ({
     title: '상세 내용\n섹션',
     sub: '페이지별 상세 안내 문구',
     block2Name: '관련 사진',
-    photoUrl:
-      'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=1200&auto=format&fit=crop&q=80',
-    photoCaption: '후보 1: 관련 이미지 · 권장 300DPI',
+    photoUrl: '/assets/photos/geosan_catalytic_reactor_process.jpg',
+    photoCaption: '후보 1: 관련 공정 설비 이미지 · 권장 300DPI',
     photoCandidates: [
       {
         id: 1,
         title: '후보 1',
-        caption: '대표 이미지',
-        url: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=1200&auto=format&fit=crop&q=80',
+        caption: '대표 설비 이미지',
+        url: '/assets/photos/geosan_catalytic_reactor_process.jpg',
       },
     ],
     selectedPhotoCandidate: 1,
@@ -564,15 +557,14 @@ export const DraftEditorView: React.FC<DraftEditorViewProps> = ({
         title: `신규 섹션 ${nextNum}\n상세 안내`,
         sub: '신규 추가된 섹션의 주요 내용과 핵심 지표입니다.',
         block2Name: '신규 사진 블록',
-        photoUrl:
-          'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=1200&auto=format&fit=crop&q=80',
-        photoCaption: `후보 1: 추가 섹션 ${nextNum} 대표 사진 · 권장 300DPI`,
+        photoUrl: '/assets/photos/geosan_catalytic_reactor_process.jpg',
+        photoCaption: `후보 1: 추가 섹션 ${nextNum} 대표 설비 사진 · 권장 300DPI`,
         photoCandidates: [
           {
             id: 1,
             title: '후보 1',
-            caption: `추가 섹션 ${nextNum} 대표 사진`,
-            url: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=1200&auto=format&fit=crop&q=80',
+            caption: `추가 섹션 ${nextNum} 대표 설비 사진`,
+            url: '/assets/photos/geosan_catalytic_reactor_process.jpg',
           },
         ],
         selectedPhotoCandidate: 1,
@@ -1011,7 +1003,7 @@ export const DraftEditorView: React.FC<DraftEditorViewProps> = ({
                     src={currentPageData.photoUrl}
                     onError={(e) => {
                       e.currentTarget.src =
-                        'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=1200&auto=format&fit=crop&q=80'
+                        '/assets/photos/geosan_catalytic_reactor_process.jpg'
                     }}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
@@ -1063,7 +1055,7 @@ export const DraftEditorView: React.FC<DraftEditorViewProps> = ({
                                 src={candidate.url}
                                 onError={(e) => {
                                   e.currentTarget.src =
-                                    'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=400&auto=format&fit=crop&q=80'
+                                    '/assets/photos/geosan_catalytic_reactor_process.jpg'
                                 }}
                               />
                               {isSelected && (
