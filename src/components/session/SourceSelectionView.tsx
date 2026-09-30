@@ -130,7 +130,7 @@ export function SourceSelectionView({
   useEffect(() => {
     onCompanyChange(activeDocument?.document.title || '거산케미칼')
   }, [activeDocument?.document.title, onCompanyChange])
-  const locked = !!work.busy || ai.locked || hasDocument
+  const locked = !!work.busy
   const isDemo = work.session ? work.session.demo : work.demo
   const counts = {
     registered: work.sources.filter((s) => s.scope === 'registered').length,
@@ -148,11 +148,9 @@ export function SourceSelectionView({
   const aiBlocked =
     !work.session ||
     !!work.busy ||
-    work.briefDirty ||
     work.pendingUpload ||
     pending > 0
-  const canAnalyze =
-    !aiBlocked && !ai.locked && !hasDocument && selected.size > 0
+  const canAnalyze = !aiBlocked && selected.size > 0
   const openInspector = (target = 'ai-workflow') => {
     setInspectorOpen(true)
     document
@@ -161,6 +159,9 @@ export function SourceSelectionView({
   }
   const analyze = () => {
     if (!canAnalyze) return
+    if (work.briefDirty) {
+      void work.saveBrief()
+    }
     void ai.analyze()
     openInspector()
   }
@@ -526,7 +527,7 @@ export function SourceSelectionView({
             </div>
             <fieldset
               disabled={locked}
-              className="flex flex-col gap-5 disabled:opacity-60"
+              className="flex flex-col gap-5"
             >
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="brief-purpose" className={label}>
@@ -570,6 +571,8 @@ export function SourceSelectionView({
                       '공정 역량',
                       '연구개발(R&D)',
                       '납기 안정성',
+                      '공정능력',
+                      '인증·특허',
                       ...work.brief.emphasis,
                     ]),
                   ].map((item) => {
@@ -737,7 +740,7 @@ export function SourceSelectionView({
                 <button
                   type="button"
                   className={primary}
-                  disabled={!work.briefDirty}
+                  disabled={locked}
                   onClick={() => void work.saveBrief()}
                 >
                   작성 조건 저장

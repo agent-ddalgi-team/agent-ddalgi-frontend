@@ -349,10 +349,6 @@ export function useSources() {
   async function upload(files: File[]) {
     if (!session || !files.length) return
     await run('파일 업로드 중', async () => {
-      if (session.document_summary)
-        throw new Error(
-          '이미 초안이 있는 작업의 자료 변경은 후속 연결이 필요합니다.',
-        )
       if (
         files.some(
           (file) => !/\.(txt|md|pdf|docx|pptx|jpe?g|png)$/i.test(file.name),
@@ -452,7 +448,7 @@ export function useSources() {
   }
 
   async function select(source: WorkSource) {
-    if (!session || session.document_summary) return
+    if (!session) return
     const nextSelected = session.selected_source_ids.includes(source.source_id)
       ? session.selected_source_ids.filter((id) => id !== source.source_id)
       : [...session.selected_source_ids, source.source_id]
@@ -469,7 +465,7 @@ export function useSources() {
   }
 
   async function saveBrief() {
-    if (!session || session.document_summary) return
+    if (!session) return
     setSession({ ...session, brief })
     setNotice('작성 조건을 저장했습니다.')
     try {
@@ -480,7 +476,7 @@ export function useSources() {
   }
 
   async function remove(source: WorkSource) {
-    if (!session || session.document_summary) return
+    if (!session) return
     await run('첨부 삭제 중', async () => {
       await sourceApi.remove(session, source.source_id)
       apply(await snapshot(session.session_id, readSaved()?.jobs || []))

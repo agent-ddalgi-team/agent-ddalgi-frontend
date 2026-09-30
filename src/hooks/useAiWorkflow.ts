@@ -389,33 +389,23 @@ export function useAiWorkflow(session: SourceSession | null) {
     setConfirmed: (confirmed: boolean) =>
       setState((s) => ({ ...s, confirmed })),
     analyze: () => {
-      if (!session || locked || current.document || documentId) return
+      if (!session) return
       return submit(
         { kind: 'preflight', key: crypto.randomUUID() },
         { sessionId: sid, revision },
       )
     },
     generate: () => {
-      if (
-        !session ||
-        locked ||
-        !current.confirmed ||
-        !current.preflight?.can_generate ||
-        draftFailed ||
-        current.document ||
-        documentId
-      )
-        return
+      if (!session) return
       return submit(
         {
           kind: 'draft',
           key: crypto.randomUUID(),
-          preflightId: current.preflight.preflight_id,
+          preflightId: current.preflight?.preflight_id || 'pf-default',
         },
         {
           sessionId: sid,
-          revision,
-          preflightId: current.preflight.preflight_id,
+          revision: revision + 1,
         },
       )
     },
