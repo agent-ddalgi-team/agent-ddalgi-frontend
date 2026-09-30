@@ -6,11 +6,6 @@ import type {
   SourceSession,
   WorkSource,
 } from '../api/sources'
-import {
-  getFallbackSession,
-  getFallbackSources,
-  type WebCollectedPhoto,
-} from '../services/mockBackend'
 
 const STORAGE = 'ddalgi.sources.v1'
 const UPLOAD = `${STORAGE}.upload`
@@ -22,6 +17,7 @@ const INITIAL_BRIEF: SourceBrief = {
   photo_preference: 'balanced',
 }
 type Saved = { sessionId: string; jobs: string[] }
+type UploadAttempt = { sessionId: string; fingerprint: string; key: string }
 
 function readSaved(): Saved | null {
   try {
@@ -154,27 +150,21 @@ export function useSources() {
           setBrief(value.session.brief)
           setPendingUpload(!!sessionStorage.getItem(UPLOAD))
           setNotice('서버에 저장된 자료와 선택 상태를 불러왔습니다.')
-          return
         }
       } catch (cause) {
         if (cancelled) return
-        forget()
-        console.warn('Backend snapshot unavailable, switching to local standalone session:', cause)
+        if (
+          cause instanceof SourceApiError &&
+          [401, 403, 404, 410].includes(cause.status)
+        )
+          forget()
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : '작업을 불러오지 못했습니다.',
+        )
       } finally {
         if (!cancelled) setBusy('')
-      }
-
-      // 백엔드 미연결 시 로컬 스탠드얼론 세션으로 자동 전환하여 모든 버튼 즉시 활성화
-      if (!cancelled) {
-        const fallback = getFallbackSession()
-        const fallbackSources = getFallbackSources()
-        setSession(fallback)
-        setSources(fallbackSources)
-        setBrief(fallback.brief)
-        setError('')
-        setNotice(
-          '💡 로컬 스탠드얼론 모드로 연결되었습니다. 백엔드 없이도 모든 기능(자료 업로드, 사진 자동 수집, 초안 편집, 승인·출력)을 정상 사용할 수 있습니다.',
-        )
       }
     }
     void restore()
@@ -296,59 +286,49 @@ export function useSources() {
 
   async function start() {
     await run('작업 시작 중', async () => {
-      try {
-        const saved = readSaved()
-        if (saved) {
-          const value = await snapshot(saved.sessionId, saved.jobs)
-          apply(value)
-          setBrief(value.session.brief)
-          setPendingUpload(!!sessionStorage.getItem(UPLOAD))
-          return
-        }
-        if (!brief.purpose.trim()) throw new Error('사용 목적을 입력해 주세요.')
-        const body = JSON.stringify({ brief, demo })
-        if (createAttempt.current?.body !== body)
-          createAttempt.current = { body, key: crypto.randomUUID() }
-        const value = await sourceApi.create(
-          brief,
-          createAttempt.current.key,
-          demo,
-        )
-        persist(value.session_id, [])
-        setSession(value)
-        apply(await snapshot(value.session_id, []))
-        setNotice('작업을 시작했습니다. 자료를 첨부해 주세요.')
-      } catch (err) {
-        console.warn('Backend session start failed, activating standalone fallback session:', err)
-        const fallback = getFallbackSession(brief)
-        const fallbackSources = getFallbackSources()
-        setSession(fallback)
-        setSources(fallbackSources)
-        setBrief(fallback.brief)
-        setNotice('💡 로컬 스탠드얼론 모드로 작업을 시작했습니다. 자료 선택 및 첨부를 진행해 주세요.')
+      const saved = readSaved()
+      if (saved) {
+        const value = await snapshot(saved.sessionId, saved.jobs)
+        apply(value)
+        setBrief(value.session.brief)
+        setPendingUpload(!!sessionStorage.getItem(UPLOAD))
+        return
       }
+      if (!brief.purpose.trim()) throw new Error('사용 목적을 입력해 주세요.')
+      const body = JSON.stringify({ brief, demo })
+      if (createAttempt.current?.body !== body)
+        createAttempt.current = { body, key: crypto.randomUUID() }
+      const value = await sourceApi.create(
+        brief,
+        createAttempt.current.key,
+        demo,
+      )
+      persist(value.session_id, [])
+      setSession(value)
+      apply(await snapshot(value.session_id, []))
+      setNotice('작업을 시작했습니다. 자료를 첨부해 주세요.')
     })
   }
 
   async function refresh() {
     await run('상태 확인 중', async () => {
-      try {
-        const saved = readSaved()
-        if (!saved) return
-        const value = await snapshot(saved.sessionId, saved.jobs)
-        apply(value)
-        attempts.current = 0
-        setPolling(true)
-        setNotice('서버의 최신 상태를 불러왔습니다.')
-      } catch {
-        setNotice('로컬 스탠드얼론 상태가 유지되고 있습니다.')
-      }
+      const saved = readSaved()
+      if (!saved) return
+      const value = await snapshot(saved.sessionId, saved.jobs)
+      apply(value)
+      attempts.current = 0
+      setPolling(true)
+      setNotice('서버의 최신 상태를 불러왔습니다.')
     })
   }
 
   async function upload(files: File[]) {
     if (!session || !files.length) return
     await run('파일 업로드 중', async () => {
+      if (session.document_summary)
+        throw new Error(
+          '이미 초안이 있는 작업의 자료 변경은 후속 연결이 필요합니다.',
+        )
       if (
         files.some(
           (file) => !/\.(txt|md|pdf|docx|pptx|jpe?g|png)$/i.test(file.name),
@@ -359,124 +339,96 @@ export function useSources() {
         )
       if (files.some((file) => file.size > 10 * 1024 * 1024))
         throw new Error('파일당 최대 10MB까지 첨부할 수 있습니다.')
-
-      try {
-        const signature = await fingerprint(files)
-        const attempt = {
-          sessionId: session.session_id,
-          fingerprint: signature,
-          key: crypto.randomUUID(),
-        }
-        const result = await sourceApi.upload(session.session_id, files, attempt.key)
-        const jobIds = [...new Set([...(readSaved()?.jobs || []), result.job_id])]
-        persist(session.session_id, jobIds)
-        apply(await snapshot(session.session_id, jobIds))
-        setNotice('파일을 첨부했습니다. 읽기 상태를 확인하고 사용할 자료를 직접 선택해 주세요.')
-      } catch (err) {
-        console.warn('Backend upload failed, parsing files locally:', err)
-        // 로컬 오프라인 파싱: 브라우저 메모리에 WorkSource로 즉시 변환
-        const localItems: WorkSource[] = files.map((file, idx) => {
-          const isPhoto = /\.(jpe?g|png)$/i.test(file.name)
-          return {
-            source_id: `upload-${Date.now()}-${idx}`,
-            source_version: 1,
-            name: file.name,
-            scope: 'session',
-            origin_kind: 'demo',
-            kind: isPhoto ? 'photo' : 'company',
-            role: 'evidence',
-            use_as_company_evidence: true,
-            parse_status: 'complete',
-            text_available: !isPhoto,
-            image_available: isPhoto,
-            asset_ids: isPhoto ? [`asset-upload-${Date.now()}-${idx}`] : [],
-            warnings: [],
-            size_bytes: file.size,
-          }
-        })
-        setSources((prev) => [...prev, ...localItems])
-        setSession((prev) =>
-          prev
-            ? {
-                ...prev,
-                selected_source_ids: [
-                  ...prev.selected_source_ids,
-                  ...localItems.map((n) => n.source_id),
-                ],
-              }
-            : prev,
+      // 응답 유실 재전송은 개수 제한 검사보다 먼저 구분한다.
+      const signature = await fingerprint(files)
+      const previous = JSON.parse(
+        sessionStorage.getItem(UPLOAD) || 'null',
+      ) as UploadAttempt | null
+      if (
+        previous &&
+        (previous.sessionId !== session.session_id ||
+          previous.fingerprint !== signature)
+      )
+        throw new Error(
+          '이전 업로드의 결과가 아직 확인되지 않았습니다. 같은 파일을 다시 선택해 재시도하거나 작업을 종료해 주세요.',
         )
-        setNotice(`✓ 파일 ${files.length}건이 첨부 자료로 등록되었습니다.`)
+      if (
+        !previous &&
+        sources.filter((source) => source.scope === 'session').length +
+          files.length >
+          10
+      )
+        throw new Error('이번 작업에는 최대 10개까지 첨부할 수 있습니다.')
+      const attempt = previous || {
+        sessionId: session.session_id,
+        fingerprint: signature,
+        key: crypto.randomUUID(),
       }
+      sessionStorage.setItem(UPLOAD, JSON.stringify(attempt))
+      pendingFiles.current = files
+      setPendingUpload(true)
+      let result
+      try {
+        result = await sourceApi.upload(session.session_id, files, attempt.key)
+      } catch (cause) {
+        if (
+          cause instanceof SourceApiError &&
+          cause.status >= 400 &&
+          cause.status < 500 &&
+          ![408, 429].includes(cause.status)
+        ) {
+          sessionStorage.removeItem(UPLOAD)
+          setPendingUpload(false)
+          pendingFiles.current = []
+        }
+        throw cause
+      }
+      const jobIds = [...new Set([...(readSaved()?.jobs || []), result.job_id])]
+      persist(session.session_id, jobIds)
+      sessionStorage.removeItem(UPLOAD)
+      setPendingUpload(false)
+      pendingFiles.current = []
+      apply(await snapshot(session.session_id, jobIds))
+      attempts.current = 0
+      setPolling(true)
+      setNotice(
+        '파일을 첨부했습니다. 읽기 상태를 확인하고 사용할 자료를 직접 선택해 주세요.',
+      )
     })
   }
 
-  function addWebPhotos(photos: WebCollectedPhoto[]) {
-    if (!session) return
-    const newItems: WorkSource[] = photos.map((p) => ({
-      source_id: `web-${p.id}-${Date.now()}`,
-      source_version: 1,
-      name: p.name,
-      scope: 'session',
-      origin_kind: 'demo',
-      kind: 'photo',
-      role: 'evidence',
-      use_as_company_evidence: true,
-      parse_status: 'complete',
-      text_available: false,
-      image_available: true,
-      asset_ids: [`asset-web-${p.id}`],
-      warnings: [],
-      size_bytes: 1250000,
-    }))
-
-    setSources((prev) => [...prev, ...newItems])
-    setSession((prev) =>
-      prev
-        ? {
-            ...prev,
-            selected_source_ids: [
-              ...new Set([
-                ...prev.selected_source_ids,
-                ...newItems.map((n) => n.source_id),
-              ]),
-            ],
-          }
-        : prev,
-    )
-    setNotice(`✓ 웹 사이트에서 ${photos.length}건의 사진을 가져와 첨부 자료에 자동 등록했습니다.`)
-  }
-
   async function select(source: WorkSource) {
-    if (!session) return
-    const nextSelected = session.selected_source_ids.includes(source.source_id)
-      ? session.selected_source_ids.filter((id) => id !== source.source_id)
-      : [...session.selected_source_ids, source.source_id]
-    setSession({ ...session, selected_source_ids: nextSelected })
-    try {
-      await sourceApi.inputs(
+    if (!session || session.document_summary) return
+    await run('자료 선택 저장 중', async () => {
+      const selected = session.selected_source_ids.includes(source.source_id)
+        ? session.selected_source_ids.filter((id) => id !== source.source_id)
+        : [...session.selected_source_ids, source.source_id]
+      const result = await sourceApi.inputs(
         session,
-        { selected_source_ids: nextSelected },
+        { selected_source_ids: selected },
         crypto.randomUUID(),
       )
-    } catch {
-      // 로컬 유지
-    }
+      setSession({ ...session, ...result })
+      setNotice('자료 선택을 서버에 저장했습니다.')
+    })
   }
 
   async function saveBrief() {
-    if (!session) return
-    setSession({ ...session, brief })
-    setNotice('작성 조건을 저장했습니다.')
-    try {
-      await sourceApi.inputs(session, { brief }, crypto.randomUUID())
-    } catch {
-      // 로컬 유지
-    }
+    if (!session || session.document_summary) return
+    await run('작성 조건 저장 중', async () => {
+      if (!brief.purpose.trim()) throw new Error('사용 목적을 입력해 주세요.')
+      const result = await sourceApi.inputs(
+        session,
+        { brief },
+        crypto.randomUUID(),
+      )
+      setSession({ ...session, ...result, brief })
+      setNotice('작성 조건을 서버에 저장했습니다.')
+    })
   }
 
   async function remove(source: WorkSource) {
-    if (!session) return
+    if (!session || session.document_summary) return
     await run('첨부 삭제 중', async () => {
       await sourceApi.remove(session, source.source_id)
       apply(await snapshot(session.session_id, readSaved()?.jobs || []))
@@ -513,7 +465,6 @@ export function useSources() {
     start,
     refresh,
     upload,
-    addWebPhotos,
     select,
     saveBrief,
     remove,

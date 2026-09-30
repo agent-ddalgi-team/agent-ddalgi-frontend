@@ -70,7 +70,8 @@ export const CURATED_ENTERPRISE_PHOTOS: WebCollectedPhoto[] = [
     caption: '완제품 품질 유지를 위한 특수 질소 충전 패키징 및 출하장',
     category: 'product',
     url: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=1600&auto=format&fit=crop&q=85',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=400&auto=format&fit=crop&q=80',
+    thumbnailUrl:
+      'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=400&auto=format&fit=crop&q=80',
     sourceDomain: 'geosan.co.kr',
     sourcePageUrl: 'https://www.geosan.co.kr/logistics/dispatch',
   },
@@ -80,7 +81,8 @@ export const CURATED_ENTERPRISE_PHOTOS: WebCollectedPhoto[] = [
     caption: '신규 고객사 2시간 이내 샘플 접수 및 기술 상담 센터',
     category: 'building',
     url: 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=1600&auto=format&fit=crop&q=85',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=400&auto=format&fit=crop&q=80',
+    thumbnailUrl:
+      'https://images.unsplash.com/photo-1497366216548-37526070297c?w=400&auto=format&fit=crop&q=80',
     sourceDomain: 'geosan.co.kr',
     sourcePageUrl: 'https://www.geosan.co.kr/support/center',
   },
@@ -90,7 +92,8 @@ export const CURATED_ENTERPRISE_PHOTOS: WebCollectedPhoto[] = [
     caption: '국제 품질 및 환경 경영 표준 규격 공식 인증서',
     category: 'cert',
     url: 'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=1600&auto=format&fit=crop&q=85',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=400&auto=format&fit=crop&q=80',
+    thumbnailUrl:
+      'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=400&auto=format&fit=crop&q=80',
     sourceDomain: 'iso.org',
     sourcePageUrl: 'https://www.geosan.co.kr/quality/certification',
   },
@@ -307,7 +310,8 @@ export function getFallbackPreflight(sessionId: string): Preflight {
             source_version: 1,
             segment_id: 'seg-2',
             locator: { line: 12 },
-            excerpt: '반도체 세정제 및 2차전지 핵심 소재 분야에서 독보적 기술 확보',
+            excerpt:
+              '반도체 세정제 및 2차전지 핵심 소재 분야에서 독보적 기술 확보',
           },
         ],
         alternatives: null,
@@ -335,12 +339,14 @@ export function getFallbackPreflight(sessionId: string): Preflight {
         code: 'DEMO_VALUE',
         severity: 'warning',
         status: 'open',
-        message: '일부 통계(연간 생산량 150,000톤)는 시연용 수치가 포함되어 있습니다.',
+        message:
+          '일부 통계(연간 생산량 150,000톤)는 시연용 수치가 포함되어 있습니다.',
       },
     ],
     recommendations: {
       suggested_pages: 4,
-      reason: '선택한 4건의 자료를 기반으로 핵심 역량 중심 4쪽 구성을 추천합니다.',
+      reason:
+        '선택한 4건의 자료를 기반으로 핵심 역량 중심 4쪽 구성을 추천합니다.',
       needed: [],
     },
   }
@@ -486,10 +492,30 @@ export function getFallbackDraft(
       target_pages: 4,
       status: 'draft',
       pages: [
-        { page_id: 'page-1', title: '표지 및 비전', blocks: blocksPage1 },
-        { page_id: 'page-2', title: '회사 개요 및 연혁', blocks: blocksPage2 },
-        { page_id: 'page-3', title: '공정 및 품질 관리', blocks: blocksPage3 },
-        { page_id: 'page-4', title: '실적 및 상담 안내', blocks: blocksPage4 },
+        {
+          page_id: 'page-1',
+          layout_key: 'text',
+          title: '표지 및 비전',
+          blocks: blocksPage1,
+        },
+        {
+          page_id: 'page-2',
+          layout_key: 'text',
+          title: '회사 개요 및 연혁',
+          blocks: blocksPage2,
+        },
+        {
+          page_id: 'page-3',
+          layout_key: 'text',
+          title: '공정 및 품질 관리',
+          blocks: blocksPage3,
+        },
+        {
+          page_id: 'page-4',
+          layout_key: 'text',
+          title: '실적 및 상담 안내',
+          blocks: blocksPage4,
+        },
       ],
     },
   }
