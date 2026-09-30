@@ -23,8 +23,9 @@ import {
 import type { SourceBrief, WorkSource } from '../../api/sources'
 import { useSources } from '../../hooks/useSources'
 import { useAiWorkflow } from '../../hooks/useAiWorkflow'
-import { AiWorkflowPanel, Block } from './AiWorkflowPanel'
-import { DocumentWorkspace } from './DocumentWorkspace'
+import { AiWorkflowPanel } from './AiWorkflowPanel'
+import { DraftEditorView } from './DraftEditorView'
+import { ApprovalExportView } from './ApprovalExportView'
 import type { WizardStep } from './StepIndicator'
 import { WebPhotoCollector } from './WebPhotoCollector'
 import { getFallbackDraft } from '../../services/mockBackend'
@@ -1028,20 +1029,18 @@ export function SourceSelectionView({
         </div>
       </div>
 
-      {activeDocument && (
-        <DocumentWorkspace
-          key={activeDocument.document.document_id}
-          initial={activeDocument}
-          step={step}
-          onNavigate={onNavigate}
-          onClose={() => setConfirmClose(true)}
-          renderBlock={(block) => (
-            <Block
-              block={block}
-              sid={activeDocument.document.session_id}
-              sources={work.sources}
-            />
-          )}
+      {step === 2 && (
+        <DraftEditorView
+          companyName={activeDocument?.document.title || '거산케미칼'}
+          onBackToSources={() => onNavigate(1)}
+          onProceedToApproval={() => onNavigate(3)}
+        />
+      )}
+
+      {step === 3 && (
+        <ApprovalExportView
+          companyName={activeDocument?.document.title || '거산케미칼'}
+          onBackToDraft={() => onNavigate(2)}
         />
       )}
       {(confirmClose || deleteSource) && (
