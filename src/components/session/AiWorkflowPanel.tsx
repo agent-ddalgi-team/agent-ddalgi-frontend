@@ -174,6 +174,7 @@ export function AiWorkflowPanel({
   blocked,
   canAnalyze,
   onAnalyze,
+  onGenerate,
 }: {
   ai: Workflow
   sources: WorkSource[]
@@ -183,6 +184,7 @@ export function AiWorkflowPanel({
   blocked: boolean
   canAnalyze: boolean
   onAnalyze: () => void
+  onGenerate?: () => void
 }) {
   const { preflight, document: result, job } = ai
   const document = result?.document
@@ -514,7 +516,7 @@ export function AiWorkflowPanel({
                   type="checkbox"
                   className="mt-0.5 h-4 w-4 cursor-pointer accent-[#007A78]"
                   checked={ai.confirmed}
-                  disabled={blocked || !ai.canConfirm}
+                  disabled={working}
                   onChange={(e) => ai.setConfirmed(e.target.checked)}
                 />
                 <span className="flex flex-col">
@@ -530,10 +532,18 @@ export function AiWorkflowPanel({
               <button
                 type="button"
                 className={`${primary} w-full`}
-                disabled={blocked || !ai.canConfirm || !ai.confirmed}
-                onClick={() => void ai.generate()}
+                disabled={working}
+                onClick={() => {
+                  ai.setConfirmed(true)
+                  if (onGenerate) {
+                    onGenerate()
+                  } else {
+                    void ai.generate()
+                  }
+                }}
               >
-                확인한 자료로 초안 생성
+                <Sparkles className="h-4 w-4" />
+                <span>확인한 자료로 초안 생성</span>
               </button>
             </>
           )}

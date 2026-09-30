@@ -114,7 +114,7 @@ export async function triggerBrowserDownload(
         types: isPdf
           ? [
               {
-                description: 'PDF 문서 (*.pdf)',
+                description: 'Adobe Acrobat PDF 문서 (*.pdf)',
                 accept: {
                   'application/pdf': ['.pdf'],
                 },

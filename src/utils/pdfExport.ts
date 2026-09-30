@@ -27,27 +27,72 @@ interface PageData {
 
 /**
  * 브라우저 이미지 비동기 로딩 헬퍼 (CORS 및 타임아웃 방어)
+ * 로컬 정적 에셋은 fetch -> Blob -> URL.createObjectURL로 변환하여 CORS 제한 및 Canvas 오염을 완벽히 방지합니다.
  */
-function loadBrowserImage(src: string): Promise<HTMLImageElement | null> {
-  return new Promise((resolve) => {
-    const img = new Image()
-    img.crossOrigin = 'anonymous'
+async function loadBrowserImage(src: string): Promise<HTMLImageElement | null> {
+  if (!src) return null
 
-    img.onload = () => {
-      resolve(img)
+  // 1. 상대 경로 또는 로컬 에셋인 경우, fetch로 Blob을 직접 생성하여 로드 (CORS 100% 방지)
+  const isRelative = !src.startsWith('http://') && !src.startsWith('https://')
+
+  if (isRelative && typeof window !== 'undefined' && typeof window.fetch === 'function') {
+    try {
+      const response = await fetch(src)
+      if (response.ok) {
+        const blob = await response.blob()
+        const objectUrl = URL.createObjectURL(blob)
+        return new Promise<HTMLImageElement | null>((resolve) => {
+          const img = new Image()
+          img.onload = () => resolve(img)
+          img.onerror = () => {
+            console.warn(`[PDF Export] Blob 이미지 생성 실패: ${src}`)
+            resolve(null)
+          }
+          img.src = objectUrl
+        })
+      }
+    } catch (e) {
+      console.warn(`[PDF Export] 로컬 에셋 fetch 실패 (${src}):`, e)
+    }
+  }
+
+  // 2. 외부 원격 이미지 또는 fetch 실패 시 직접 Image 객체로 로드
+  return new Promise<HTMLImageElement | null>((resolve) => {
+    const img = new Image()
+    if (src.startsWith('http://') || src.startsWith('https://')) {
+      img.crossOrigin = 'anonymous'
     }
 
+    let resolved = false
+    const onDone = (res: HTMLImageElement | null) => {
+      if (!resolved) {
+        resolved = true
+        resolve(res)
+      }
+    }
+
+    img.onload = () => onDone(img)
     img.onerror = () => {
       console.warn(`[PDF Export] 이미지 로딩 실패 (폴백 적용): ${src}`)
-      resolve(null)
+      // 로컬 안정 에셋으로 폴백 시도
+      if (src !== '/assets/photos/geosan_catalytic_reactor_process.jpg') {
+        const fallbackImg = new Image()
+        fallbackImg.onload = () => onDone(fallbackImg)
+        fallbackImg.onerror = () => onDone(null)
+        fallbackImg.src = '/assets/photos/geosan_catalytic_reactor_process.jpg'
+      } else {
+        onDone(null)
+      }
     }
 
-    // 최대 3.5초 대기 후 타임아웃 시 안전하게 null 반환
+    // 최대 4.5초 대기 후 타임아웃 시 안전하게 반환
     setTimeout(() => {
-      if (!img.complete) {
-        resolve(null)
+      if (img.complete && img.naturalWidth > 0) {
+        onDone(img)
+      } else {
+        onDone(null)
       }
-    }, 3500)
+    }, 4500)
 
     img.src = src
   })
@@ -154,6 +199,12 @@ function renderPageToCanvas(
   const ctx = canvas.getContext('2d', { alpha: false })
   if (!ctx) return canvas
 
+  // 순수 회사명 추출 (예: '거산케미칼 회사소개서 2025' -> '거산케미칼')
+  const displayCompanyName =
+    (companyName || '거산케미칼')
+      .replace(/\s*(공식\s*)?회사소개서(\s*\d{4})?.*$/, '')
+      .trim() || '거산케미칼'
+
   // 1. 배경 흰색 채우기
   ctx.fillStyle = '#FFFFFF'
   ctx.fillRect(0, 0, width, height)
@@ -167,7 +218,7 @@ function renderPageToCanvas(
     'bold 18px "Pretendard", -apple-system, BlinkMacSystemFont, "Malgun Gothic", "맑은 고딕", sans-serif'
   ctx.fillStyle = '#007A78'
   ctx.textAlign = 'left'
-  ctx.fillText(companyName.toUpperCase() || 'GEOSAN CHEMICAL', 80, 95)
+  ctx.fillText(displayCompanyName.toUpperCase() || 'GEOSAN CHEMICAL', 80, 95)
 
   ctx.font =
     '600 16px "Pretendard", -apple-system, BlinkMacSystemFont, "Malgun Gothic", "맑은 고딕", sans-serif'
@@ -283,21 +334,48 @@ function renderPageToCanvas(
 
     ctx.restore()
 
-    // 사진 좌측 하단 캡션 플로팅 배지
-    const badgeX = photoX + 16
-    const badgeY = photoY + photoH - 44
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'
-    drawCanvasRoundRect(ctx, badgeX, badgeY, 360, 32, 16, true, false)
-
+    // 사진 좌측 하단 캡션 플로팅 배지 (동적 너비 자동 계산, 여유 패딩 및 안전 클리핑)
     ctx.font =
-      'bold 14px "Pretendard", -apple-system, BlinkMacSystemFont, "Malgun Gothic", "맑은 고딕", sans-serif'
+      'bold 15px "Pretendard", -apple-system, BlinkMacSystemFont, "Malgun Gothic", "맑은 고딕", sans-serif'
+    const badgeText = `📷 ${displayCompanyName} · ${p.photoCaption}`
+    const textMetrics = ctx.measureText(badgeText)
+    const textWidth = textMetrics.width
+    // 좌우 원형 캡 곡선(반지름 19px) 안쪽으로 글씨가 절대 튀어나가지 않도록 좌우 22px 여유 패딩과 안전 여백 부여
+    const badgePaddingX = 22
+    const maxBadgeW = photoW - 32
+    const badgeW = Math.min(maxBadgeW, Math.ceil(textWidth + badgePaddingX * 2 + 10))
+    const badgeH = 38
+    const badgeRadius = 19
+    const badgeX = photoX + 16
+    const badgeY = photoY + photoH - 52
+
+    // 1. 배지 배경 (부드러운 그림자와 함께 둥근 캡슐 렌더링)
+    ctx.save()
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.28)'
+    ctx.shadowBlur = 8
+    ctx.shadowOffsetY = 2
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.98)'
+    drawCanvasRoundRect(ctx, badgeX, badgeY, badgeW, badgeH, badgeRadius, true, false)
+    ctx.restore()
+
+    // 2. 글씨가 도형 밖으로 튀어나가지 않도록 안전 클리핑 적용
+    ctx.save()
+    ctx.beginPath()
+    drawCanvasRoundRect(ctx, badgeX, badgeY, badgeW, badgeH, badgeRadius, false, false)
+    ctx.clip()
+
+    // 3. 텍스트 수직 중앙 정렬 및 렌더링
+    ctx.font =
+      'bold 15px "Pretendard", -apple-system, BlinkMacSystemFont, "Malgun Gothic", "맑은 고딕", sans-serif'
     ctx.fillStyle = '#007A78'
     ctx.textAlign = 'left'
+    ctx.textBaseline = 'middle'
     ctx.fillText(
-      `📷 ${companyName} · ${p.photoCaption}`,
-      badgeX + 14,
-      badgeY + 21,
+      badgeText,
+      badgeX + badgePaddingX,
+      badgeY + badgeH / 2,
     )
+    ctx.restore()
   } else {
     // 이미지 로딩 실패 시 테크니컬 그래디언트 배너 폴백
     ctx.save()
@@ -315,27 +393,49 @@ function renderPageToCanvas(
     drawCanvasRoundRect(ctx, photoX, photoY, photoW, photoH, 12, true, false)
 
     const centerBannerX = photoX + photoW / 2
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'
+    ctx.font =
+      'bold 18px "Pretendard", -apple-system, BlinkMacSystemFont, "Malgun Gothic", "맑은 고딕", sans-serif'
+    const fallbackText = `[ ${displayCompanyName} · ${p.photoCaption} ]`
+    const fbMetrics = ctx.measureText(fallbackText)
+    const bannerPaddingX = 26
+    const maxBannerW = photoW - 40
+    const bannerW = Math.min(maxBannerW, Math.ceil(fbMetrics.width + bannerPaddingX * 2 + 10))
+    const bannerH = 46
+    const bannerRadius = 23
+    const bannerX = centerBannerX - bannerW / 2
+    const bannerY = photoY + 80
+
+    ctx.save()
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.25)'
+    ctx.shadowBlur = 6
+    ctx.shadowOffsetY = 2
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.96)'
     drawCanvasRoundRect(
       ctx,
-      centerBannerX - 220,
-      photoY + 80,
-      440,
-      46,
-      23,
+      bannerX,
+      bannerY,
+      bannerW,
+      bannerH,
+      bannerRadius,
       true,
       false,
     )
+    ctx.restore()
 
-    ctx.font =
-      'bold 18px "Pretendard", -apple-system, BlinkMacSystemFont, "Malgun Gothic", "맑은 고딕", sans-serif'
+    ctx.save()
+    ctx.beginPath()
+    drawCanvasRoundRect(ctx, bannerX, bannerY, bannerW, bannerH, bannerRadius, false, false)
+    ctx.clip()
+
     ctx.fillStyle = '#007A78'
     ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
     ctx.fillText(
-      `[ ${companyName} · ${p.photoCaption} ]`,
+      fallbackText,
       centerBannerX,
-      photoY + 109,
+      bannerY + bannerH / 2,
     )
+    ctx.restore()
     ctx.restore()
   }
 
@@ -435,7 +535,7 @@ function renderPageToCanvas(
   ctx.fillStyle = '#94A3B8'
   ctx.textAlign = 'left'
   ctx.fillText(
-    `출처 근거: GS-2025-04A 팩트 검증 완료 · 원천 파일 [${p.source}] · ${companyName} 공식 세션`,
+    `출처 근거: GS-2025-04A 팩트 검증 완료 · 원천 파일 [${p.source}] · ${displayCompanyName} 공식 세션`,
     80,
     currentY,
   )
@@ -474,7 +574,11 @@ function renderPageToCanvas(
 export async function generateAndDownloadPdf(
   options: PdfExportOptions = {},
 ): Promise<string> {
-  const companyName = (options.companyName || '거산케미칼').trim()
+  const rawCompanyName = (options.companyName || '거산케미칼').trim()
+  const companyName =
+    rawCompanyName
+      .replace(/\s*(공식\s*)?회사소개서(\s*\d{4})?.*$/, '')
+      .trim() || '거산케미칼'
   const today = new Date().toISOString().split('T')[0]
   const fileName = `${companyName}_회사소개서_2025_${today}.pdf`
 
@@ -489,9 +593,8 @@ export async function generateAndDownloadPdf(
         '공식 CI와 2025년도 주요 지향 가치, 그리고 글로벌 시장을 향한 정밀 화학 원료 공급 비전을 표지에 집약했습니다. 신뢰할 수 있는 파트너십을 바탕으로 차세대 정밀 화학 소재의 표준을 세워갑니다.',
       summary: `${companyName}의 대표 CI, 브랜드 슬로건 및 2025년 공식 비전을 첫 페이지에 품격 있게 배치한 커버 섹션입니다.`,
       source: '회사소개서_기존본.pptx',
-      photoUrl:
-        'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1200&auto=format&fit=crop&q=80',
-      photoCaption: '글로벌 엔터프라이즈 사옥 전경',
+      photoUrl: '/assets/photos/geosan_headquarters_facade.jpg',
+      photoCaption: '글로벌 엔터프라이즈 본사 사옥 전경',
       kpis: [
         { label: '설립 연도', value: '2012년' },
         { label: '글로벌 거점', value: '4개국' },
@@ -508,9 +611,8 @@ export async function generateAndDownloadPdf(
       summary:
         '주요 연혁 5대 마일스톤과 전국 생산 거점 맵을 요약하여 회사의 안정적인 성장 궤적을 제시합니다.',
       source: '기업 인터뷰.txt',
-      photoUrl:
-        'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=1200&auto=format&fit=crop&q=80',
-      photoCaption: '군산·안산 스마트 팩토리 전경',
+      photoUrl: '/assets/photos/geosan_cleanroom_automated_pipes.jpg',
+      photoCaption: '군산·안산 첨단 자동화 스마트 팩토리 전경',
       kpis: [
         { label: '국내 거점', value: '2개 공장' },
         { label: '연구 인력', value: '45명' },
@@ -528,9 +630,8 @@ export async function generateAndDownloadPdf(
       summary:
         '군산 제2 스마트 팩토리의 정밀 공정 라인과 99.4% 자동화 성과 지표를 결합하여 신규 고객에게 기술 신뢰성을 입증하는 핵심 페이지입니다.',
       source: '공정설명서_v3.pdf',
-      photoUrl:
-        'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=1200&auto=format&fit=crop&q=80',
-      photoCaption: '정밀 자동화 제어 공정 설비',
+      photoUrl: '/assets/photos/geosan_distillation_lab.jpg',
+      photoCaption: '중앙기술연구소 정밀 증류 분석 설비',
       kpis: [
         { label: '공정 자동화율', value: '99.4%' },
         { label: '무사고 일수', value: '1,820일' },
@@ -548,9 +649,8 @@ export async function generateAndDownloadPdf(
       summary:
         '배합-반응-정제-패키징의 4단계를 알기 쉬운 흐름도와 아이콘으로 구성하여 기술력을 어필합니다.',
       source: '공정설명서_v3.pdf',
-      photoUrl:
-        'https://images.unsplash.com/photo-1581092335397-9583fe92d232?w=1200&auto=format&fit=crop&q=80',
-      photoCaption: '4단계 촉매 반응 및 정제 파이프라인',
+      photoUrl: '/assets/photos/geosan_catalytic_reactor_process.jpg',
+      photoCaption: '고압 연속 촉매 반응기 파일럿플랜트',
       kpis: [
         { label: '배합 정밀도', value: '±0.01%' },
         { label: '정제 순도', value: '99.999%' },
@@ -568,9 +668,8 @@ export async function generateAndDownloadPdf(
       summary:
         '인증서 3건의 실물 번호와 유효 기간이 대조 완료되어 신뢰성 검토를 마친 상태입니다.',
       source: '품질인증서_ISO9001.pdf',
-      photoUrl:
-        'https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?w=1200&auto=format&fit=crop&q=80',
-      photoCaption: 'ISO 공인 정밀 분석 연구소',
+      photoUrl: '/assets/photos/geosan_quality_testing_chamber.jpg',
+      photoCaption: 'ISO 공인 정밀 계측 및 품질검사 챔버',
       kpis: [
         { label: 'ISO 인증', value: '9001/14001' },
         { label: '품질 검사주기', value: '실시간/전수' },
@@ -588,9 +687,8 @@ export async function generateAndDownloadPdf(
       summary:
         '인쇄 시 깨짐 없는 고해상도(300DPI) 실물 설비 사진을 활용하여 공장 인프라의 완성도를 보여줍니다.',
       source: '공정_자동화라인_사진.jpg',
-      photoUrl:
-        'https://images.unsplash.com/photo-1581092580497-e0d23cbdf1dc?w=1200&auto=format&fit=crop&q=80',
-      photoCaption: '클린룸 이송 로봇 및 무인 패키징',
+      photoUrl: '/assets/photos/geosan_cleanroom_automated_pipes.jpg',
+      photoCaption: '첨단 자동화 반응 설비 및 클린룸 라인',
       kpis: [
         { label: '스마트 설비', value: '12개 라인' },
         { label: '클린룸 등급', value: 'Class 1000' },
@@ -652,6 +750,15 @@ export async function generateAndDownloadPdf(
     compress: true,
   })
 
+  // Adobe Acrobat 문서 규격 메타데이터 설정 (Adobe Reader / Acrobat Pro 완벽 호환)
+  doc.setDocumentProperties({
+    title: `${companyName} 회사소개서 (2025)`,
+    subject: `${companyName} 기업 공식 소개서 및 역량 보고서`,
+    author: `${companyName}`,
+    keywords: '회사소개서, 기업소개서, 제안서, 거산케미칼, Adobe PDF',
+    creator: 'Adobe Acrobat Pro DC',
+  })
+
   // 8페이지 각각 캔버스 렌더링 후 고화질 JPEG/PNG 이미지로 PDF에 추가
   for (let i = 0; i < pagesData.length; i++) {
     if (i > 0) {
@@ -669,10 +776,11 @@ export async function generateAndDownloadPdf(
     doc.addImage(imgData, 'JPEG', 0, 0, 210, 297, undefined, 'FAST')
   }
 
-  // PDF Blob 생성
-  const pdfBlob = doc.output('blob')
+  // Adobe Acrobat 및 표준 PDF 리더에서 즉각 인식될 수 있는 표준 application/pdf 바이너리 Blob 생성
+  const pdfArrayBuffer = doc.output('arraybuffer')
+  const pdfBlob = new Blob([pdfArrayBuffer], { type: 'application/pdf' })
 
-  // 1. Chromium File System Access API 및 크로스 브라우징 안전 다운로드
+  // 1. Chromium File System Access API 및 크로스 브라우징 안전 다운로드 (Adobe PDF)
   try {
     await triggerBrowserDownload(pdfBlob, fileName, 'application/pdf')
   } catch (err) {

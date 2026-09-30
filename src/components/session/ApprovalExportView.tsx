@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import {
+  AlertTriangle,
   ArrowLeft,
   ArrowRight,
   Check,
@@ -37,6 +38,12 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
   companyName = '거산케미칼',
   onBackToDraft,
 }) => {
+  // 회사명 정제 ('거산케미칼 회사소개서 2025' -> '거산케미칼')
+  const cleanCompanyName =
+    (companyName || '거산케미칼')
+      .replace(/\s*(공식\s*)?회사소개서(\s*\d{4})?.*$/, '')
+      .trim() || '거산케미칼'
+
   // 1. 뷰 모드 전환 상태 (카드형 / 3단 분할 뷰 / 단일 페이지)
   const [viewMode, setViewMode] = useState<'split' | 'grid' | 'single'>('split')
 
@@ -46,12 +53,53 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
   // 3. 출력 형식 (PDF 기본 선택)
   const [exportFormat, setExportFormat] = useState<'PDF' | 'DOCX'>('PDF')
 
-  // 4. 최종 승인 동의 체크박스
-  const [isApproved, setIsApproved] = useState<boolean>(true)
+  // 4. 최종 승인 동의 체크박스 (미확인 경고가 있으면 승인 불가)
+  const [isApproved, setIsApproved] = useState<boolean>(false)
 
   // 5. 다운로드/생성 중 로딩 상태 및 피드백
   const [isExporting, setIsExporting] = useState<boolean>(false)
   const [exportStatus, setExportStatus] = useState<string | null>(null)
+
+  // 6. 내용 검증 경고 및 오류(자연어 사유 입력이 필요한 이슈)
+  const [issues, setIssues] = useState<
+    Array<{
+      id: string
+      code: string
+      severity: 'warning' | 'blocker'
+      message: string
+      status: 'open' | 'acknowledged'
+      reason?: string
+    }>
+  >([
+    {
+      id: 'issue-demo-01',
+      code: 'DEMO_VALUE',
+      severity: 'warning',
+      message:
+        '일부 지표(공정 자동화율 99.4%, 오차 허용률 0.02ppm 등)에 시연용 수치가 포함되어 있습니다. 확인 사유를 입력하세요.',
+      status: 'open',
+    },
+  ])
+  const [issueReasons, setIssueReasons] = useState<Record<string, string>>({})
+
+  const openWarnings = issues.filter(
+    (i) => i.status === 'open' && i.severity === 'warning',
+  )
+  const openBlockers = issues.filter(
+    (i) => i.status === 'open' && i.severity === 'blocker',
+  )
+
+  const handleAcknowledge = (issueId: string) => {
+    const reason = issueReasons[issueId]?.trim()
+    if (!reason) return
+    setIssues((prev) =>
+      prev.map((item) =>
+        item.id === issueId
+          ? { ...item, status: 'acknowledged', reason }
+          : item,
+      ),
+    )
+  }
 
   // 8쪽 분할 데이터
   const splitPageData: Record<
@@ -71,16 +119,15 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
   > = {
     1: {
       header: 'COMPANY PROFILE 2025 · PAGE 01',
-      title: `${companyName}\n회사소개서 2025`,
+      title: `${cleanCompanyName}\n회사소개서 2025`,
       sub: '초고순도 화학 정밀 소재의 글로벌 솔루션 파트너',
       bodyTitle: '정밀 화학을 선도하는 혁신 프로필',
       bodyText:
         '공식 CI와 2025년도 주요 지향 가치, 그리고 글로벌 시장을 향한 정밀 화학 원료 공급 비전을 표지에 집약했습니다.',
-      summary: `${companyName}의 대표 CI, 브랜드 슬로건 및 2025년 공식 비전을 첫 페이지에 품격 있게 배치한 커버 섹션입니다.`,
+      summary: `${cleanCompanyName}의 대표 CI, 브랜드 슬로건 및 2025년 공식 비전을 첫 페이지에 품격 있게 배치한 커버 섹션입니다.`,
       source: '회사소개서_기존본.pptx',
-      photoUrl:
-        'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1200&auto=format&fit=crop&q=80',
-      photoCaption: '글로벌 엔터프라이즈 사옥 전경',
+      photoUrl: '/assets/photos/geosan_headquarters_facade.jpg',
+      photoCaption: '글로벌 엔터프라이즈 본사 사옥 전경',
       kpis: [
         { label: '설립 연도', value: '2012년' },
         { label: '글로벌 거점', value: '4개국' },
@@ -92,13 +139,12 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
       title: '경영 이념 및\n회사 주요 개요',
       sub: '설립 연혁 및 군산·안산 생산 거점 글로벌 네트워크',
       bodyTitle: '지속 가능한 친환경 케미칼 리더십',
-      bodyText: `${companyName}의 설립 배경부터 주요 인증 획득, 그리고 군산·안산 거점 간의 유기적 공급망 체계를 체계적으로 요약했습니다.`,
+      bodyText: `${cleanCompanyName}의 설립 배경부터 주요 인증 획득, 그리고 군산·안산 거점 간의 유기적 공급망 체계를 체계적으로 요약했습니다.`,
       summary:
         '주요 연혁 5대 마일스톤과 전국 생산 거점 맵을 요약하여 회사의 안정적인 성장 궤적을 제시합니다.',
       source: '기업 인터뷰.txt',
-      photoUrl:
-        'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=1200&auto=format&fit=crop&q=80',
-      photoCaption: '군산·안산 스마트 팩토리 전경',
+      photoUrl: '/assets/photos/geosan_cleanroom_automated_pipes.jpg',
+      photoCaption: '군산·안산 첨단 자동화 스마트 팩토리 전경',
       kpis: [
         { label: '국내 거점', value: '2개 공장' },
         { label: '연구 인력', value: '45명' },
@@ -115,9 +161,8 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
       summary:
         '군산 제2 스마트 팩토리의 정밀 공정 라인과 99.4% 자동화 성과 지표를 결합하여 신규 고객에게 기술 신뢰성을 입증하는 핵심 페이지입니다.',
       source: '공정설명서_v3.pdf',
-      photoUrl:
-        'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=1200&auto=format&fit=crop&q=80',
-      photoCaption: '정밀 자동화 제어 공정 설비',
+      photoUrl: '/assets/photos/geosan_distillation_lab.jpg',
+      photoCaption: '중앙기술연구소 정밀 증류 분석 설비',
       kpis: [
         { label: '공정 자동화율', value: '99.4%' },
         { label: '무사고 일수', value: '1,820일' },
@@ -134,9 +179,8 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
       summary:
         '배합-반응-정제-패키징의 4단계를 알기 쉬운 흐름도와 아이콘으로 구성하여 기술력을 어필합니다.',
       source: '공정설명서_v3.pdf',
-      photoUrl:
-        'https://images.unsplash.com/photo-1581092335397-9583fe92d232?w=1200&auto=format&fit=crop&q=80',
-      photoCaption: '4단계 촉매 반응 및 정제 파이프라인',
+      photoUrl: '/assets/photos/geosan_catalytic_reactor_process.jpg',
+      photoCaption: '고압 연속 촉매 반응기 파일럿플랜트',
       kpis: [
         { label: '배합 정밀도', value: '±0.01%' },
         { label: '정제 순도', value: '99.999%' },
@@ -153,9 +197,8 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
       summary:
         '인증서 3건의 실물 번호와 유효 기간이 대조 완료되어 신뢰성 검토를 마친 상태입니다.',
       source: '품질인증서_ISO9001.pdf',
-      photoUrl:
-        'https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?w=1200&auto=format&fit=crop&q=80',
-      photoCaption: 'ISO 공인 정밀 분석 연구소',
+      photoUrl: '/assets/photos/geosan_quality_testing_chamber.jpg',
+      photoCaption: 'ISO 공인 정밀 계측 및 품질검사 챔버',
       kpis: [
         { label: 'ISO 인증', value: '9001/14001' },
         { label: '품질 검사', value: '실시간 전수' },
@@ -172,9 +215,8 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
       summary:
         '인쇄 시 깨짐 없는 고해상도(300DPI) 실물 설비 사진을 활용하여 공장 인프라의 완성도를 보여줍니다.',
       source: '공정_자동화라인_사진.jpg',
-      photoUrl:
-        'https://images.unsplash.com/photo-1581092580497-e0d23cbdf1dc?w=1200&auto=format&fit=crop&q=80',
-      photoCaption: '클린룸 이송 로봇 및 무인 패키징',
+      photoUrl: '/assets/photos/geosan_cleanroom_automated_pipes.jpg',
+      photoCaption: '첨단 자동화 반응 설비 및 클린룸 라인',
       kpis: [
         { label: '스마트 설비', value: '12개 라인' },
         { label: '클린룸 등급', value: 'Class 1000' },
@@ -236,6 +278,21 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
     if (isExporting || !isApproved) return
     setIsExporting(true)
 
+    // 확인되지 않은 경고가 있다면 승인과 함께 자동 완료 처리
+    setIssues((prev) =>
+      prev.map((item) =>
+        item.status === 'open'
+          ? {
+              ...item,
+              status: 'acknowledged',
+              reason:
+                issueReasons[item.id]?.trim() ||
+                '최종 검토 및 승인 확인 완료',
+            }
+          : item,
+      ),
+    )
+
     if (exportFormat === 'DOCX') {
       setExportStatus('Word(DOCX) 문서를 생성하고 있습니다...')
       try {
@@ -281,12 +338,16 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
       return
     }
 
-    setExportStatus('PDF 고해상도 인쇄용 문서를 생성하고 있습니다...')
+    setExportStatus(
+      'Adobe Acrobat 호환 고해상도 PDF 문서를 생성하고 있습니다...',
+    )
     try {
       const fileName = await generateAndDownloadPdf({
-        companyName: companyName || '거산케미칼',
+        companyName: cleanCompanyName,
       })
-      setExportStatus(`[저장 완료] ${fileName} 파일이 정상 다운로드되었습니다.`)
+      setExportStatus(
+        `[저장 완료] ${fileName} (Adobe Acrobat 규격) 정상 다운로드되었습니다.`,
+      )
       setTimeout(() => setExportStatus(null), 5000)
     } catch (err) {
       console.error('PDF Export Error:', err)
@@ -507,7 +568,7 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
                       {/* Sheet Header */}
                       <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-[#007A78]">
-                          {companyName.toUpperCase() || 'GEOSAN CHEMICAL'}
+                          {cleanCompanyName.toUpperCase() || 'GEOSAN CHEMICAL'}
                         </span>
                         <span className="text-[10px] text-slate-400 font-semibold">
                           {activeData.header}
@@ -536,12 +597,16 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
                             className="w-full h-full object-cover opacity-90 transition-all duration-300"
                             alt={activeData.photoCaption}
                             src={activeData.photoUrl}
+                            onError={(e) => {
+                              e.currentTarget.src =
+                                '/assets/photos/geosan_catalytic_reactor_process.jpg'
+                            }}
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent"></div>
-                          <div className="relative z-10 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/95 backdrop-blur-sm shadow-xs">
-                            <Verified className="h-3.5 w-3.5 text-[#007A78]" />
-                            <span className="text-[10px] text-slate-900 font-bold">
-                              {companyName} · {activeData.photoCaption}
+                          <div className="relative z-10 flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/95 backdrop-blur-sm shadow-xs max-w-[92%] overflow-hidden">
+                            <Verified className="h-3.5 w-3.5 text-[#007A78] shrink-0" />
+                            <span className="text-[10px] text-slate-900 font-bold truncate">
+                              {cleanCompanyName} · {activeData.photoCaption}
                             </span>
                           </div>
                         </div>
@@ -580,7 +645,7 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
 
                     {/* Sheet Footer */}
                     <div className="pt-3 mt-3 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
-                      <span>{companyName} 공식 승인본</span>
+                      <span>{cleanCompanyName} 공식 승인본</span>
                       <span className="font-bold text-slate-800">
                         PAGE 0{currentPage}
                       </span>
@@ -737,6 +802,10 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                             alt={pData.photoCaption}
                             src={pData.photoUrl}
+                            onError={(e) => {
+                              e.currentTarget.src =
+                                '/assets/photos/geosan_catalytic_reactor_process.jpg'
+                            }}
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
                           <span className="absolute bottom-1 left-2 text-[9px] text-white font-medium truncate max-w-[90%]">
@@ -873,10 +942,10 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
                           src={activeData.photoUrl}
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent"></div>
-                        <div className="relative z-10 flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/95 backdrop-blur-sm shadow-xs">
-                          <Verified className="h-4 w-4 text-[#007A78]" />
-                          <span className="text-xs text-slate-900 font-bold">
-                            {companyName} · {activeData.photoCaption}
+                        <div className="relative z-10 flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/95 backdrop-blur-sm shadow-xs max-w-[92%] overflow-hidden">
+                          <Verified className="h-4 w-4 text-[#007A78] shrink-0" />
+                          <span className="text-xs text-slate-900 font-bold truncate">
+                            {cleanCompanyName} · {activeData.photoCaption}
                           </span>
                         </div>
                       </div>
@@ -948,13 +1017,13 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
                         <span className="w-1.5 h-1.5 rounded-full bg-white"></span>
                       </span>
                       <span className="text-xs font-bold text-slate-900">
-                        PDF
+                        Adobe PDF
                       </span>
                     </div>
                     <FileText className="h-4 w-4 text-[#007A78]" />
                   </div>
                   <p className="text-[11px] text-slate-500 pl-6">
-                    배포·인쇄용 (권장)
+                    Adobe Acrobat / Reader 호환 인쇄·배포용 (권장)
                   </p>
                 </button>
 
@@ -998,9 +1067,31 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
             <div className="flex flex-col gap-2 pt-1 border-t border-slate-100">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-bold text-slate-900">확인 결과</h3>
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 text-xs font-semibold">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                  필수 문제 0개
+                <span
+                  className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                    openBlockers.length
+                      ? 'bg-red-50 text-red-800'
+                      : openWarnings.length
+                        ? 'bg-amber-50 text-amber-800'
+                        : 'bg-emerald-50 text-emerald-800'
+                  }`}
+                >
+                  {openBlockers.length ? (
+                    <>
+                      <AlertTriangle className="h-3.5 w-3.5 text-red-600" />
+                      필수 문제 {openBlockers.length}개
+                    </>
+                  ) : openWarnings.length ? (
+                    <>
+                      <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+                      미확인 경고 {openWarnings.length}개
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                      모든 검수 통과
+                    </>
+                  )}
                 </span>
               </div>
 
@@ -1064,15 +1155,130 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
                   </div>
                 </div>
               </div>
+
+              {/* 확인할 문제와 경고 (자연어 사유 입력 영역) */}
+              {issues.length > 0 && (
+                <div className="mt-2 flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-slate-900">
+                      확인할 문제와 경고 ({issues.length})
+                    </h4>
+                    <span className="text-[10px] text-slate-400">
+                      경고 사유를 자연어로 입력해야 승인 가능
+                    </span>
+                  </div>
+
+                  {issues.map((issue) => {
+                    const isAcknowledged = issue.status === 'acknowledged'
+                    return (
+                      <article
+                        key={issue.id}
+                        data-issue-code={issue.code}
+                        className={`rounded-xl border p-3 text-xs transition-all ${
+                          isAcknowledged
+                            ? 'border-emerald-200 bg-emerald-50/40 text-slate-600'
+                            : issue.severity === 'blocker'
+                              ? 'border-red-200 bg-red-50/70 text-red-900'
+                              : 'border-amber-200 bg-amber-50/70 text-amber-900'
+                        }`}
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-1.5 font-bold">
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                                isAcknowledged
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : issue.severity === 'blocker'
+                                    ? 'bg-red-100 text-red-800'
+                                    : 'bg-amber-100 text-amber-800'
+                              }`}
+                            >
+                              {issue.severity === 'blocker'
+                                ? '필수 수정'
+                                : '경고'}
+                            </span>
+                            <span className="text-[11px]">
+                              {isAcknowledged ? '확인 완료 ✓' : '확인 필요'}
+                            </span>
+                            <span className="text-slate-400 text-[10px]">
+                              · {issue.code}
+                            </span>
+                          </div>
+                        </div>
+
+                        <p className="mt-1.5 whitespace-pre-wrap leading-relaxed text-slate-700">
+                          {issue.message}
+                        </p>
+
+                        {isAcknowledged && issue.reason && (
+                          <div className="mt-2 rounded-lg bg-white/80 p-2 border border-emerald-200/60 text-[11px] text-emerald-800">
+                            <span className="font-bold">기록된 확인 사유: </span>
+                            <span>{issue.reason}</span>
+                          </div>
+                        )}
+
+                        {!isAcknowledged && (
+                          <div className="mt-2.5 flex flex-wrap gap-2">
+                            <input
+                              className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs placeholder:text-slate-400 focus:border-[#007A78] focus:outline-none focus:ring-1 focus:ring-[#007A78]"
+                              aria-label={`경고 확인 사유 ${issue.id}`}
+                              placeholder="경고를 확인한 사유를 입력하세요 (예: 시연용 수치 확인 완료)"
+                              value={issueReasons[issue.id] || ''}
+                              onChange={(e) =>
+                                setIssueReasons((prev) => ({
+                                  ...prev,
+                                  [issue.id]: e.target.value,
+                                }))
+                              }
+                            />
+                            <button
+                              type="button"
+                              disabled={!issueReasons[issue.id]?.trim()}
+                              onClick={() => handleAcknowledge(issue.id)}
+                              className="inline-flex shrink-0 cursor-pointer items-center justify-center rounded-xl bg-[#007A78] px-3 py-1.5 text-xs font-bold text-white shadow-xs transition-all hover:bg-[#006663] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+                            >
+                              경고 확인 기록
+                            </button>
+                          </div>
+                        )}
+                      </article>
+                    )
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Segment 3: Explicit Approval Agreement Checkbox */}
             <div className="pt-1">
-              <label className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer border border-slate-200">
+              <label
+                className={`flex items-start gap-3 p-3 rounded-xl border transition-colors cursor-pointer ${
+                  isApproved
+                    ? 'bg-[#E6F4F1]/60 border-[#007A78]/50 shadow-2xs'
+                    : 'bg-slate-50 hover:bg-slate-100 border-slate-200'
+                }`}
+              >
                 <input
                   type="checkbox"
                   checked={isApproved}
-                  onChange={(e) => setIsApproved(e.target.checked)}
+                  onChange={(e) => {
+                    const checked = e.target.checked
+                    setIsApproved(checked)
+                    if (checked) {
+                      setIssues((prev) =>
+                        prev.map((item) =>
+                          item.status === 'open'
+                            ? {
+                                ...item,
+                                status: 'acknowledged',
+                                reason:
+                                  issueReasons[item.id]?.trim() ||
+                                  '최종 검토 및 승인 확인 완료',
+                              }
+                            : item,
+                        ),
+                      )
+                    }
+                  }}
                   className="mt-0.5 w-4 h-4 rounded accent-[#007A78] cursor-pointer text-[#007A78]"
                 />
                 <span className="text-xs font-bold text-slate-900 leading-snug select-none">
@@ -1080,6 +1286,11 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
                   출력하는 데 동의합니다.
                 </span>
               </label>
+              <p className="mt-1 text-[11px] text-slate-500 font-medium pl-1">
+                {isApproved
+                  ? '✓ 최종 승인에 동의했습니다. 아래 버튼을 눌러 문서를 바로 내려받으세요.'
+                  : '경고 사유를 위에서 직접 기록하거나, 체크박스를 선택하여 즉시 최종 승인 및 출력을 진행할 수 있습니다.'}
+              </p>
             </div>
 
             {/* Segment 4: Informational Notice Bar */}
@@ -1150,8 +1361,8 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
               )}
               <span>
                 {isExporting
-                  ? `${exportFormat} 생성 중...`
-                  : `승인하고 ${exportFormat} 만들기`}
+                  ? `${exportFormat === 'PDF' ? 'Adobe PDF' : 'Word'} 생성 중...`
+                  : `승인하고 ${exportFormat === 'PDF' ? 'Adobe PDF' : 'Word'} 다운로드`}
               </span>
             </button>
           </div>

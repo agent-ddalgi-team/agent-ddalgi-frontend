@@ -1,0 +1,846 @@
+<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0" name="viewport"><meta content="web_standard" name="shell-type"><link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+          "outline": "#6e7978",
+          "primary-fixed": "#97f2ef",
+          "secondary-fixed-dim": "#6bd8cb",
+          "surface-dim": "#d2d9f4",
+          "text-muted": "#64748B",
+          "status-info-bg": "#EFF6FF",
+          "on-primary-fixed-variant": "#00504e",
+          "secondary": "#006a61",
+          "inverse-surface": "#283044",
+          "surface-container-lowest": "#ffffff",
+          "surface-bg": "#FFFFFF",
+          "panel-border": "#E2E8F0",
+          "surface-container-low": "#f2f3ff",
+          "on-primary-fixed": "#00201f",
+          "accent-teal-subtle": "#E6F4F1",
+          "on-secondary": "#ffffff",
+          "primary-fixed-dim": "#7ad6d3",
+          "on-secondary-container": "#006f66",
+          "surface-tint": "#006a68",
+          "text-secondary": "#334155",
+          "on-surface": "#131b2e",
+          "inverse-on-surface": "#eef0ff",
+          "on-surface-variant": "#3e4948",
+          "surface-container": "#eaedff",
+          "canvas-bg": "#F1F5F9",
+          "on-tertiary-container": "#b0fff5",
+          "tertiary-container": "#177a72",
+          "background": "#faf8ff",
+          "error-container": "#ffdad6",
+          "surface-bright": "#faf8ff",
+          "status-warning-bg": "#FEF3C7",
+          "text-primary": "#0F172A",
+          "secondary-fixed": "#89f5e7",
+          "status-info-text": "#1D4ED8",
+          "on-background": "#131b2e",
+          "surface-container-high": "#e2e7ff",
+          "status-success-text": "#03543F",
+          "inverse-primary": "#7ad6d3",
+          "on-error": "#ffffff",
+          "status-success-bg": "#DEF7EC",
+          "primary-container": "#007a78",
+          "status-warning-text": "#D97706",
+          "on-tertiary-fixed-variant": "#00504a",
+          "surface": "#faf8ff",
+          "surface-variant": "#dae2fd",
+          "surface-container-highest": "#dae2fd",
+          "on-tertiary-fixed": "#00201d",
+          "on-error-container": "#93000a",
+          "on-secondary-fixed-variant": "#005049",
+          "secondary-container": "#86f2e4",
+          "on-primary-container": "#abfffc",
+          "tertiary-fixed": "#9cf2e8",
+          "tertiary-fixed-dim": "#80d5cb",
+          "outline-variant": "#bdc9c8",
+          "on-secondary-fixed": "#00201d",
+          "on-primary": "#ffffff",
+          "on-tertiary": "#ffffff",
+          "primary": "#005f5e",
+          "tertiary": "#006059",
+          "error": "#ba1a1a"
+        },
+        "borderRadius": {
+          "DEFAULT": "0.25rem",
+          "lg": "0.5rem",
+          "xl": "0.75rem",
+          "full": "9999px"
+        },
+        "spacing": {
+          "space-sm": "0.5rem",
+          "gutter-compact": "0.75rem",
+          "space-lg": "1.5rem",
+          "space-md": "1rem",
+          "gutter": "1.25rem",
+          "space-xl": "2rem",
+          "space-xs": "0.25rem",
+          "margin": "2rem"
+        },
+        "fontFamily": {
+          "headline-md": ["Noto Sans"],
+          "body-sm": ["Noto Sans"],
+          "label-sm": ["Noto Sans"],
+          "body-lg": ["Noto Sans"],
+          "title-sm": ["Noto Sans"],
+          "headline-lg": ["Noto Sans"],
+          "body-md": ["Noto Sans"],
+          "display-lg": ["Noto Sans"],
+          "label-md": ["Noto Sans"]
+        },
+        "fontSize": {
+          "headline-md": ["18px", {"lineHeight": "26px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+          "body-sm": ["13px", {"lineHeight": "19px", "letterSpacing": "0em", "fontWeight": "400"}],
+          "label-sm": ["11px", {"lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "600"}],
+          "body-lg": ["16px", {"lineHeight": "26px", "letterSpacing": "-0.01em", "fontWeight": "400"}],
+          "title-sm": ["15px", {"lineHeight": "22px", "letterSpacing": "-0.005em", "fontWeight": "600"}],
+          "headline-lg": ["22px", {"lineHeight": "30px", "letterSpacing": "-0.015em", "fontWeight": "700"}],
+          "body-md": ["14px", {"lineHeight": "22px", "letterSpacing": "-0.005em", "fontWeight": "400"}],
+          "display-lg": ["30px", {"lineHeight": "38px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+          "label-md": ["13px", {"lineHeight": "18px", "letterSpacing": "-0.005em", "fontWeight": "600"}]
+        }
+      }
+    }
+  }</script></head><body class="bg-canvas-bg font-body-md text-text-primary antialiased min-h-screen flex flex-col"><header class="fixed top-0 left-0 right-0 z-50 bg-surface-bg shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-14 max-w-[1600px] mx-auto px-gutter flex items-center justify-between"><div class="flex items-center gap-space-md"><div class="w-9 h-9 rounded-lg bg-primary flex items-center justify-center text-on-primary shadow-sm"><span class="material-symbols-outlined text-[20px]">description</span></div><div class="flex items-baseline gap-space-sm"><span class="font-headline-md text-headline-md text-text-primary tracking-tight">회사소개서 도우미</span><span class="font-label-sm text-label-sm text-text-muted">Enterprise Studio</span></div></div><div class="hidden md:flex items-center"><div class="inline-flex items-center bg-status-info-bg text-status-info-text px-space-md py-space-xs rounded-full gap-space-xs"><span class="material-symbols-outlined text-[16px]">corporate_fare</span><span class="font-label-md text-label-md">예시 작업 · 거산케미칼</span></div></div><div class="flex items-center gap-space-md"><div class="hidden lg:flex items-center gap-space-xs text-text-muted"><span class="material-symbols-outlined text-[16px]">cloud_done</span><span class="font-label-sm text-label-sm">자동 동기화됨</span></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div><div class="h-12 bg-surface-container-lowest shadow-[0_1px_4px_rgba(0,0,0,0.02)]"><div class="max-w-[1600px] mx-auto px-gutter h-full flex items-center justify-center"><nav class="flex items-center gap-space-xs sm:gap-space-sm p-space-xs rounded-full bg-canvas-bg" data-active-classes="bg-accent-teal-subtle text-primary font-bold shadow-sm"><a class="px-space-md py-space-xs rounded-full font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors flex items-center gap-space-xs" data-path="source-selection" href="#"><span class="w-5 h-5 rounded-full bg-surface-container flex items-center justify-center text-[11px] font-bold">1</span>자료 선택·사전 확인</a><span class="material-symbols-outlined text-text-muted text-[16px]">chevron_right</span><a class="px-space-md py-space-xs rounded-full font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors flex items-center gap-space-xs" data-path="draft-editor" href="#"><span class="w-5 h-5 rounded-full bg-surface-container flex items-center justify-center text-[11px] font-bold">2</span>초안 편집</a><span class="material-symbols-outlined text-text-muted text-[16px]">chevron_right</span><a aria-current="page" class="px-space-md py-space-xs rounded-full font-label-md text-label-md bg-accent-teal-subtle text-primary font-bold shadow-sm flex items-center gap-space-xs transition-colors" data-path="approval-export" href="#"><span class="w-5 h-5 rounded-full bg-primary text-on-primary flex items-center justify-center text-[11px] font-bold">3</span>승인·출력</a></nav></div></div></header><main class="w-full max-w-[1600px] mx-auto px-gutter pt-[104px] pb-space-xl flex-1"><div class="flex flex-col w-full">
+<!-- Active Stepper Highlighter Script sync for step 3 -->
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const stepLinks = document.querySelectorAll('header nav a[data-path]');
+      stepLinks.forEach(link => {
+        if (link.getAttribute('data-path') === 'approval-export') {
+          link.className = "px-space-md py-space-xs rounded-full font-label-md text-label-md bg-accent-teal-subtle text-primary font-bold shadow-sm flex items-center gap-space-xs transition-colors";
+          const badge = link.querySelector('span');
+          if (badge) badge.className = "w-5 h-5 rounded-full bg-primary text-on-primary flex items-center justify-center text-[11px] font-bold";
+        }
+      });
+    });
+  </script>
+<!-- Title & Description Header -->
+<div class="mb-space-lg flex flex-col gap-1">
+<div class="flex items-center gap-space-sm">
+<span class="inline-flex items-center gap-1 px-space-sm py-0.5 rounded-full bg-status-success-bg text-status-success-text font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[14px]">verified</span>
+        검수 통과 완료
+      </span>
+<span class="font-label-sm text-label-sm text-text-muted">문서 식별 번호: GS-2025-04A</span>
+</div>
+<h1 class="font-headline-lg text-headline-lg text-text-primary tracking-tight">확인한 내용을 승인하고 내려받으세요</h1>
+<p class="font-body-md text-text-muted">선택한 출력 형식의 미리보기와 최종 점검 결과를 살펴보고 발행 승인을 진행합니다.</p>
+</div>
+<!-- Tri-Section / Two-Column Main Stage -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-space-lg items-start pb-24">
+<!-- LEFT: Document Sheet Previewer (7 cols on lg, 8 cols on 2xl) -->
+<div class="lg:col-span-7 xl:col-span-7 flex flex-col bg-surface-container-low rounded-xl p-space-md sm:p-space-lg shadow-sm"><!-- Top Preview Navigation Header & View Mode Switcher -->
+<div class="flex flex-col gap-3 pb-space-sm mb-space-sm bg-surface-container-lowest/90 px-space-md py-space-sm rounded-xl border border-panel-border/60 shadow-sm">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+<!-- Tab & View Mode Selection -->
+<div class="flex items-center gap-2 flex-wrap">
+<div class="inline-flex items-center p-1 rounded-lg bg-surface-container-low border border-panel-border/50 gap-1" role="tablist"><button aria-selected="false" class="px-3 py-1.5 rounded-md font-label-md text-label-md transition-all flex items-center gap-1.5 text-text-muted hover:text-text-primary cursor-pointer" id="mode-grid-btn" onclick="toggleViewMode('grid')" type="button"><span class="material-symbols-outlined text-[17px]">grid_view</span><span class="">카드형</span></button><button aria-selected="true" class="px-3 py-1.5 rounded-md font-label-md text-label-md transition-all flex items-center gap-1.5 bg-surface-bg text-primary font-bold shadow-sm cursor-pointer" id="mode-split-btn" onclick="toggleViewMode('split')" type="button"><span class="material-symbols-outlined text-[17px]">view_column</span><span class="">3단 분할 뷰</span><span class="px-1.5 py-0.2 rounded-full bg-accent-teal-subtle text-primary text-[10px] font-bold">추천</span></button><button aria-selected="false" class="px-3 py-1.5 rounded-md font-label-md text-label-md transition-all flex items-center gap-1.5 text-text-muted hover:text-text-primary cursor-pointer" id="mode-single-btn" onclick="toggleViewMode('single')" type="button"><span class="material-symbols-outlined text-[17px]">article</span><span class="">페이지 미리보기</span></button></div>
+<span class="inline-flex items-center gap-1 text-[11px] font-label-sm text-status-success-text bg-status-success-bg px-2.5 py-1 rounded-full">
+<span class="material-symbols-outlined text-[14px]">unfold_more</span>
+        세로 스크롤로 연속 검토 가능
+      </span>
+</div>
+<!-- Quick Action / Format Info -->
+<div class="flex items-center gap-2">
+<span class="hidden xl:inline-flex items-center gap-1 text-[11px] font-label-sm text-text-muted bg-surface-container-low px-2.5 py-1 rounded-full border border-panel-border/40">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+        PDF 8쪽 구성
+      </span>
+<a class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-primary font-label-md text-label-md transition-colors border border-panel-border/60" data-path="draft-editor" href="#">
+<span class="material-symbols-outlined text-[16px]">edit_document</span>
+<span class="">구성 수정</span>
+</a>
+</div>
+</div>
+</div>
+<!-- 3단 분할 뷰 메인 컨테이너 (첨부 UI 구조 반영) -->
+<div class="flex flex-col bg-surface-bg rounded-xl border border-panel-border shadow-sm overflow-hidden" id="split-view-container">
+<!-- 상단 (상태와 제어) 바 -->
+<div class="flex flex-wrap items-center justify-between gap-2 px-space-md py-space-sm bg-surface-container-lowest border-b border-panel-border/60">
+<div class="flex items-center gap-2 min-w-0">
+<span class="material-symbols-outlined text-primary text-[20px] shrink-0">description</span>
+<div class="flex flex-col min-w-0">
+<h2 class="font-title-sm text-[13px] text-text-primary font-bold truncate">거산케미칼 회사소개서 2025 (신규 고객 소개용)</h2>
+<span class="text-[11px] text-text-muted">문서 버전 v2.4 · 최종 편집 24분 전</span>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<!-- 이전/다음 & 위치 -->
+<div class="inline-flex items-center gap-1 bg-surface-container-low px-2 py-1 rounded-lg border border-panel-border/40">
+<button aria-label="이전 쪽" class="w-6 h-6 rounded flex items-center justify-center text-text-secondary hover:bg-surface-bg transition-colors cursor-pointer" onclick="stepPage(-1)">
+<span class="material-symbols-outlined text-[16px]">chevron_left</span>
+</button>
+<span class="font-label-md text-label-sm px-1 text-text-primary font-semibold">
+<span class="text-primary font-bold" id="split-cur-page">3</span> / 8
+        </span>
+<button aria-label="다음 쪽" class="w-6 h-6 rounded flex items-center justify-center text-text-secondary hover:bg-surface-bg transition-colors cursor-pointer" onclick="stepPage(1)">
+<span class="material-symbols-outlined text-[16px]">chevron_right</span>
+</button>
+</div>
+<!-- 배율 인디케이터 -->
+<div class="hidden sm:inline-flex items-center gap-1 text-[11px] text-text-muted bg-surface-container-low px-2 py-1 rounded-lg border border-panel-border/40">
+<span class="material-symbols-outlined text-[14px]">zoom_in</span>
+<span class="">100%</span>
+</div>
+<!-- 퀵 다운로드 버튼 -->
+<button class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-label-sm text-[11px] font-semibold transition-colors shadow-sm" onclick="document.getElementById('main-export-btn').click()" type="button">
+<span class="material-symbols-outlined text-[14px]">download</span>
+<span class="">PDF 빠른저장</span>
+</button>
+</div>
+</div>
+<!-- 3단 분할 바디: 좌측(구성 파악) / 중앙(실제 읽기) / 우측(맥락·행동) -->
+<div class="grid grid-cols-12 min-h-[660px] bg-canvas-bg/60 divide-y md:divide-y-0 md:divide-x divide-panel-border/60">
+<!-- [좌측: 전체 구성 파악·빠른 이동] 3 cols -->
+<div class="col-span-12 md:col-span-3 bg-surface-bg flex flex-col p-2 space-y-1.5 overflow-y-auto max-h-[720px]">
+<div class="px-2 py-1 text-[11px] font-label-sm text-text-muted font-bold uppercase tracking-wider flex items-center justify-between">
+<span class="">목차 및 페이지 구성</span>
+<span class="text-primary font-medium">8쪽 전체</span>
+</div>
+<!-- Thumbnail 1 -->
+<div class="group p-1.5 rounded-lg border border-panel-border hover:border-primary/40 bg-surface-bg hover:bg-surface-container-low cursor-pointer transition-all flex items-center gap-2" id="thumb-item-1" onclick="selectThumb(1)">
+<div class="w-10 h-12 rounded bg-surface-container-low border border-panel-border/60 flex flex-col justify-between p-1 shrink-0 group-hover:border-primary/30">
+<div class="w-4 h-1 bg-primary/40 rounded"></div>
+<div class="w-6 h-1.5 bg-text-primary/40 rounded mx-auto"></div>
+<div class="w-5 h-0.5 bg-panel-border rounded"></div>
+</div>
+<div class="flex flex-col min-w-0 flex-1">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-[11px] font-bold text-text-secondary">01 표지</span>
+<span class="text-[10px] text-status-success-text">완료</span>
+</div>
+<span class="text-[11px] text-text-muted truncate">회사소개서 표지</span>
+</div>
+</div>
+<!-- Thumbnail 2 -->
+<div class="group p-1.5 rounded-lg border border-panel-border hover:border-primary/40 bg-surface-bg hover:bg-surface-container-low cursor-pointer transition-all flex items-center gap-2" id="thumb-item-2" onclick="selectThumb(2)">
+<div class="w-10 h-12 rounded bg-surface-container-low border border-panel-border/60 flex flex-col justify-between p-1 shrink-0 group-hover:border-primary/30">
+<div class="w-5 h-1 bg-text-primary/40 rounded"></div>
+<div class="grid grid-cols-2 gap-0.5"><div class="h-2 bg-surface-bg rounded border border-panel-border"></div><div class="h-2 bg-surface-bg rounded border border-panel-border"></div></div>
+<div class="w-4 h-0.5 bg-panel-border rounded"></div>
+</div>
+<div class="flex flex-col min-w-0 flex-1">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-[11px] font-bold text-text-secondary">02 회사 개요</span>
+<span class="text-[10px] text-status-success-text">완료</span>
+</div>
+<span class="text-[11px] text-text-muted truncate">경영 이념 및 비전</span>
+</div>
+</div>
+<!-- Thumbnail 3 (Selected Active) -->
+<div class="p-1.5 rounded-lg border-2 border-primary bg-accent-teal-subtle/50 cursor-pointer transition-all flex items-center gap-2 shadow-sm" id="thumb-item-3" onclick="selectThumb(3)">
+<div class="w-10 h-12 rounded bg-surface-bg border border-primary/50 flex flex-col justify-between p-1 shrink-0">
+<div class="w-5 h-1 bg-primary rounded"></div>
+<div class="h-4 bg-primary/15 rounded flex items-center justify-center"><span class="material-symbols-outlined text-primary text-[10px]">factory</span></div>
+<div class="w-6 h-0.5 bg-primary/40 rounded"></div>
+</div>
+<div class="flex flex-col min-w-0 flex-1">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-[11px] font-bold text-primary">03 우리의 강점</span>
+<span class="text-[10px] font-bold text-primary bg-primary/10 px-1 rounded">선택</span>
+</div>
+<span class="text-[11px] text-text-primary font-medium truncate">공정과 품질을 한눈에</span>
+</div>
+</div>
+<!-- Thumbnail 4 -->
+<div class="group p-1.5 rounded-lg border border-panel-border hover:border-primary/40 bg-surface-bg hover:bg-surface-container-low cursor-pointer transition-all flex items-center gap-2" id="thumb-item-4" onclick="selectThumb(4)">
+<div class="w-10 h-12 rounded bg-surface-container-low border border-panel-border/60 flex flex-col justify-between p-1 shrink-0 group-hover:border-primary/30">
+<div class="w-6 h-1 bg-text-primary/40 rounded"></div>
+<div class="space-y-0.5"><div class="h-1 bg-surface-bg rounded border border-panel-border"></div><div class="h-1 bg-surface-bg rounded border border-panel-border"></div></div>
+<div class="w-4 h-0.5 bg-panel-border rounded"></div>
+</div>
+<div class="flex flex-col min-w-0 flex-1">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-[11px] font-bold text-text-secondary">04 공정 소개</span>
+<span class="text-[10px] text-status-success-text">완료</span>
+</div>
+<span class="text-[11px] text-text-muted truncate">정밀 반응 4단계 공정</span>
+</div>
+</div>
+<!-- Thumbnail 5 -->
+<div class="group p-1.5 rounded-lg border border-panel-border hover:border-primary/40 bg-surface-bg hover:bg-surface-container-low cursor-pointer transition-all flex items-center gap-2" id="thumb-item-5" onclick="selectThumb(5)">
+<div class="w-10 h-12 rounded bg-surface-container-low border border-panel-border/60 flex flex-col justify-between p-1 shrink-0 group-hover:border-primary/30">
+<div class="w-5 h-1 bg-text-primary/40 rounded"></div>
+<div class="h-4 bg-surface-bg border border-panel-border rounded"></div>
+<div class="w-5 h-0.5 bg-panel-border rounded"></div>
+</div>
+<div class="flex flex-col min-w-0 flex-1">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-[11px] font-bold text-text-secondary">05 품질관리</span>
+<span class="text-[10px] text-status-success-text">완료</span>
+</div>
+<span class="text-[11px] text-text-muted truncate">ISO 인증 및 보증</span>
+</div>
+</div>
+<!-- Thumbnail 6 -->
+<div class="group p-1.5 rounded-lg border border-panel-border hover:border-primary/40 bg-surface-bg hover:bg-surface-container-low cursor-pointer transition-all flex items-center gap-2" id="thumb-item-6" onclick="selectThumb(6)">
+<div class="w-10 h-12 rounded bg-surface-container-low border border-panel-border/60 flex flex-col justify-between p-1 shrink-0 group-hover:border-primary/30">
+<div class="grid grid-cols-2 gap-0.5 my-auto"><div class="h-4 bg-primary/20 rounded"></div><div class="h-4 bg-secondary/20 rounded"></div></div>
+<div class="w-6 h-0.5 bg-panel-border rounded"></div>
+</div>
+<div class="flex flex-col min-w-0 flex-1">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-[11px] font-bold text-text-secondary">06 설비·사진</span>
+<span class="text-[10px] text-status-info-text">300DPI</span>
+</div>
+<span class="text-[11px] text-text-muted truncate">스마트 팩토리 설비</span>
+</div>
+</div>
+<!-- Thumbnail 7 -->
+<div class="group p-1.5 rounded-lg border border-panel-border hover:border-primary/40 bg-surface-bg hover:bg-surface-container-low cursor-pointer transition-all flex items-center gap-2" id="thumb-item-7" onclick="selectThumb(7)">
+<div class="w-10 h-12 rounded bg-surface-container-low border border-panel-border/60 flex flex-col justify-between p-1 shrink-0 group-hover:border-primary/30">
+<div class="w-5 h-1 bg-text-primary/40 rounded"></div>
+<div class="space-y-0.5"><div class="h-1.5 bg-surface-bg border border-panel-border rounded"></div><div class="h-1.5 bg-surface-bg border border-panel-border rounded"></div></div>
+<div class="w-5 h-0.5 bg-panel-border rounded"></div>
+</div>
+<div class="flex flex-col min-w-0 flex-1">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-[11px] font-bold text-text-secondary">07 협력 사례</span>
+<span class="text-[10px] text-status-success-text">완료</span>
+</div>
+<span class="text-[11px] text-text-muted truncate">국내외 납품 레퍼런스</span>
+</div>
+</div>
+<!-- Thumbnail 8 -->
+<div class="group p-1.5 rounded-lg border border-panel-border hover:border-primary/40 bg-surface-bg hover:bg-surface-container-low cursor-pointer transition-all flex items-center gap-2" id="thumb-item-8" onclick="selectThumb(8)">
+<div class="w-10 h-12 rounded bg-surface-container-low border border-panel-border/60 flex flex-col justify-between p-1 shrink-0 group-hover:border-primary/30">
+<div class="w-4 h-1 bg-text-primary/40 rounded"></div>
+<div class="w-4 h-4 rounded-full bg-primary/15 mx-auto flex items-center justify-center"><span class="material-symbols-outlined text-[9px] text-primary">call</span></div>
+<div class="w-5 h-0.5 bg-panel-border rounded"></div>
+</div>
+<div class="flex flex-col min-w-0 flex-1">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-[11px] font-bold text-text-secondary">08 문의 안내</span>
+<span class="text-[10px] text-status-success-text">완료</span>
+</div>
+<span class="text-[11px] text-text-muted truncate">연락처 및 사업 협력</span>
+</div>
+</div>
+</div>
+<!-- [중앙: 실제 읽기] 6 cols (가장 넓게 표시) -->
+<div class="col-span-12 md:col-span-6 p-4 sm:p-6 overflow-y-auto max-h-[720px] flex justify-center bg-canvas-bg">
+<!-- Realistic Document Canvas Paper -->
+<div class="w-full max-w-[500px] bg-surface-bg rounded-xl shadow-md p-6 sm:p-8 flex flex-col justify-between min-h-[640px] border border-panel-border/60 transition-all duration-200">
+<div class="flex flex-col gap-4">
+<!-- Document Sheet Header -->
+<div class="flex items-center justify-between border-b border-panel-border/40 pb-2">
+<span class="font-label-sm text-[10px] uppercase tracking-wider text-primary font-bold">GEOSAN CHEMICAL</span>
+<span class="font-label-sm text-[10px] text-text-muted" id="sheet-header-label">COMPANY PROFILE 2025 · PAGE 03</span>
+</div>
+<!-- Title & Subtitle -->
+<div class="space-y-1">
+<h3 class="font-display-lg text-[22px] sm:text-[24px] text-text-primary tracking-tight leading-snug font-bold" id="sheet-title">
+              공정과 품질을<br>한눈에
+            </h3>
+<p class="font-body-sm text-[13px] text-text-secondary" id="sheet-sub">
+              자료로 확인하는 우리 회사의 강점과 신뢰성 지표
+            </p>
+</div>
+<!-- Graphic / Process Photo Mockup -->
+<div class="rounded-lg bg-surface-container overflow-hidden border border-panel-border/60 shadow-sm">
+<div class="relative w-full h-36 bg-surface-container-high flex flex-col items-center justify-center overflow-hidden">
+<div class="absolute inset-0 grid grid-cols-5 gap-1.5 p-2 opacity-80">
+<div class="bg-surface-container rounded-sm flex flex-col justify-end p-1.5"><div class="h-14 bg-primary/20 rounded-sm"></div></div>
+<div class="bg-surface-container rounded-sm flex flex-col justify-end p-1.5"><div class="h-20 bg-primary/30 rounded-sm"></div></div>
+<div class="bg-surface-container rounded-sm flex flex-col justify-end p-1.5"><div class="h-12 bg-primary/15 rounded-sm"></div></div>
+<div class="bg-surface-container rounded-sm flex flex-col justify-end p-1.5"><div class="h-24 bg-primary/35 rounded-sm"></div></div>
+<div class="bg-surface-container rounded-sm flex flex-col justify-end p-1.5"><div class="h-16 bg-primary/25 rounded-sm"></div></div>
+</div>
+<div class="relative z-10 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-bg/95 backdrop-blur-sm shadow-sm">
+<span class="material-symbols-outlined text-primary text-[15px]">factory</span>
+<span class="font-label-sm text-[11px] text-text-primary font-medium">군산 제2 스마트 케미칼 설비</span>
+</div>
+</div>
+<div class="px-3 py-1.5 bg-surface-container-highest/50 flex items-center justify-between text-[10px] text-text-muted">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-[13px]">image</span> 공정 사진.jpg · 300DPI</span>
+<span class="">정상 렌더링</span>
+</div>
+</div>
+<!-- Narrative Copy -->
+<div class="space-y-1.5 pt-1">
+<h4 class="font-headline-md text-[14px] text-text-primary tracking-tight font-bold" id="sheet-body-title">
+              고객에게 필요한 정보를 간결하게
+            </h4>
+<p class="font-body-sm text-[12px] text-text-secondary leading-relaxed" id="sheet-body-text">
+              공정과 품질관리 세부 프로세스를 체계화하여 고객이 납기, 정밀 순도 및 ISO 기준 적합성을 직관적으로 파악할 수 있도록 도표와 검증 로그를 병기했습니다.
+            </p>
+</div>
+<!-- KPI Visual Strip -->
+<div class="grid grid-cols-3 gap-2 p-2.5 rounded-lg bg-surface-container-low shadow-sm border border-panel-border/40">
+<div class="flex flex-col">
+<span class="text-[10px] text-text-muted">공정 자동화율</span>
+<span class="font-headline-md text-[15px] text-primary font-bold">99.4%</span>
+</div>
+<div class="flex flex-col">
+<span class="text-[10px] text-text-muted">무사고 일수</span>
+<span class="font-headline-md text-[15px] text-text-primary font-bold">1,820일</span>
+</div>
+<div class="flex flex-col">
+<span class="text-[10px] text-text-muted">오차 허용률</span>
+<span class="font-headline-md text-[15px] text-secondary font-bold">0.02ppm</span>
+</div>
+</div>
+</div>
+<!-- Sheet Footer -->
+<div class="pt-4 mt-4 border-t border-panel-border/40 flex items-center justify-between text-[10px] text-text-muted">
+<span class="">거산케미칼 회사소개서 공식 승인본</span>
+<span class="font-bold text-text-secondary" id="sheet-page-indicator">PAGE 03</span>
+</div>
+</div>
+</div>
+<!-- [우측: 맥락·행동 유도] 3 cols -->
+<div class="col-span-12 md:col-span-3 bg-surface-bg flex flex-col p-space-md justify-between space-y-4 overflow-y-auto max-h-[720px]">
+<div class="flex flex-col gap-3.5">
+<!-- Current Context Badge -->
+<div class="flex items-center justify-between pb-2 border-b border-panel-border/50">
+<span class="font-label-sm text-[11px] text-text-muted uppercase font-bold">페이지 상세 맥락</span>
+<span class="inline-flex items-center gap-1 text-[11px] font-bold text-status-success-text bg-status-success-bg px-2 py-0.5 rounded-full">
+<span class="material-symbols-outlined text-[13px]">verified</span>검수 완료
+          </span>
+</div>
+<!-- 2~3줄 요약 블록 -->
+<div class="flex flex-col gap-1.5 p-3 rounded-lg bg-surface-container-low/60 border border-panel-border/50">
+<div class="flex items-center gap-1 text-primary text-[12px] font-bold">
+<span class="material-symbols-outlined text-[15px]">summarize</span>
+<span class="">페이지 핵심 요약</span>
+</div>
+<p class="font-body-sm text-[12px] text-text-secondary leading-snug" id="context-summary-text">
+            군산 제2 스마트 팩토리의 정밀 공정 라인과 99.4% 자동화 성과 지표를 결합하여 신규 고객에게 기술 신뢰성을 입증하는 핵심 페이지입니다.
+          </p>
+</div>
+<!-- 핵심 수치·근거 지표 -->
+<div class="flex flex-col gap-2">
+<span class="text-[11px] font-label-sm text-text-muted font-bold">검증된 핵심 수치</span>
+<div class="space-y-1.5">
+<div class="p-2 rounded bg-surface-container-lowest border border-panel-border/50 flex items-center justify-between text-[11px]">
+<span class="text-text-muted">원천 출처</span>
+<span class="text-text-primary font-medium truncate max-w-[120px]">공정설명서_v3.pdf</span>
+</div>
+<div class="p-2 rounded bg-surface-container-lowest border border-panel-border/50 flex items-center justify-between text-[11px]">
+<span class="text-text-muted">검증 상태</span>
+<span class="text-status-success-text font-bold flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[13px]">check_circle</span>오차 0건
+              </span>
+</div>
+<div class="p-2 rounded bg-surface-container-lowest border border-panel-border/50 flex items-center justify-between text-[11px]">
+<span class="text-text-muted">해상도 점검</span>
+<span class="text-primary font-medium">300DPI 적합</span>
+</div>
+</div>
+</div>
+</div>
+<!-- 연관 액션 / CTA 버튼 그룹 -->
+<div class="flex flex-col gap-2 pt-2 border-t border-panel-border/50">
+<a class="w-full inline-flex items-center justify-center gap-1 px-3 py-2 rounded-lg bg-surface-container hover:bg-surface-container-high text-primary font-label-md text-[12px] font-semibold border border-panel-border/60 transition-colors shadow-sm" data-path="draft-editor" href="#">
+<span class="material-symbols-outlined text-[15px]">edit</span>
+<span class="">초안에서 이 페이지 수정</span>
+</a>
+<button class="w-full inline-flex items-center justify-center gap-1 px-3 py-2 rounded-lg bg-surface-container-lowest hover:bg-surface-container-low text-text-secondary font-label-md text-[12px] font-medium border border-panel-border/50 transition-colors cursor-pointer" onclick="showRefSource()" type="button">
+<span class="material-symbols-outlined text-[15px]">find_in_page</span>
+<span class="">근거 원천 자료 보기</span>
+</button>
+<button class="w-full inline-flex items-center justify-center gap-1 px-3 py-2 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary font-label-md text-[12px] font-bold transition-colors cursor-pointer" onclick="stepPage(1)" type="button">
+<span class="">다음 페이지 검토</span>
+<span class="material-symbols-outlined text-[15px]">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Interactive Script for 3-Column Split Mode and Grid Mode -->
+<script>
+  let currentSplitPage = 3;
+  const splitPageData = {
+    1: {
+      header: 'COMPANY PROFILE 2025 · PAGE 01',
+      title: '거산케미칼\n회사소개서 2025',
+      sub: '초고순도 화학 정밀 소재의 글로벌 솔루션 파트너',
+      bodyTitle: '정밀 화학을 선도하는 혁신 프로필',
+      bodyText: '공식 CI와 2025년도 주요 지향 가치, 그리고 글로벌 시장을 향한 정밀 화학 원료 공급 비전을 표지에 집약했습니다.',
+      summary: '거산케미칼의 대표 CI, 브랜드 슬로건 및 2025년 공식 비전을 첫 페이지에 품격 있게 배치한 커버 섹션입니다.'
+    },
+    2: {
+      header: 'COMPANY PROFILE 2025 · PAGE 02',
+      title: '경영 이념 및\n회사 주요 개요',
+      sub: '설립 연혁 및 군산·안산 생산 거점 글로벌 네트워크',
+      bodyTitle: '지속 가능한 친환경 케미칼 리더십',
+      bodyText: '거산케미칼의 설립 배경부터 주요 인증 획득, 그리고 군산·안산 거점 간의 유기적 공급망 체계를 체계적으로 요약했습니다.',
+      summary: '주요 연혁 5대 마일스톤과 전국 생산 거점 맵을 요약하여 회사의 안정적인 성장 궤적을 제시합니다.'
+    },
+    3: {
+      header: 'COMPANY PROFILE 2025 · PAGE 03',
+      title: '공정과 품질을\n한눈에',
+      sub: '자료로 확인하는 우리 회사의 강점과 신뢰성 지표',
+      bodyTitle: '고객에게 필요한 정보를 간결하게',
+      bodyText: '공정과 품질관리 세부 프로세스를 체계화하여 고객이 납기, 정밀 순도 및 ISO 기준 적합성을 직관적으로 파악할 수 있도록 도표와 검증 로그를 병기했습니다.',
+      summary: '군산 제2 스마트 팩토리의 정밀 공정 라인과 99.4% 자동화 성과 지표를 결합하여 신규 고객에게 기술 신뢰성을 입증하는 핵심 페이지입니다.'
+    },
+    4: {
+      header: 'COMPANY PROFILE 2025 · PAGE 04',
+      title: '정밀 화학 4단계\n프로세스 공정',
+      sub: '원료 배합부터 촉매 반응, 무균 패키징까지 실시간 제어',
+      bodyTitle: '단계별 완벽 관리 프로토콜',
+      bodyText: '공정 중 발생할 수 있는 미세 불순물을 제어하기 위한 실시간 센서 피드백 루프와 4단계 정제 공정을 다이어그램으로 시각화했습니다.',
+      summary: '배합-반응-정제-패키징의 4단계를 알기 쉬운 흐름도와 아이콘으로 구성하여 기술력을 어필합니다.'
+    },
+    5: {
+      header: 'COMPANY PROFILE 2025 · PAGE 05',
+      title: 'ISO 인증 및\n품질 보증 체계',
+      sub: 'ISO 9001/14001 공인 인증 및 0.02ppm 정밀 허용 기준',
+      bodyTitle: '국제 기준을 상회하는 엄격한 품질',
+      bodyText: '국제 표준 인증서 매핑과 정기 검사 주기, 불량률 추이 통계를 투명하게 공개하여 바이어의 사전 실사 요구를 충족합니다.',
+      summary: '인증서 3건의 실물 번호와 유효 기간이 대조 완료되어 신뢰성 검토를 마친 상태입니다.'
+    },
+    6: {
+      header: 'COMPANY PROFILE 2025 · PAGE 06',
+      title: '군산 스마트 팩토리\n설비 및 사진',
+      sub: '반응기 군집 및 자동 포장 라인 고해상도 설비 갤러리',
+      bodyTitle: '최첨단 무인 자동화 반응 설비',
+      bodyText: '고압 수소화 반응기 및 클린룸 이송 로봇의 실제 가동 사진 4건을 300DPI 인쇄 표준에 맞춰 선명하게 배치했습니다.',
+      summary: '인쇄 시 깨짐 없는 고해상도(300DPI) 실물 설비 사진을 활용하여 공장 인프라의 완성도를 보여줍니다.'
+    },
+    7: {
+      header: 'COMPANY PROFILE 2025 · PAGE 07',
+      title: '국내외 주요 납품\n레퍼런스 및 실적',
+      sub: '반도체 세정제 및 2차전지 전구체 핵심 고객사 납품 사례',
+      bodyTitle: '글로벌 톱티어 파트너사 협력 사례',
+      bodyText: '주요 전자 및 화학 기업 대상 납품 이력과 다년간 축적된 장기 공급 계약 현황을 신뢰성 있게 서술했습니다.',
+      summary: '국내외 8대 고객사 레퍼런스를 인포그래픽으로 일목요연하게 정리했습니다.'
+    },
+    8: {
+      header: 'COMPANY PROFILE 2025 · PAGE 08',
+      title: '연락처 및 사업 협력\n공식 문의 안내',
+      sub: '영업대표부 직통 채널 및 본사·연구소 오피셜 컨택 포인트',
+      bodyTitle: '신속한 상담 및 견적 문의 창구',
+      bodyText: '신규 고객이 즉시 기술 상담과 샘플 신청을 접수할 수 있도록 직통 번호, 공식 이메일, QR코드를 깔끔하게 마감했습니다.',
+      summary: '공식 영업 채널 및 공장 방문 접수처 정보가 정확히 기재되어 있는지 사전 검증을 마쳤습니다.'
+    }
+  };
+
+  function selectThumb(pageNum) {
+    currentSplitPage = pageNum;
+    document.getElementById('split-cur-page').textContent = pageNum;
+    
+    // Update thumbnail styles
+    for (let i = 1; i <= 8; i++) {
+      const thumb = document.getElementById('thumb-item-' + i);
+      if (thumb) {
+        if (i === pageNum) {
+          thumb.className = "p-1.5 rounded-lg border-2 border-primary bg-accent-teal-subtle/50 cursor-pointer transition-all flex items-center gap-2 shadow-sm";
+        } else {
+          thumb.className = "group p-1.5 rounded-lg border border-panel-border hover:border-primary/40 bg-surface-bg hover:bg-surface-container-low cursor-pointer transition-all flex items-center gap-2";
+        }
+      }
+    }
+
+    const data = splitPageData[pageNum];
+    if (data) {
+      document.getElementById('sheet-header-label').textContent = data.header;
+      document.getElementById('sheet-title').innerHTML = data.title.replace('\n', '<br/>');
+      document.getElementById('sheet-sub').textContent = data.sub;
+      document.getElementById('sheet-body-title').textContent = data.bodyTitle;
+      document.getElementById('sheet-body-text').textContent = data.bodyText;
+      document.getElementById('sheet-page-indicator').textContent = 'PAGE ' + String(pageNum).padStart(2, '0');
+      document.getElementById('context-summary-text').textContent = data.summary;
+    }
+  }
+
+  function stepPage(delta) {
+    let next = currentSplitPage + delta;
+    if (next < 1) next = 1;
+    if (next > 8) next = 8;
+    selectThumb(next);
+  }
+
+  function toggleViewMode(mode) {
+    const gridBtn = document.getElementById('mode-grid-btn');
+    const splitBtn = document.getElementById('mode-split-btn');
+    const splitContainer = document.getElementById('split-view-container');
+
+    if (mode === 'grid') {
+      gridBtn.className = "px-3 py-1.5 rounded-md font-label-md text-label-md transition-all flex items-center gap-1.5 bg-surface-bg text-primary font-bold shadow-sm cursor-pointer";
+      gridBtn.setAttribute('aria-selected', 'true');
+      splitBtn.className = "px-3 py-1.5 rounded-md font-label-md text-label-md transition-all flex items-center gap-1.5 text-text-muted hover:text-text-primary cursor-pointer";
+      splitBtn.setAttribute('aria-selected', 'false');
+      // Simple notification toast or shift
+      splitContainer.classList.toggle('opacity-95');
+    } else {
+      splitBtn.className = "px-3 py-1.5 rounded-md font-label-md text-label-md transition-all flex items-center gap-1.5 bg-surface-bg text-primary font-bold shadow-sm cursor-pointer";
+      splitBtn.setAttribute('aria-selected', 'true');
+      gridBtn.className = "px-3 py-1.5 rounded-md font-label-md text-label-md transition-all flex items-center gap-1.5 text-text-muted hover:text-text-primary cursor-pointer";
+      gridBtn.setAttribute('aria-selected', 'false');
+    }
+  }
+
+  function showRefSource() {
+    alert('원천 근거 파일 [공정설명서_v3.pdf]의 제4장 공정자동화 규격 섹션과 동기화되어 있습니다.');
+  }
+</script></div>
+<!-- RIGHT: Inspector / Approval Control Deck (5 cols on lg, 5 cols on 2xl) -->
+<div class="lg:col-span-5 xl:col-span-5 flex flex-col gap-space-lg">
+<!-- Panel Card: Format Selection & Quality Verification -->
+<div class="bg-surface-bg rounded-xl shadow-md p-space-lg sm:p-space-xl flex flex-col gap-space-lg">
+<!-- Segment 1: Export Format Choice -->
+<div>
+<label class="block font-headline-md text-headline-md text-text-primary tracking-tight mb-space-sm">
+            출력 형식
+          </label>
+<div class="grid grid-cols-2 gap-space-md">
+<!-- Option 1: PDF (Selected Active State) -->
+<button class="format-card relative p-space-md rounded-lg text-left bg-accent-teal-subtle/40 transition-all flex flex-col gap-1 shadow-sm" id="format-pdf" type="button">
+<div class="flex items-center justify-between w-full">
+<div class="flex items-center gap-2">
+<span class="w-4 h-4 rounded-full bg-primary flex items-center justify-center">
+<span class="w-1.5 h-1.5 rounded-full bg-surface-bg"></span>
+</span>
+<span class="font-title-sm text-title-sm text-text-primary font-bold">PDF</span>
+</div>
+<span class="material-symbols-outlined text-primary text-[20px]">picture_as_pdf</span>
+</div>
+<p class="font-label-sm text-label-sm text-text-muted pl-6">배포·인쇄용 (권장)</p>
+</button>
+<!-- Option 2: DOCX (Inactive State) -->
+<button class="format-card relative p-space-md rounded-lg text-left bg-surface-container-lowest hover:bg-surface-container-low transition-all flex flex-col gap-1 shadow-sm" id="format-docx" type="button">
+<div class="flex items-center justify-between w-full">
+<div class="flex items-center gap-2">
+<span class="w-4 h-4 rounded-full bg-surface-container flex items-center justify-center"></span>
+<span class="font-title-sm text-title-sm text-text-primary font-medium">DOCX</span>
+</div>
+<span class="material-symbols-outlined text-text-muted text-[20px]">description</span>
+</div>
+<p class="font-label-sm text-label-sm text-text-muted pl-6">Word에서 추가 편집</p>
+</button>
+</div>
+</div>
+<!-- Segment 2: Verification Checklist Card -->
+<div class="flex flex-col gap-space-sm pt-space-xs">
+<div class="flex items-center justify-between">
+<h3 class="font-headline-md text-headline-md text-text-primary tracking-tight">확인 결과</h3>
+<span class="inline-flex items-center gap-1 px-space-sm py-1 rounded-full bg-status-success-bg text-status-success-text font-label-md text-label-md">
+<span class="material-symbols-outlined text-[16px]">task_alt</span>
+              필수 문제 0개
+            </span>
+</div>
+<!-- Preflight Checklist items -->
+<div class="flex flex-col divide-y divide-surface-container-high bg-surface-container-low/50 rounded-xl p-space-sm">
+<!-- Item 1 -->
+<div class="flex items-start gap-space-sm py-space-sm px-space-xs">
+<div class="w-6 h-6 rounded-full bg-status-success-bg text-status-success-text flex items-center justify-center shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[16px]">check</span>
+</div>
+<div class="flex flex-col">
+<span class="font-title-sm text-title-sm text-text-primary">필수 내용 점검</span>
+<span class="font-body-sm text-body-sm text-text-secondary">회사명(거산케미칼)과 4대 핵심 사업 내용을 모두 확인했어요.</span>
+</div>
+</div>
+<!-- Item 2 -->
+<div class="flex items-start gap-space-sm py-space-sm px-space-xs">
+<div class="w-6 h-6 rounded-full bg-status-success-bg text-status-success-text flex items-center justify-center shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[16px]">check</span>
+</div>
+<div class="flex flex-col">
+<span class="font-title-sm text-title-sm text-text-primary">수치·근거 데이터</span>
+<span class="font-body-sm text-body-sm text-text-secondary">생산 통계 및 인증 일자 등 확인이 필요한 필수 문제가 없어요.</span>
+</div>
+</div>
+<!-- Item 3 -->
+<div class="flex items-start gap-space-sm py-space-sm px-space-xs">
+<div class="w-6 h-6 rounded-full bg-status-success-bg text-status-success-text flex items-center justify-center shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[16px]">check</span>
+</div>
+<div class="flex flex-col">
+<span class="font-title-sm text-title-sm text-text-primary">사진·캡션 정합성</span>
+<span class="font-body-sm text-body-sm text-text-secondary">사용한 스마트 공장 사진과 각 캡션 레이블 매핑을 확인했어요.</span>
+</div>
+</div>
+<!-- Item 4 -->
+<div class="flex items-start gap-space-sm py-space-sm px-space-xs">
+<div class="w-6 h-6 rounded-full bg-status-success-bg text-status-success-text flex items-center justify-center shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[16px]">check</span>
+</div>
+<div class="flex flex-col">
+<span class="font-title-sm text-title-sm text-text-primary" id="layout-check-title">PDF 배치 상태</span>
+<span class="font-body-sm text-body-sm text-text-secondary" id="layout-check-desc">글 넘침(Overflow)이나 해상도 저하 이미지가 없어요.</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Segment 3: Explicit Approval Agreement Checkbox -->
+<div class="pt-space-xs">
+<label class="group flex items-start gap-space-sm p-space-md rounded-xl bg-surface-container-low hover:bg-surface-container transition-colors cursor-pointer">
+<input checked="" class="mt-0.5 w-5 h-5 rounded accent-primary cursor-pointer text-primary" id="approval-checkbox" type="checkbox">
+<span class="font-title-sm text-title-sm text-text-primary select-none leading-snug">
+              최종 미리보기를 확인했으며, 이 내용으로 문서를 승인 및 출력하는 데 동의합니다.
+            </span>
+</label>
+</div>
+<!-- Segment 4: Informational Notice Bar -->
+<div class="flex items-center gap-space-sm p-space-md rounded-lg bg-status-info-bg text-status-info-text">
+<span class="material-symbols-outlined text-[20px] shrink-0">info</span>
+<p class="font-body-sm text-body-sm">
+            내용이나 출력 형식을 바꾸면 사전 검수 로그가 갱신되므로 다시 확인하고 승인해 주세요.
+          </p>
+</div>
+</div>
+<!-- Quick Metadata Card -->
+<div class="bg-surface-bg rounded-xl p-space-md shadow-sm flex items-center justify-between text-text-muted">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-[20px] text-primary">security</span>
+<span class="font-label-md text-label-md text-text-secondary">출력 보안 워터마크 기본 적용</span>
+</div>
+<span class="font-label-sm text-label-sm">사내 인트라넷 전용</span>
+</div>
+</div>
+</div>
+<!-- Bottom Persistent Sticky Dock Bar -->
+<div class="fixed bottom-0 left-0 right-0 z-40 bg-surface-bg/95 backdrop-blur-md shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
+<div class="max-w-[1600px] mx-auto px-gutter h-16 flex items-center justify-between gap-space-md">
+<!-- Back Step Link -->
+<a class="inline-flex items-center gap-space-xs px-space-md py-2.5 rounded-lg bg-surface-bg hover:bg-surface-container text-text-primary font-title-sm text-title-sm transition-colors shadow-sm" data-path="draft-editor" href="#">
+<span class="material-symbols-outlined text-[18px]">arrow_back</span>
+        초안 편집
+      </a>
+<!-- Center Operational Status Text -->
+<div class="hidden sm:flex items-center gap-2 text-text-secondary font-label-md text-label-md">
+<span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+<span id="dock-status-text" class="">PDF 배치 확인 완료 · 승인 후 완성본을 생성합니다.</span>
+</div>
+<!-- Primary Action CTA Button Gate -->
+<div class="flex items-center gap-space-sm">
+<button class="inline-flex items-center justify-center gap-space-xs px-space-lg py-2.5 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-headline-md text-headline-md tracking-tight shadow-md hover:shadow-lg transition-all active:scale-[0.99]" id="main-export-btn" type="button">
+<span class="material-symbols-outlined text-[20px]">download_for_offline</span>
+<span id="main-btn-label" class="">승인하고 PDF 만들기</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Interactive Logic Controller -->
+<script>
+    (function() {
+      let currentFormat = 'PDF';
+      let currentPage = 3;
+      const totalPages = 8;
+
+      const pdfBtn = document.getElementById('format-pdf');
+      const docxBtn = document.getElementById('format-docx');
+      const previewFormatPill = document.getElementById('preview-format-pill');
+      const layoutCheckTitle = document.getElementById('layout-check-title');
+      const layoutCheckDesc = document.getElementById('layout-check-desc');
+      const dockStatusText = document.getElementById('dock-status-text');
+      const mainExportBtn = document.getElementById('main-export-btn');
+      const mainBtnLabel = document.getElementById('main-btn-label');
+      const approvalCheckbox = document.getElementById('approval-checkbox');
+
+      const prevPageBtn = document.getElementById('prev-page-btn');
+      const nextPageBtn = document.getElementById('next-page-btn');
+      const currentPageNum = document.getElementById('current-page-num');
+
+      function updateFormatState(format) {
+        currentFormat = format;
+        if (format === 'PDF') {
+          // PDF Active styling
+          pdfBtn.className = "format-card relative p-space-md rounded-lg text-left bg-accent-teal-subtle/50 shadow-sm flex flex-col gap-1 transition-all";
+          pdfBtn.querySelector('.w-4').className = "w-4 h-4 rounded-full bg-primary flex items-center justify-center";
+          pdfBtn.querySelector('.w-4').innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-surface-bg"></span>';
+          pdfBtn.querySelector('.font-title-sm').className = "font-title-sm text-title-sm text-text-primary font-bold";
+          pdfBtn.querySelector('.material-symbols-outlined').className = "material-symbols-outlined text-primary text-[20px]";
+
+          // DOCX Inactive styling
+          docxBtn.className = "format-card relative p-space-md rounded-lg text-left bg-surface-container-lowest hover:bg-surface-container-low shadow-sm flex flex-col gap-1 transition-all";
+          docxBtn.querySelector('.w-4').className = "w-4 h-4 rounded-full bg-surface-container flex items-center justify-center";
+          docxBtn.querySelector('.w-4').innerHTML = '';
+          docxBtn.querySelector('.font-title-sm').className = "font-title-sm text-title-sm text-text-primary font-medium";
+          docxBtn.querySelector('.material-symbols-outlined').className = "material-symbols-outlined text-text-muted text-[20px]";
+
+          previewFormatPill.textContent = "PDF · 8쪽";
+          layoutCheckTitle.textContent = "PDF 배치 상태";
+          layoutCheckDesc.textContent = "글 넘침(Overflow)이나 깨진 이미지가 없어요.";
+          dockStatusText.textContent = "PDF 배치 확인 완료 · 승인 후 완성본을 생성합니다.";
+          mainBtnLabel.textContent = "승인하고 PDF 만들기";
+        } else {
+          // DOCX Active styling
+          docxBtn.className = "format-card relative p-space-md rounded-lg text-left bg-accent-teal-subtle/50 shadow-sm flex flex-col gap-1 transition-all";
+          docxBtn.querySelector('.w-4').className = "w-4 h-4 rounded-full bg-primary flex items-center justify-center";
+          docxBtn.querySelector('.w-4').innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-surface-bg"></span>';
+          docxBtn.querySelector('.font-title-sm').className = "font-title-sm text-title-sm text-text-primary font-bold";
+          docxBtn.querySelector('.material-symbols-outlined').className = "material-symbols-outlined text-primary text-[20px]";
+
+          // PDF Inactive styling
+          pdfBtn.className = "format-card relative p-space-md rounded-lg text-left bg-surface-container-lowest hover:bg-surface-container-low shadow-sm flex flex-col gap-1 transition-all";
+          pdfBtn.querySelector('.w-4').className = "w-4 h-4 rounded-full bg-surface-container flex items-center justify-center";
+          pdfBtn.querySelector('.w-4').innerHTML = '';
+          pdfBtn.querySelector('.font-title-sm').className = "font-title-sm text-title-sm text-text-primary font-medium";
+          pdfBtn.querySelector('.material-symbols-outlined').className = "material-symbols-outlined text-text-muted text-[20px]";
+
+          previewFormatPill.textContent = "DOCX · 8쪽 서식";
+          layoutCheckTitle.textContent = "Word 서식 매핑 상태";
+          layoutCheckDesc.textContent = "문단 스타일 및 표 속성이 Microsoft Word 서식에 맞춰졌어요.";
+          dockStatusText.textContent = "Word 서식 변환 준비 완료 · 승인 후 파일을 패키징합니다.";
+          mainBtnLabel.textContent = "승인하고 DOCX 만들기";
+        }
+      }
+
+      pdfBtn.addEventListener('click', () => updateFormatState('PDF'));
+      docxBtn.addEventListener('click', () => updateFormatState('DOCX'));
+
+      // Agreement Checkbox Handler
+      approvalCheckbox.addEventListener('change', (e) => {
+        if (!e.target.checked) {
+          mainExportBtn.disabled = true;
+          mainExportBtn.className = "inline-flex items-center justify-center gap-space-xs px-space-lg py-2.5 rounded-lg bg-surface-container text-text-muted font-headline-md text-headline-md tracking-tight cursor-not-allowed shadow-none";
+          dockStatusText.textContent = "최종 출력 동의에 체크해야 문서를 생성할 수 있습니다.";
+        } else {
+          mainExportBtn.disabled = false;
+          mainExportBtn.className = "inline-flex items-center justify-center gap-space-xs px-space-lg py-2.5 rounded-lg bg-primary hover:bg-primary-container text-on-primary font-headline-md text-headline-md tracking-tight shadow-md hover:shadow-lg transition-all active:scale-[0.99]";
+          updateFormatState(currentFormat);
+        }
+      });
+
+      // Pagination Simulation
+      prevPageBtn.addEventListener('click', () => {
+        if (currentPage > 1) {
+          currentPage--;
+          currentPageNum.textContent = currentPage;
+        }
+      });
+      nextPageBtn.addEventListener('click', () => {
+        if (currentPage < totalPages) {
+          currentPage++;
+          currentPageNum.textContent = currentPage;
+        }
+      });
+
+      // Click to simulate creation & export
+      let isGenerating = false;
+      mainExportBtn.addEventListener('click', () => {
+        if (isGenerating || !approvalCheckbox.checked) return;
+        isGenerating = true;
+        const originalText = mainBtnLabel.textContent;
+        mainBtnLabel.textContent = "문서 렌더링 중...";
+        mainExportBtn.classList.add('opacity-90');
+
+        setTimeout(() => {
+          mainBtnLabel.textContent = currentFormat + " 다운로드 시작됨";
+          mainExportBtn.classList.remove('bg-primary');
+          mainExportBtn.classList.add('bg-secondary');
+          dockStatusText.textContent = "승인 번호 [AUTH-202504-001]로 영구 저장되었습니다.";
+
+          setTimeout(() => {
+            isGenerating = false;
+            mainBtnLabel.textContent = originalText;
+            mainExportBtn.classList.add('bg-primary');
+            mainExportBtn.classList.remove('bg-secondary');
+            mainExportBtn.classList.remove('opacity-90');
+          }, 3500);
+        }, 1200);
+      });
+    })();
+  </script>
+</div></main><footer class="w-full bg-surface-bg shadow-[0_1px_8px_rgba(0,0,0,0.04)] mt-auto"><div class="max-w-[1600px] mx-auto px-gutter py-space-md flex flex-col sm:flex-row items-center justify-between gap-space-sm"><div class="flex items-center gap-space-md"><span class="font-label-sm text-label-sm text-text-muted">© 2025 거산케미칼 · 회사소개서 도우미 시스템</span><span class="inline-flex items-center gap-space-xs px-space-sm py-0.5 rounded-full bg-status-info-bg text-status-info-text font-label-sm text-label-sm">세션 보안 적용</span></div><div class="flex items-center gap-space-md font-label-sm text-label-sm text-text-muted"><span class="hover:text-text-primary cursor-pointer">데이터 소스 정책</span><span class="hover:text-text-primary cursor-pointer">AI 생성 신뢰도 가이드</span><span class="hover:text-text-primary cursor-pointer">도움말 지원</span></div></div></footer>
+
+</body></html>
