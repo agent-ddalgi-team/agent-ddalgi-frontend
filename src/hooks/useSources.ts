@@ -22,6 +22,10 @@ type UploadAttempt = { sessionId: string; fingerprint: string; key: string }
 function readSaved(): Saved | null {
   try {
     const saved = JSON.parse(sessionStorage.getItem(STORAGE) || 'null')
+    if (saved?.sessionId === 'session-demo-standalone') {
+      forget()
+      return null
+    }
     return saved &&
       typeof saved.sessionId === 'string' &&
       Array.isArray(saved.jobs)
@@ -305,6 +309,7 @@ export function useSources() {
       )
       persist(value.session_id, [])
       setSession(value)
+      setBrief(value.brief)
       apply(await snapshot(value.session_id, []))
       setNotice('작업을 시작했습니다. 자료를 첨부해 주세요.')
     })

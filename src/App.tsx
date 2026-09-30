@@ -55,7 +55,7 @@ function App() {
           <div className="flex items-center gap-3">
             <div className="hidden items-center gap-1.5 text-xs font-medium text-slate-400 lg:flex">
               <CloudCheck className="h-4 w-4 text-[#007A78]" />
-              <span>작업 중 서버에 자동 저장</span>
+              <span>저장한 내용은 서버에 보관</span>
             </div>
             <button
               type="button"
