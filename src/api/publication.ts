@@ -181,9 +181,12 @@ export function canAcknowledge(issue: Issue, demo: boolean) {
     issue.status === 'open' &&
     issue.severity === 'warning' &&
     issue.scope !== 'layout' &&
-    ((issue.origin === 'server' &&
-      (issue.code === 'PLACEHOLDER_TEXT' ||
-        (issue.code === 'DEMO_VALUE' && demo))) ||
+    ((issue.code === 'PHOTO_CONTENT_REVIEW' &&
+      issue.scope === 'content' &&
+      ['server', 'agent'].includes(issue.origin)) ||
+      (issue.origin === 'server' &&
+        (issue.code === 'PLACEHOLDER_TEXT' ||
+          (issue.code === 'DEMO_VALUE' && demo))) ||
       (issue.origin === 'agent' &&
         ['REPETITION', 'PHOTO_SHORTAGE'].includes(issue.code)))
   )
