@@ -199,14 +199,14 @@ export const DraftEditorView: React.FC<DraftEditorViewProps> = ({
       sub: '원료 배합부터 촉매 반응, 무균 패키징까지 실시간 제어',
       block2Name: '촉매 반응 파이프라인',
       photoUrl:
-        'https://images.unsplash.com/photo-1581092335397-9583fe92d232?w=1200&auto=format&fit=crop&q=80',
+        'https://images.unsplash.com/photo-1581092795360-fd1ca04f0952?w=1200&auto=format&fit=crop&q=80',
       photoCaption: '후보 1: 4단계 촉매 반응 및 정제 파이프라인 · 권장 300DPI',
       photoCandidates: [
         {
           id: 1,
           title: '후보 1 (반응기)',
           caption: '4단계 촉매 반응 파이프라인',
-          url: 'https://images.unsplash.com/photo-1581092335397-9583fe92d232?w=1200&auto=format&fit=crop&q=80',
+          url: 'https://images.unsplash.com/photo-1581092795360-fd1ca04f0952?w=1200&auto=format&fit=crop&q=80',
         },
         {
           id: 2,
@@ -1009,6 +1009,10 @@ export const DraftEditorView: React.FC<DraftEditorViewProps> = ({
                     className="w-full h-full object-cover transition-opacity duration-300"
                     alt={currentPageData.photoCaption}
                     src={currentPageData.photoUrl}
+                    onError={(e) => {
+                      e.currentTarget.src =
+                        'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=1200&auto=format&fit=crop&q=80'
+                    }}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
                   <div className="absolute bottom-2 left-3 flex items-center gap-1.5 px-2 py-0.5 rounded bg-white/95 backdrop-blur text-slate-900 text-[10px] font-semibold shadow-xs">
@@ -1057,6 +1061,10 @@ export const DraftEditorView: React.FC<DraftEditorViewProps> = ({
                                 className="w-full h-full object-cover"
                                 alt={candidate.caption}
                                 src={candidate.url}
+                                onError={(e) => {
+                                  e.currentTarget.src =
+                                    'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=400&auto=format&fit=crop&q=80'
+                                }}
                               />
                               {isSelected && (
                                 <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-[#007A78] text-white flex items-center justify-center text-[10px] font-bold">

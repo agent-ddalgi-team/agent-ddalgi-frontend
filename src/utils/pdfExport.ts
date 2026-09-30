@@ -39,7 +39,14 @@ function loadBrowserImage(src: string): Promise<HTMLImageElement | null> {
 
     img.onerror = () => {
       console.warn(`[PDF Export] 이미지 로딩 실패 (폴백 적용): ${src}`)
-      resolve(null)
+      if (
+        !src.includes('photo-1581092160607-ee22621dd758')
+      ) {
+        img.src =
+          'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=1200&auto=format&fit=crop&q=80'
+      } else {
+        resolve(null)
+      }
     }
 
     // 최대 3.5초 대기 후 타임아웃 시 안전하게 null 반환
@@ -549,7 +556,7 @@ export async function generateAndDownloadPdf(
         '배합-반응-정제-패키징의 4단계를 알기 쉬운 흐름도와 아이콘으로 구성하여 기술력을 어필합니다.',
       source: '공정설명서_v3.pdf',
       photoUrl:
-        'https://images.unsplash.com/photo-1581092335397-9583fe92d232?w=1200&auto=format&fit=crop&q=80',
+        'https://images.unsplash.com/photo-1581092795360-fd1ca04f0952?w=1200&auto=format&fit=crop&q=80',
       photoCaption: '4단계 촉매 반응 및 정제 파이프라인',
       kpis: [
         { label: '배합 정밀도', value: '±0.01%' },

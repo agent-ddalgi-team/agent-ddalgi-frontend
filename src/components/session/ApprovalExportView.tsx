@@ -177,7 +177,7 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
         '배합-반응-정제-패키징의 4단계를 알기 쉬운 흐름도와 아이콘으로 구성하여 기술력을 어필합니다.',
       source: '공정설명서_v3.pdf',
       photoUrl:
-        'https://images.unsplash.com/photo-1581092335397-9583fe92d232?w=1200&auto=format&fit=crop&q=80',
+        'https://images.unsplash.com/photo-1581092795360-fd1ca04f0952?w=1200&auto=format&fit=crop&q=80',
       photoCaption: '4단계 촉매 반응 및 정제 파이프라인',
       kpis: [
         { label: '배합 정밀도', value: '±0.01%' },
@@ -597,6 +597,10 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
                             className="w-full h-full object-cover opacity-90 transition-all duration-300"
                             alt={activeData.photoCaption}
                             src={activeData.photoUrl}
+                            onError={(e) => {
+                              e.currentTarget.src =
+                                'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=1200&auto=format&fit=crop&q=80'
+                            }}
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent"></div>
                           <div className="relative z-10 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/95 backdrop-blur-sm shadow-xs">
@@ -798,6 +802,10 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                             alt={pData.photoCaption}
                             src={pData.photoUrl}
+                            onError={(e) => {
+                              e.currentTarget.src =
+                                'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=600&auto=format&fit=crop&q=80'
+                            }}
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
                           <span className="absolute bottom-1 left-2 text-[9px] text-white font-medium truncate max-w-[90%]">
