@@ -96,6 +96,14 @@ export const CURATED_ENTERPRISE_PHOTOS: WebCollectedPhoto[] = [
   },
 ]
 
+import {
+  searchWebPhotosDynamic,
+  searchWebPhotosDetailed,
+  type WebPhotoSearchResult,
+} from './webPhotoCrawler'
+
+export type { WebPhotoSearchResult }
+
 /**
  * 홈페이지 URL이나 검색 키워드를 입력받아 웹 사이트 및 기업 라이브러리에서 관련 사진들을 검색/수집합니다.
  */
@@ -103,34 +111,19 @@ export async function searchWebPhotos(
   queryOrUrl: string,
   categoryFilter?: string,
 ): Promise<WebCollectedPhoto[]> {
-  // 웹 네트워크 시뮬레이션 지연 (500ms)
-  await new Promise((r) => setTimeout(r, 450))
-
-  const clean = queryOrUrl.trim().toLowerCase()
-  let filtered = CURATED_ENTERPRISE_PHOTOS
-
-  if (categoryFilter && categoryFilter !== 'all') {
-    filtered = filtered.filter((p) => p.category === categoryFilter)
-  }
-
-  if (clean && !clean.startsWith('http')) {
-    filtered = filtered.filter(
-      (p) =>
-        p.name.toLowerCase().includes(clean) ||
-        p.caption.toLowerCase().includes(clean) ||
-        p.category.includes(clean) ||
-        clean.includes('공장') ||
-        clean.includes('설비') ||
-        clean.includes('화학') ||
-        clean.includes('거산'),
-    )
-    if (!filtered.length) {
-      filtered = CURATED_ENTERPRISE_PHOTOS
-    }
-  }
-
-  return filtered
+  return searchWebPhotosDynamic(queryOrUrl, categoryFilter)
 }
+
+/**
+ * 출처 및 수집 메타데이터를 포함한 상세 웹 사진 검색
+ */
+export async function searchWebPhotosWithDetail(
+  queryOrUrl: string,
+  categoryFilter?: string,
+): Promise<WebPhotoSearchResult> {
+  return searchWebPhotosDetailed(queryOrUrl, categoryFilter)
+}
+
 
 /**
  * 기본 제공 시연 자료 목록 (백엔드 미연결 시 자동 공급)
