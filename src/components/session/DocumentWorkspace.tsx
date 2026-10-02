@@ -27,7 +27,7 @@ import {
   X,
 } from 'lucide-react'
 import type { DraftBlock, DraftResult } from '../../api/aiWorkflow'
-import { readableIssueMessage } from '../../constants/profileLabels'
+import { issueMessageParts } from '../../constants/profileLabels'
 import { canAcknowledge } from '../../api/publication'
 import { usePublication } from '../../hooks/usePublication'
 import type { WizardStep } from './StepIndicator'
@@ -203,9 +203,13 @@ export function DocumentWorkspace({
   const focusBlock = (id: string) => {
     setReading(false)
     setBlockId(id)
-    requestAnimationFrame(() =>
-      document.querySelector<HTMLElement>(`[data-edit-block="${id}"]`)?.focus(),
-    )
+    requestAnimationFrame(() => {
+      const target = document.querySelector<HTMLElement>(
+        `[data-edit-block="${id}"]`,
+      )
+      target?.focus({ preventScroll: true })
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
   }
   const pageIssues = (index: number) =>
     openIssues.filter((issue) =>
@@ -1752,7 +1756,7 @@ export function DocumentWorkspace({
                         key={issue.issue_id}
                         className="rounded-lg bg-amber-50 p-2 text-[11px] leading-snug text-amber-900"
                       >
-                        {readableIssueMessage(issue.message)}
+                        {issueMessageParts(issue.message).reason}
                       </p>
                     ))}
                     <div className="mt-auto flex flex-col gap-1.5 border-t border-slate-100 pt-2">
@@ -1966,9 +1970,12 @@ export function DocumentWorkspace({
                         </span>
                       )}
                     </p>
-                    <p className="mt-1.5 whitespace-pre-wrap leading-relaxed">
-                      {readableIssueMessage(issue.message)}
-                    </p>
+                    <div className="mt-3">
+                      <p className="font-bold text-slate-900">지적 이유</p>
+                      <p className="mt-1 whitespace-pre-wrap break-words leading-relaxed">
+                        {issueMessageParts(issue.message).reason}
+                      </p>
+                    </div>
                     <div
                       className="mt-2 flex flex-col gap-2"
                       data-issue-locations
@@ -1990,10 +1997,16 @@ export function DocumentWorkspace({
                               }}
                             >
                               <span className="block font-bold">
-                                {pi + 1}쪽 · {blockLabel[block.type]} 확인하기 →
+                                {pi + 1}쪽 · 블록{' '}
+                                {page.blocks.indexOf(block) + 1} ·{' '}
+                                {blockLabel[block.type]} 수정하기 →
                               </span>
-                              <span className="mt-1 block line-clamp-2 text-slate-600">
-                                {blockText(block).slice(0, 120)}
+                              <span className="mt-1 block text-[11px] text-slate-500">
+                                {page.title} · 검사 대상 문구
+                              </span>
+                              <span className="mt-2 block max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded-md border-l-2 border-amber-400 bg-amber-50/60 p-2 leading-relaxed text-slate-800">
+                                {blockText(block) ||
+                                  '텍스트가 없는 블록입니다.'}
                               </span>
                             </button>
                           )),
@@ -2017,6 +2030,24 @@ export function DocumentWorkspace({
                         </button>
                       )}
                     </div>
+                    {issueMessageParts(issue.message).action && (
+                      <div className="mt-3 rounded-lg border border-teal-100 bg-teal-50 p-2.5 text-slate-800">
+                        <p className="font-bold text-teal-900">권장 수정</p>
+                        <p className="mt-1 whitespace-pre-wrap break-words leading-relaxed">
+                          {issueMessageParts(issue.message).action}
+                        </p>
+                      </div>
+                    )}
+                    {issueMessageParts(issue.message).evidence && (
+                      <details className="mt-3 border-t border-current/10 pt-2 text-slate-600">
+                        <summary className="cursor-pointer font-semibold">
+                          판단에 사용한 원문 근거 펼치기
+                        </summary>
+                        <p className="mt-2 max-h-64 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-white p-2 text-[11px] leading-relaxed">
+                          {issueMessageParts(issue.message).evidence}
+                        </p>
+                      </details>
+                    )}
                     {issue.resolution?.reason && (
                       <p className="mt-1.5 text-[11px] text-slate-500">
                         확인 사유: {issue.resolution.reason}
