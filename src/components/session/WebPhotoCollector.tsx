@@ -55,10 +55,44 @@ export const WebPhotoCollector: React.FC<WebPhotoCollectorProps> = ({
     text: string
   } | null>(null)
 
+  // [Security Hardening] 위험 스킴(javascript:, data:, file:) 및 비정상 입력 차단
+  const validateWebQueryOrUrl = (raw: string): { valid: boolean; clean: string; error?: string } => {
+    const trimmed = raw.trim().replace(/[\x00-\x1f\x7f]/g, '').slice(0, 300)
+    if (!trimmed) {
+      return { valid: false, clean: '', error: '검색어 또는 URL을 입력해 주세요.' }
+    }
+
+    const lower = trimmed.toLowerCase()
+    if (
+      lower.startsWith('javascript:') ||
+      lower.startsWith('data:') ||
+      lower.startsWith('file:') ||
+      lower.startsWith('vbscript:')
+    ) {
+      return {
+        valid: false,
+        clean: '',
+        error: '보안상 허용되지 않는 위험한 프로토콜(javascript, data, file)입니다. 일반 웹 주소(http/https) 또는 기업명을 입력해 주세요.',
+      }
+    }
+
+    return { valid: true, clean: trimmed }
+  }
+
   // 웹 사진 검색 / 크롤링 실행 핸들러
   const handleSearch = async (targetQuery = query, targetCategory = category) => {
-    const q = targetQuery.trim()
-    if (!q) return
+    const check = validateWebQueryOrUrl(targetQuery)
+    if (!check.valid) {
+      if (check.error) {
+        setFeedback({
+          type: 'warning',
+          text: check.error,
+        })
+      }
+      return
+    }
+
+    const q = check.clean
     setIsSearching(true)
     setFeedback(null)
 
@@ -180,6 +214,8 @@ export const WebPhotoCollector: React.FC<WebPhotoCollectorProps> = ({
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && void handleSearch(query, category)}
               placeholder="회사 홈페이지 URL (예: https://www.kaeri.re.kr) 또는 기업명 입력"
+              maxLength={300}
+              autoComplete="off"
               disabled={disabled || isSearching}
               className="w-full rounded-xl border border-teal-200 bg-white py-2 pl-9 pr-8 text-xs text-slate-900 shadow-2xs transition-all placeholder:text-slate-400 focus:border-[#007A78] focus:outline-none focus:ring-2 focus:ring-[#007A78]/20 disabled:bg-slate-100"
             />
@@ -386,8 +422,15 @@ export const WebPhotoCollector: React.FC<WebPhotoCollectorProps> = ({
                         loading="lazy"
                         onError={(e) => {
                           const target = e.currentTarget
+                          const isSafeUrl =
+                            typeof photo.url === 'string' &&
+                            (photo.url.startsWith('http://') ||
+                              photo.url.startsWith('https://') ||
+                              photo.url.startsWith('/'))
+
                           if (
                             !target.dataset.retried &&
+                            isSafeUrl &&
                             !photo.thumbnailUrl.startsWith('/crawl-api')
                           ) {
                             target.dataset.retried = 'true'

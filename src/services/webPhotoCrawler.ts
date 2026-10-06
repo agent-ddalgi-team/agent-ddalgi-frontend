@@ -205,8 +205,15 @@ export async function searchWebPhotosDetailed(
   queryOrUrl: string,
   categoryFilter?: string,
 ): Promise<WebPhotoSearchResult> {
-  const clean = queryOrUrl.trim()
-  if (!clean) {
+  const clean = (queryOrUrl || '').trim().replace(/[\x00-\x1f\x7f]/g, '').slice(0, 300)
+  const lower = clean.toLowerCase()
+  if (
+    !clean ||
+    lower.startsWith('javascript:') ||
+    lower.startsWith('data:') ||
+    lower.startsWith('file:') ||
+    lower.startsWith('vbscript:')
+  ) {
     return {
       companyTitle: '',
       domain: '',
