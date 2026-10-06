@@ -59,10 +59,11 @@ export const AiSidecar: React.FC<AiSidecarProps> = ({
 
   const handleRequest = async (customText?: string) => {
     const textToSend = customText !== undefined ? customText : instruction
+    const safeText = textToSend.trim().slice(0, 500)
     setLoading(true)
     await onRequestAi(
       activeParagraph.paragraph_id,
-      textToSend.trim() || undefined,
+      safeText || undefined,
     )
     setLoading(false)
     setInstruction('')
@@ -118,6 +119,7 @@ export const AiSidecar: React.FC<AiSidecarProps> = ({
                   onChange={(e) => setInstruction(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleRequest()}
                   placeholder="예: 품질 경쟁력을 더 부각하고 격식체로 변경해줘"
+                  maxLength={500}
                   className="w-full rounded-xl border border-teal-300 bg-white px-3.5 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-[#007A78] focus:ring-1 focus:ring-[#007A78] focus:outline-hidden"
                 />
               </div>

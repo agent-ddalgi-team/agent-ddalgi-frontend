@@ -1,6 +1,6 @@
 import { jsPDF } from 'jspdf'
 import saveAs from 'file-saver'
-import { triggerBrowserDownload } from './documentExport'
+import { sanitizeDownloadFileName, triggerBrowserDownload } from './documentExport'
 import type { EditableDraftSection } from '../types/session'
 
 export interface PdfExportOptions {
@@ -30,10 +30,22 @@ interface PageData {
  * 로컬 정적 에셋은 fetch -> Blob -> URL.createObjectURL로 변환하여 CORS 제한 및 Canvas 오염을 완벽히 방지합니다.
  */
 async function loadBrowserImage(src: string): Promise<HTMLImageElement | null> {
-  if (!src) return null
+  if (!src || typeof src !== 'string') return null
+
+  // [Security Hardening] 위험 스킴 차단 (javascript:, data:text/html, vbscript:, file:)
+  const trimmedSrc = src.trim()
+  const lower = trimmedSrc.toLowerCase()
+  if (
+    lower.startsWith('javascript:') ||
+    lower.startsWith('vbscript:') ||
+    lower.startsWith('file:') ||
+    (lower.startsWith('data:') && !lower.startsWith('data:image/'))
+  ) {
+    return null
+  }
 
   // 1. 상대 경로 또는 로컬 에셋인 경우, fetch로 Blob을 직접 생성하여 로드 (CORS 100% 방지)
-  const isRelative = !src.startsWith('http://') && !src.startsWith('https://')
+  const isRelative = !trimmedSrc.startsWith('http://') && !trimmedSrc.startsWith('https://')
 
   if (isRelative && typeof window !== 'undefined' && typeof window.fetch === 'function') {
     try {
@@ -580,7 +592,8 @@ export async function generateAndDownloadPdf(
       .replace(/\s*(공식\s*)?회사소개서(\s*\d{4})?.*$/, '')
       .trim() || '거산케미칼'
   const today = new Date().toISOString().split('T')[0]
-  const fileName = `${companyName}_회사소개서_2025_${today}.pdf`
+  const rawFileName = `${companyName}_회사소개서_2025_${today}.pdf`
+  const fileName = sanitizeDownloadFileName(rawFileName, 'company_profile_2025.pdf')
 
   const pagesData: PageData[] = [
     {

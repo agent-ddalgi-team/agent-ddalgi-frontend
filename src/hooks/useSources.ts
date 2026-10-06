@@ -112,6 +112,7 @@ export function useSources(allowDocumentChanges = false) {
   const mounted = useRef(false)
   const createAttempt = useRef<{ body: string; key: string } | null>(null)
   const pendingFiles = useRef<File[]>([])
+  const companyAttempt = useRef<{ body: string; key: string } | null>(null)
   const attempts = useRef(0)
   const generation = useRef(0)
 
@@ -343,6 +344,21 @@ export function useSources(allowDocumentChanges = false) {
         )
       if (files.some((file) => file.size > 10 * 1024 * 1024))
         throw new Error('파일당 최대 10MB까지 첨부할 수 있습니다.')
+      for (const file of files) {
+        if (!file.name || file.name.length > 150)
+          throw new Error('파일명은 최대 150자 이내여야 합니다.')
+        if (file.name.includes('..') || /[/\\]/.test(file.name))
+          throw new Error('파일명에 디렉터리 경로 문자를 사용할 수 없습니다.')
+        if (
+          /\.(exe|bat|cmd|sh|vbs|scr|jar|js|msi|dll|com|pif|reg|ps1)\b/i.test(
+            file.name,
+          )
+        )
+          throw new Error(
+            '실행 파일 확장자가 포함된 파일은 첨부할 수 없습니다.',
+          )
+        if (file.size <= 0) throw new Error('빈 파일은 첨부할 수 없습니다.')
+      }
       // 응답 유실 재전송은 개수 제한 검사보다 먼저 구분한다.
       const signature = await fingerprint(files)
       const previous = JSON.parse(
@@ -431,6 +447,50 @@ export function useSources(allowDocumentChanges = false) {
     })
   }
 
+  async function changeCompany(name: string) {
+    const target = name.trim()
+    if (!target || target.length > 50 || lock.current) return false
+    if (session?.document_summary && !allowDocumentChanges) return false
+    if (target === (session?.brief.target_company || brief.target_company))
+      return true
+    if (!session) {
+      setBrief({ ...brief, target_company: target })
+      return true
+    }
+    let completed = false
+    await run('회사 변경 저장 중', async () => {
+      const next = { ...session.brief, target_company: target }
+      const change = { brief: next, selected_source_ids: [] }
+      const body = JSON.stringify({
+        session: session.session_id,
+        revision: session.input_revision,
+        change,
+      })
+      if (companyAttempt.current?.body !== body)
+        companyAttempt.current = { body, key: crypto.randomUUID() }
+      const result = await sourceApi.inputs(
+        session,
+        change,
+        companyAttempt.current.key,
+      )
+      setSession({ ...session, ...result, brief: next })
+      setBrief({ ...brief, target_company: target })
+      companyAttempt.current = null
+      setNotice(
+        '회사를 저장하고 자료 선택을 해제했습니다. 해당 회사 자료를 선택해 다시 점검해 주세요. 기존 파일과 문서는 보존됩니다.',
+      )
+      completed = true
+    })
+    return completed
+  }
+
+  async function importPublic() {
+    if (!session || (session.document_summary && !allowDocumentChanges)) return
+    await run('공개 자료 연결 확인 중', async () => {
+      await sourceApi.importPublic(session)
+    })
+  }
+
   async function remove(source: WorkSource) {
     if (!session || (session.document_summary && !allowDocumentChanges)) return
     await run('첨부 삭제 중', async () => {
@@ -471,6 +531,8 @@ export function useSources(allowDocumentChanges = false) {
     upload,
     select,
     saveBrief,
+    changeCompany,
+    importPublic,
     remove,
     close,
     retryUpload: () => upload(pendingFiles.current),

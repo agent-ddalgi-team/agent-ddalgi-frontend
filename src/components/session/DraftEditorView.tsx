@@ -1169,6 +1169,7 @@ export const DraftEditorView: React.FC<DraftEditorViewProps> = ({
                     <textarea
                       value={currentPageData.bodyText}
                       onChange={(e) => handleUpdateBodyText(e.target.value)}
+                      maxLength={5000}
                       className="w-full bg-white border border-[#007A78] rounded-lg p-2 text-xs font-medium text-slate-900 focus:outline-none resize-none"
                       rows={3}
                     />
@@ -1252,6 +1253,7 @@ export const DraftEditorView: React.FC<DraftEditorViewProps> = ({
               <textarea
                 value={currentPageData.aiPrompt}
                 onChange={(e) => handleUpdateAiPrompt(e.target.value)}
+                maxLength={500}
                 className="w-full bg-transparent resize-none outline-none text-xs text-slate-900 placeholder:text-slate-400"
                 rows={2}
                 placeholder="문장 다듬기 요청을 적어주세요"

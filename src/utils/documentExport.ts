@@ -32,9 +32,40 @@ interface FileSystemFileHandle {
 }
 
 /**
+ * [Security Hardening] 파일명 Path Traversal 및 특수문자 정제
+ * - 디렉터리 탐색 문자(../, ..\) 제거
+ * - OS 예약 문자(\ / : * ? " < > |) 및 제어문자(\x00-\x1f) 제거
+ * - 최대 길이 100자로 안전하게 제한
+ */
+export function sanitizeDownloadFileName(
+  rawName: string,
+  fallback = 'download_document',
+): string {
+  if (!rawName || typeof rawName !== 'string') return fallback
+
+  // 앞뒤 공백 및 경로 탐색 패턴 제거
+  let clean = rawName
+    .trim()
+    .replace(/\.\.+[/\\]/g, '')
+    .replace(/[/\\]/g, '_')
+    // OS 예약 문자 및 제어문자 제거
+    .replace(/[\\/:*?"<>|\x00-\x1f]/g, '_')
+    .replace(/_{2,}/g, '_')
+
+  // 확장자 분리 및 보호
+  const extMatch = clean.match(/(\.[a-zA-Z0-9]{1,10})$/)
+  const ext = extMatch ? extMatch[1] : ''
+  const baseName = ext ? clean.slice(0, -ext.length) : clean
+
+  const safeBase = baseName.trim().slice(0, 100) || fallback
+  return `${safeBase}${ext}`
+}
+
+/**
  * 앵커 태그를 활용한 표준 다운로드 폴백
  */
-function downloadViaAnchor(blob: Blob, fileName: string): void {
+function downloadViaAnchor(blob: Blob, rawFileName: string): void {
+  const fileName = sanitizeDownloadFileName(rawFileName)
   // File 객체로 래핑하여 메타데이터 및 확장자 보존
   const mimeType = fileName.endsWith('.pdf')
     ? 'application/pdf'
@@ -79,9 +110,10 @@ function downloadViaAnchor(blob: Blob, fileName: string): void {
  */
 export async function triggerBrowserDownload(
   data: Blob | string,
-  fileName: string,
+  rawFileName: string,
   mimeType?: string,
 ): Promise<void> {
+  const fileName = sanitizeDownloadFileName(rawFileName)
   const isPdf = fileName.endsWith('.pdf')
   const isDocx = fileName.endsWith('.docx')
   const defaultMime = isPdf

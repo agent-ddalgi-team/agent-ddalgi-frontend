@@ -3,11 +3,15 @@ import { useEffect, useRef, useState } from 'react'
 import {
   AlertTriangle,
   ArrowRight,
+  Building2,
+  DownloadCloud,
+  Pencil,
   Check,
   CheckCircle2,
   FileSpreadsheet,
   FileText,
   FolderOpen,
+  Globe,
   Image as ImageIcon,
   Info,
   Lightbulb,
@@ -27,6 +31,7 @@ import { useAiWorkflow } from '../../hooks/useAiWorkflow'
 import { AiWorkflowPanel, Block } from './AiWorkflowPanel'
 import { DocumentWorkspace } from './DocumentWorkspace'
 import type { WizardStep } from './StepIndicator'
+import { CompanyChangeModal } from './CompanyChangeModal'
 
 const statusText = {
   queued: '읽기 대기',
@@ -96,18 +101,26 @@ export function SourceSelectionView({
   step,
   onNavigate,
   onCompanyChange,
+  companyModalOpen,
+  onCompanyModalOpen,
+  onCompanyModalClose,
 }: {
   onDraftAvailable?: (available: boolean) => void
   step: WizardStep
   onNavigate: (step: WizardStep) => void
   onCompanyChange: (name: string) => void
+  companyModalOpen: boolean
+  onCompanyModalOpen: () => void
+  onCompanyModalClose: () => void
 }) {
   const [sourceEditing, setSourceEditing] = useState(false)
   const [sourceChangeBlocked, setSourceChangeBlocked] = useState(true)
   const work = useSources(sourceEditing && !sourceChangeBlocked)
   const ai = useAiWorkflow(work.session)
   const fileInput = useRef<HTMLInputElement>(null)
-  const [tab, setTab] = useState<'registered' | 'session'>('registered')
+  const [tab, setTab] = useState<'registered' | 'public' | 'session'>(
+    'registered',
+  )
   const [dragging, setDragging] = useState(false)
   const [tag, setTag] = useState('')
   const [tagOpen, setTagOpen] = useState(false)
@@ -128,18 +141,34 @@ export function SourceSelectionView({
   useEffect(() => {
     const title = ai.document?.document.title
     onCompanyChange(
-      title?.replace(/\s*(공식\s*)?회사소개서(\s*\d{4})?.*$/, '').trim() ||
+      work.brief.target_company ||
+        title?.replace(/\s*(공식\s*)?회사소개서(\s*\d{4})?.*$/, '').trim() ||
         title ||
         '새 회사소개서',
     )
-  }, [ai.document?.document.title, onCompanyChange])
+  }, [ai.document?.document.title, work.brief.target_company, onCompanyChange])
   const locked =
     !!work.busy ||
     ai.locked ||
     (hasDocument && (!sourceEditing || sourceChangeBlocked))
+  const currentCompany = work.brief.target_company || ''
+  const sufficiency =
+    !work.briefDirty &&
+    ai.preflight?.input_revision === work.session?.input_revision
+      ? ai.preflight?.sufficiency
+      : null
+  const coverageLabels = {
+    supported: '근거 있음',
+    missing: '자료 필요',
+    needs_confirmation: '확인 필요',
+    conflict: '근거 충돌',
+  }
   const isDemo = work.session ? work.session.demo : work.demo
   const counts = {
     registered: work.sources.filter((s) => s.scope === 'registered').length,
+    public: work.sources.filter((s) =>
+      s.warnings?.some((w) => w.code === 'PUBLIC_OPEN_DATA'),
+    ).length,
     session: work.sources.filter((s) => s.scope === 'session').length,
   }
   const selectedSession = work.sources.filter(
@@ -292,6 +321,12 @@ export function SourceSelectionView({
                 <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600">
                   {sizeLabel(source.size_bytes)}
                 </span>
+                {source.source_id.startsWith('src-pub-') && (
+                  <span className="inline-flex items-center gap-1 rounded bg-teal-50 border border-teal-200 px-1.5 py-0.2 text-[10px] font-bold text-[#007A78]">
+                    <Globe className="h-2.5 w-2.5" />
+                    공개 데이터
+                  </span>
+                )}
                 {source.role === 'instruction' && (
                   <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600">
                     작성 조건용
@@ -299,9 +334,17 @@ export function SourceSelectionView({
                 )}
               </span>
               <span
-                className={`text-[11px] ${source.origin_kind === 'demo' ? 'text-amber-800' : 'text-slate-500'}`}
+                className={`text-[11px] ${
+                  source.source_id.startsWith('src-pub-')
+                    ? 'text-teal-800 font-medium'
+                    : source.origin_kind === 'demo'
+                      ? 'text-amber-800'
+                      : 'text-slate-500'
+                }`}
               >
-                {origin} · {readState}
+                {source.source_id.startsWith('src-pub-') && source.warnings?.[0]
+                  ? `🏛️ ${source.warnings[0].message} · ${readState}`
+                  : `${origin} · ${readState}`}
                 {!source.use_as_company_evidence &&
                   source.role !== 'instruction' &&
                   ' · 참고용, 근거 선택 불가'}
@@ -833,6 +876,7 @@ export function SourceSelectionView({
                 {(
                   [
                     ['registered', '등록 자료'],
+                    ['public', '🏛️ 공개 연동 데이터'],
                     ['session', '이번 작업 첨부'],
                   ] as const
                 ).map(([key, text]) => (
@@ -842,7 +886,7 @@ export function SourceSelectionView({
                     role="tab"
                     aria-selected={tab === key}
                     onClick={() => setTab(key)}
-                    className={`flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold transition-all ${
+                    className={`flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition-all ${
                       tab === key
                         ? 'bg-white font-bold text-[#007A78] shadow-2xs'
                         : 'text-slate-600 hover:text-slate-900'
@@ -863,6 +907,99 @@ export function SourceSelectionView({
               </div>
             </div>
 
+            <div className="rounded-xl border border-teal-200/90 bg-gradient-to-r from-teal-50/80 via-white to-teal-50/30 p-3 text-xs shadow-2xs">
+              <div className="flex flex-wrap items-center justify-between gap-2.5">
+                <div className="flex items-center gap-2.5">
+                  <Building2 className="h-8 w-8 rounded-lg bg-[#007A78] p-1.5 text-white" />
+                  <div>
+                    <p className="font-bold">
+                      관리자 소속 공개 데이터 자동 연동
+                    </p>
+                    <button
+                      type="button"
+                      className="mt-1 inline-flex items-center gap-1 rounded-full bg-teal-100 px-2 py-1 text-teal-900"
+                      onClick={onCompanyModalOpen}
+                    >
+                      소속: {currentCompany || '회사 선택'}{' '}
+                      <Pencil className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className={primary}
+                  disabled={locked || !work.session || !currentCompany}
+                  onClick={() => void work.importPublic()}
+                >
+                  <DownloadCloud className="h-4 w-4" /> 공개 데이터 자동으로
+                  가져오기
+                </button>
+              </div>
+              <p className="mt-2 text-slate-600">
+                DART·특허청·나라장터 연결 준비 중 · API 키 미설정. 실제로 등록된
+                공개 자료 {counts.public}건
+              </p>
+            </div>
+            <div
+              className="rounded-xl border border-amber-200 bg-amber-50/80 p-3 text-xs"
+              aria-label="자료 충족도"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <strong>
+                  {sufficiency
+                    ? '데이터 충족도 ' + sufficiency.score + '%'
+                    : '데이터 충족도 · 점검 필요'}
+                </strong>
+                <button
+                  type="button"
+                  className={button}
+                  disabled={locked || !work.session}
+                  onClick={() => fileInput.current?.click()}
+                >
+                  <Plus className="h-3 w-3" /> 부족한 자료 파일 직접 첨부
+                </button>
+              </div>
+              <div
+                className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200"
+                role="progressbar"
+                aria-label="근거 항목 충족률"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={sufficiency?.score}
+                aria-valuetext={
+                  sufficiency ? sufficiency.score + '%' : '점검 필요'
+                }
+              >
+                <div
+                  className="h-full bg-[#007A78]"
+                  style={{ width: (sufficiency?.score || 0) + '%' }}
+                />
+              </div>
+              {sufficiency ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {sufficiency.categories.map((category) => (
+                    <span
+                      key={category.key}
+                      className="rounded bg-white px-2 py-1"
+                    >
+                      {category.label}: {coverageLabels[category.status]}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-2">
+                  자료를 선택하고 AI 점검을 실행하면 근거 기준의 충족도를
+                  표시합니다. 자료·작성 조건 변경 시 다시 점검합니다.
+                </p>
+              )}
+              <p className="mt-2 text-slate-600">
+                개요·공정·실적·인증 4개 분야의 근거 포함 비율입니다. 사실의
+                진위나 최종 승인 통과율을 뜻하지 않습니다.
+                {sufficiency?.has_blockers &&
+                  ' 해결해야 할 필수 문제가 있습니다.'}
+              </p>
+            </div>
+
             {!work.session ? (
               <div className="flex flex-col items-center gap-2 py-10 text-center">
                 <FolderOpen className="h-8 w-8 text-slate-300" />
@@ -878,11 +1015,24 @@ export function SourceSelectionView({
               <p className="py-8 text-center text-sm text-slate-500">
                 {tab === 'registered'
                   ? '등록된 자료가 없습니다. 이번 작업에 파일을 첨부할 수 있습니다.'
-                  : '첨부한 파일이 없습니다. 아래에서 파일을 추가해 주세요.'}
+                  : tab === 'public'
+                    ? '연동된 공개 자료가 없습니다. 회사 선택 후 공개 데이터 가져오기에서 연결 상태를 확인할 수 있습니다.'
+                    : '첨부한 파일이 없습니다. 아래에서 파일을 추가해 주세요.'}
               </p>
             ) : (
               <ul className="flex flex-col gap-2.5">
-                {work.sources.filter((s) => s.scope === tab).map(renderSource)}
+                {(tab === 'public'
+                  ? work.sources.filter(
+                      (s) =>
+                        s.source_id.startsWith('src-pub-') ||
+                        s.warnings?.some((w) =>
+                          w.message.includes('공개 데이터'),
+                        ),
+                    )
+                  : tab === 'registered'
+                    ? work.sources.filter((s) => s.scope === 'registered')
+                    : work.sources.filter((s) => s.scope === 'session')
+                ).map(renderSource)}
               </ul>
             )}
 
@@ -909,6 +1059,7 @@ export function SourceSelectionView({
                 }}
               />
               <div
+                id="file-upload-dropzone"
                 className={`flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed p-4 text-center transition-colors ${
                   dragging
                     ? 'border-[#007A78] bg-[#E6F4F1]/60'
@@ -1151,6 +1302,15 @@ export function SourceSelectionView({
           </div>
         </div>
       )}
+      <CompanyChangeModal
+        key={currentCompany + String(companyModalOpen)}
+        isOpen={companyModalOpen}
+        currentCompany={currentCompany}
+        onClose={onCompanyModalClose}
+        onConfirm={work.changeCompany}
+        disabled={locked}
+        hasSession={!!work.session}
+      />
     </>
   )
 }

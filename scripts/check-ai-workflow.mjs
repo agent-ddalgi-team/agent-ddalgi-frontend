@@ -9,6 +9,191 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { createServer } from 'vite'
 
+// Read production helpers into an isolated VM: no network or real session data.
+async function reviewRegressions() {
+  const ts = await import('typescript')
+  const { runInNewContext } = await import('node:vm')
+  const { EventEmitter } = await import('node:events')
+  const { isIP } = await import('node:net')
+  const transpile = (text) =>
+    ts.transpileModule(text, {
+      compilerOptions: {
+        target: ts.ScriptTarget.ES2022,
+        module: ts.ModuleKind.CommonJS,
+      },
+    }).outputText
+  const config = await readFile(
+    new URL('../vite.config.ts', import.meta.url),
+    'utf8',
+  )
+  const ast = ts.createSourceFile(
+    'vite.config.ts',
+    config,
+    ts.ScriptTarget.Latest,
+    true,
+  )
+  const names = ['publicAddress', 'safeFetchBuffer', 'robustFetchBuffer']
+  const helpers = ast.statements
+    .filter((n) => ts.isFunctionDeclaration(n) && names.includes(n.name?.text))
+    .map((n) => n.getText(ast))
+    .join('\n')
+  let requests = [],
+    dnsMode = 'public',
+    responseMode = 'image'
+  const transport = {
+    get(url, options, receive) {
+      requests.push({ url: url.href, options })
+      const req = new EventEmitter()
+      req.destroy = (error) => {
+        if (error) req.emit('error', error)
+        req.emit('close')
+      }
+      queueMicrotask(() => {
+        if (responseMode === 'tls-error') {
+          req.destroy(new Error('certificate failure'))
+          return
+        }
+        const res = new EventEmitter()
+        res.destroy = () => req.emit('close')
+        res.resume = () => {}
+        res.headers = {
+          'content-type': responseMode === 'html' ? 'text/html' : 'image/png',
+        }
+        res.statusCode = 200
+        if (responseMode === 'private-redirect' || responseMode === 'loop') {
+          res.statusCode = 302
+          res.headers.location =
+            responseMode === 'loop' ? '/again' : 'https://127.0.0.1/'
+        }
+        receive(res)
+        res.emit('data', Buffer.from('test-image'))
+        res.emit('end')
+        req.emit('close')
+      })
+      return req
+    },
+  }
+  const context = {
+    URL,
+    Buffer,
+    Date,
+    setTimeout,
+    clearTimeout,
+    isIP,
+    http: transport,
+    https: transport,
+    lookup: async () =>
+      dnsMode === 'private'
+        ? [{ address: '10.1.2.3', family: 4 }]
+        : [{ address: '8.8.8.8', family: 4 }],
+  }
+  runInNewContext(transpile(helpers), context)
+  for (const host of [
+    '127.0.0.1',
+    '172.16.0.1',
+    '169.254.20.1',
+    '::1',
+    '::ffff:127.0.0.1',
+    'fc00::1',
+    'fe80::1',
+    '100.64.0.1',
+  ])
+    assert.equal(context.publicAddress(host), false, host)
+  assert.equal(context.publicAddress('8.8.8.8'), true)
+  assert.equal(context.publicAddress('2001:4860:4860::8888'), true)
+  dnsMode = 'private'
+  assert.equal(
+    (await context.safeFetchBuffer('https://example.org', 1000, 100)).ok,
+    false,
+  )
+  assert.equal(requests.length, 0)
+  dnsMode = 'public'
+  assert.equal(
+    (await context.robustFetchBuffer('https://example.org')).ok,
+    true,
+  )
+  const options = requests[0].options
+  options.lookup('example.org', { all: true }, (error, addresses) => {
+    assert.equal(error, null)
+    assert.equal(addresses[0].address, '8.8.8.8')
+  })
+  assert.notEqual(options.rejectUnauthorized, false)
+  requests = []
+  responseMode = 'private-redirect'
+  assert.equal(
+    (await context.safeFetchBuffer('https://example.org', 1000, 100)).ok,
+    false,
+  )
+  assert.equal(requests.length, 1)
+  requests = []
+  responseMode = 'loop'
+  assert.equal(
+    (await context.safeFetchBuffer('https://example.org', 1000, 100)).ok,
+    false,
+  )
+  assert.equal(requests.length, 6)
+  requests = []
+  responseMode = 'tls-error'
+  assert.equal(
+    (await context.safeFetchBuffer('https://example.org', 1000, 100)).ok,
+    false,
+  )
+  assert.equal(requests.length, 1, 'No HTTP downgrade after TLS failure')
+  responseMode = 'html'
+  assert.equal(
+    (await context.robustFetchBuffer('https://example.org')).status,
+    415,
+  )
+  responseMode = 'image'
+  assert.equal(
+    (await context.safeFetchBuffer('https://example.org', 1000, 2)).ok,
+    false,
+  )
+  const crawler = {
+    exports: {},
+    AbortSignal,
+    fetch: async () => {
+      throw new Error('offline')
+    },
+  }
+  runInNewContext(
+    transpile(
+      await readFile(
+        new URL('../src/services/webPhotoCrawler.ts', import.meta.url),
+        'utf8',
+      ),
+    ),
+    crawler,
+  )
+  await assert.rejects(
+    () => crawler.exports.searchWebPhotosDetailed('https://example.org'),
+    /offline/,
+  )
+  crawler.fetch = async () => ({
+    ok: true,
+    headers: { get: () => 'text/html' },
+  })
+  await assert.rejects(
+    () => crawler.exports.searchWebPhotosDetailed('https://example.org'),
+    /수집 서버/,
+  )
+  crawler.fetch = async () => ({
+    ok: true,
+    headers: { get: () => 'application/json' },
+    json: async () => ({ sourceKind: 'platform', photos: [] }),
+  })
+  assert.equal(
+    (await crawler.exports.searchWebPhotosDetailed('https://example.org'))
+      .photos.length,
+    0,
+  )
+  console.log(
+    'Review regressions PASS: private IP/DNS/redirect, DNS pinning, redirect limit, TLS failure, MIME/size bounds, no fabricated fallback.',
+  )
+}
+await reviewRegressions()
+if (process.argv.includes('--review-regressions-only')) process.exit(0)
+
 const screenPreview = process.argv.includes('--screen-preview')
 const paid = process.env.AI_CHECK_LIVE === '1'
 const reviewReplay = process.argv.includes('--review-replay')
@@ -637,6 +822,12 @@ finally:
       ),
     'start screen',
   )
+  if (!live) {
+    await evaluate("document.querySelector('button[title=\"소속 기업/기관 변경\"]').click()")
+    await until(() => has('input[aria-label="대상 회사명"]'), 'company dialog before session')
+    await evaluate("(()=>{const e=document.querySelector('input[aria-label=\"대상 회사명\"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,\"value\").set.call(e,\"이전 시연 회사\");e.dispatchEvent(new Event(\"input\",{bubbles:true}))})()")
+    await click('회사 선택')
+  }
   await click('작업 시작 / 이어하기')
   await idle()
   sessionId = await evaluate(
@@ -666,6 +857,31 @@ finally:
     `document.querySelector('input[aria-label="ai-connection-demo.txt 선택"]').click()`,
   )
   await idle()
+  if (!live) {
+    const sessionState = () => evaluate('fetch("/api/v1/sessions/"+JSON.parse(sessionStorage.getItem("ddalgi.sources.v1")).sessionId).then(r=>r.json())')
+    assert.equal((await sessionState()).brief.target_company, '이전 시연 회사')
+    await evaluate("document.querySelector('button[title=\"소속 기업/기관 변경\"]').click()")
+    await until(() => has('input[aria-label="대상 회사명"]'), 'company dialog')
+    await evaluate("(()=>{const e=document.querySelector('input[aria-label=\"대상 회사명\"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,\"value\").set.call(e,\"테스트나무\");e.dispatchEvent(new Event(\"input\",{bubbles:true}))})()")
+    await click('회사 변경 및 자료 선택 해제')
+    await idle()
+    await until(async () => !(await has('[role="dialog"]')), 'company saved')
+    assert.equal((await sessionState()).brief.target_company, '테스트나무')
+    assert.deepEqual((await sessionState()).selected_source_ids, [])
+    await reload()
+    await evaluate("[...document.querySelectorAll('[role=\"tab\"]')].find(t=>t.textContent.includes(\"이번 작업 첨부\")).click()")
+    await until(() => has('input[aria-label="ai-connection-demo.txt 선택"]:not(:disabled)'), 'company reload')
+    assert.equal((await sessionState()).brief.target_company, '테스트나무')
+    assert.equal(await evaluate('document.querySelector(\'input[aria-label="ai-connection-demo.txt 선택"]\').checked'), false)
+    const beforePublic = await sessionState()
+    await click('공개 데이터 자동으로 가져오기')
+    await idle()
+    assert.ok(await evaluate('document.body.innerText.includes("외부 API 키와 수집 연결을 아직 설정하지 않았습니다.")'))
+    assert.deepEqual(await sessionState(), beforePublic)
+    await evaluate("document.querySelector('input[aria-label=\"ai-connection-demo.txt 선택\"]').click()")
+    await idle()
+    checks.push('company saved/reloaded; changed company clears selection and retains uploads; public import without keys reports error without mutation')
+  }
   if (photoTrial) {
     // DOCX limits enlargement to native pixels / 150ppi. Use enough pixels
     // for two images to overflow; a small native image must remain small.
@@ -751,8 +967,13 @@ finally:
   assert.equal(await draftDisabled(), true)
   checks.push('facts and evidence; explicit confirmation resets on reload')
   if (!live) {
+    assert.ok(await evaluate('document.querySelector(\'[aria-label="자료 충족도"]\').textContent.includes("%")'))
+    checks.push('server evidence coverage displayed after preflight')
+  }
+  if (!live) {
     await changePurpose('수정된 소개 목적')
     await idle()
+    assert.ok(await evaluate("document.querySelector('[aria-label=\"자료 충족도\"]').textContent.includes(\"점검 필요\")"))
     assert.equal(await draftDisabled(), true)
     await click('작성 조건 저장')
     await idle()
@@ -2256,6 +2477,65 @@ finally:
       await click('DOCX 다운로드')
       await idle()
       checks.push('wrong MIME rejected before saving DOCX; retry works')
+        // Both formats approved: changing format must not reuse the old export ID.
+        await evaluate(
+          'document.querySelector(\'button[aria-label="PDF 출력 선택"]\').click()',
+        )
+        await click('PDF 배치 검사')
+        await until(
+          async () =>
+            (await documentState()).layout_checks.pdf?.status === 'passed',
+          'PDF alternate format',
+          120000,
+        )
+        await idle()
+        await evaluate(
+          'document.querySelector(\'input[aria-label="PDF 최종 승인 동의"]\').click()',
+        )
+        await click('현재 PDF 최종 승인')
+        await idle()
+        await click('승인된 PDF 준비')
+        await until(
+          () =>
+            evaluate(
+              "!![...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='PDF 다운로드'&&!b.disabled)",
+            ),
+          'PDF export ready',
+        )
+        await evaluate(
+          'document.querySelector(\'button[aria-label="DOCX 출력 선택"]\').click()',
+        )
+        assert.equal(
+          await evaluate(
+            "[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='DOCX 다운로드').disabled",
+          ),
+          true,
+        )
+        assert.equal(
+          await evaluate(
+            "JSON.parse(sessionStorage.getItem('ddalgi.sources.v1.publication')).exportId || null",
+          ),
+          null,
+        )
+        await click('승인된 DOCX 준비')
+        await until(
+          () =>
+            evaluate(
+              "!![...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='DOCX 다운로드'&&!b.disabled)",
+            ),
+          'DOCX export restored after switching',
+        )
+        assert.equal(
+          await evaluate(
+            "JSON.parse(sessionStorage.getItem('ddalgi.sources.v1.publication')).exportId",
+          ),
+          exportData.exportId,
+        )
+        await click('DOCX 다운로드')
+        await idle()
+        checks.push(
+          'two approved formats switch without stale export ID; prepare reuses correct DOCX',
+        )
     }
     await evaluate(
       `document.getElementById('publication-panel').scrollIntoView()`,

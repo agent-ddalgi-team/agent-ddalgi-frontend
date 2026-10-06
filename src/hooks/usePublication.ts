@@ -549,6 +549,11 @@ export function usePublication(
     validVersion(approval) &&
     approval.validation_id === validation?.validation_id &&
     approval.layout_check_id === layout?.layout_check_id
+  const canDownload =
+    !actionBlocked &&
+    approved &&
+    !!saved.exportId &&
+    saved.approvalId === approval?.approval_id
   const proposalTargets = proposal?.target_block_ids || []
   const textProposalReadable =
     !!proposal &&
@@ -1034,7 +1039,12 @@ export function usePublication(
     formatLabel,
     setFormat: (next: 'pdf' | 'docx') => {
       if (blocked || next === format) return
-      remember({ ...savedRef.current, format: next })
+      remember({
+        ...savedRef.current,
+        format: next,
+        exportId: undefined,
+        approvalId: undefined,
+      })
       setConfirmed(false)
       setNotice('')
       setError('')
@@ -1048,6 +1058,7 @@ export function usePublication(
     watch,
     canApprove,
     approved,
+    canDownload,
     refresh,
     edit: (id: string, value: string) => {
       if (blocked || saved.impactCreate) return
@@ -1151,13 +1162,7 @@ export function usePublication(
         return perform(saved.pending)
     },
     download: async () => {
-      if (
-        actionBlocked ||
-        !approved ||
-        !saved.exportId ||
-        saved.approvalId !== approval!.approval_id
-      )
-        return
+      if (!canDownload || !saved.exportId) return
       setBusy(true)
       setError('')
       try {

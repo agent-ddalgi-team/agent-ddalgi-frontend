@@ -15,8 +15,12 @@ import { SystemStatusModal } from './components/session/SystemStatusModal'
 function App() {
   const [hasDraft, setHasDraft] = useState(false)
   const [step, setStep] = useState<WizardStep>(1)
-  const [company, setCompany] = useState('새 회사소개서')
+  const [company, setCompany] = useState<string>(() => {
+    return '새 회사소개서'
+  })
   const [statusOpen, setStatusOpen] = useState(false)
+  const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false)
+
   const navigate = (next: WizardStep) => {
     setStep(next)
     window.scrollTo({ top: 0, behavior: 'instant' })
@@ -27,6 +31,11 @@ function App() {
       available ? (current === 1 && !isScreenPreview ? 2 : current) : 1,
     )
   }, [])
+
+  const handleCompanyChange = useCallback((newCompany: string) => {
+    setCompany(newCompany)
+  }, [])
+
   return (
     <div className="flex min-h-screen flex-col bg-[#F1F5F9] font-sans text-[#0F172A] antialiased">
       {/* 1. 고정 글로벌 헤더 (56px) */}
@@ -47,12 +56,20 @@ function App() {
           </div>
 
           <div className="hidden items-center md:flex">
-            <div className="inline-flex items-center gap-1.5 rounded-full border border-blue-200/60 bg-blue-50 px-3 py-1 text-blue-700 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setIsCompanyModalOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-full border border-blue-200/60 bg-blue-50 px-3 py-1 text-blue-700 shadow-2xs hover:bg-blue-100/90 transition-colors cursor-pointer group"
+              title="소속 기업/기관 변경"
+            >
               <Building2 className="h-3.5 w-3.5 text-blue-600" />
               <span className="text-xs font-bold">
                 {hasDraft ? '초안 작업' : '현재 작업'} · {company}
               </span>
-            </div>
+              <span className="ml-0.5 rounded bg-blue-200/70 px-1.5 py-0.2 text-[10px] font-bold text-blue-800 group-hover:bg-blue-300 transition-colors">
+                변경
+              </span>
+            </button>
           </div>
 
           <div className="flex items-center gap-3">
@@ -102,7 +119,10 @@ function App() {
           onDraftAvailable={onDraftAvailable}
           step={step}
           onNavigate={navigate}
-          onCompanyChange={setCompany}
+          companyModalOpen={isCompanyModalOpen}
+          onCompanyModalOpen={() => setIsCompanyModalOpen(true)}
+          onCompanyModalClose={() => setIsCompanyModalOpen(false)}
+          onCompanyChange={handleCompanyChange}
         />
       </main>
 

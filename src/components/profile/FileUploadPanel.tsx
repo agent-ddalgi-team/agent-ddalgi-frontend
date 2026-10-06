@@ -11,7 +11,17 @@ export function FileUploadPanel({
   onFilesChange,
 }: FileUploadPanelProps) {
   const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
-    onFilesChange(Array.from(event.target.files ?? []))
+    const rawFiles = Array.from(event.target.files ?? [])
+    // [Security Hardening] 파일 검증: 확장자, 크기, 0바이트 방지, 최대 3개 제한
+    const validFiles = rawFiles.filter((file) => {
+      const isAllowedExt = /\.(txt|md)$/i.test(file.name)
+      const hasSafeName = !file.name.includes('..') && !/[/\\]/.test(file.name)
+      const isSafeSize = file.size > 0 && file.size <= 10 * 1024 * 1024
+      return isAllowedExt && hasSafeName && isSafeSize
+    })
+
+    // 최대 3개까지만 전달
+    onFilesChange(validFiles.slice(0, 3))
   }
 
   return (

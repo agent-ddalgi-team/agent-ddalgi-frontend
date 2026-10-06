@@ -2485,12 +2485,7 @@ export function DocumentWorkspace({
             <button
               type="button"
               className={primary}
-              disabled={
-                work.actionBlocked ||
-                !work.approved ||
-                !work.saved.exportId ||
-                work.saved.approvalId !== work.result?.approval?.approval_id
-              }
+              disabled={!work.canDownload}
               onClick={() => void work.download()}
             >
               <Download className="h-4 w-4" />
