@@ -1,3 +1,4 @@
+import { previewStorage } from '../services/mockBackend'
 import { useEffect, useRef, useState } from 'react'
 import { sourceApi, SourceApiError } from '../api/sources'
 import type {
@@ -7,7 +8,7 @@ import type {
   WorkSource,
 } from '../api/sources'
 
-const STORAGE = 'ddalgi.sources.v1'
+const STORAGE = previewStorage
 const UPLOAD = `${STORAGE}.upload`
 const INITIAL_BRIEF: SourceBrief = {
   purpose: '신규 고객 소개 (표준 제안용)',

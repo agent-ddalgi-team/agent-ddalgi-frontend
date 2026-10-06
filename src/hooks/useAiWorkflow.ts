@@ -1,10 +1,11 @@
+import { previewStorage } from '../services/mockBackend'
 import { useEffect, useRef, useState } from 'react'
 import { aiApi } from '../api/aiWorkflow'
 import type { AiJob, DraftResult, Preflight } from '../api/aiWorkflow'
 import { sourceApi, SourceApiError } from '../api/sources'
 import type { SourceSession } from '../api/sources'
 
-const STORAGE = 'ddalgi.sources.v1.ai'
+const STORAGE = previewStorage + '.ai'
 type Attempt = {
   kind: 'preflight' | 'draft'
   key: string

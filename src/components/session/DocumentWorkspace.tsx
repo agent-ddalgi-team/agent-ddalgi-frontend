@@ -1,3 +1,4 @@
+import { isScreenPreview, screenAssetUrl } from '../../services/mockBackend'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ComponentProps, ReactNode } from 'react'
 import {
@@ -235,8 +236,7 @@ export function DocumentWorkspace({
   )
   const blockers = openIssues.filter((i) => i.severity === 'blocker')
   const warnings = openIssues.filter((i) => i.severity === 'warning')
-  const assetUrl = (id: string) =>
-    `/api/v1/sessions/${encodeURIComponent(doc.session_id)}/assets/${encodeURIComponent(id)}`
+  const assetUrl = (id: string) => screenAssetUrl(doc.session_id, id)
   const selectPage = (index: number) => {
     setPageIndex(index)
     setBlockId('')
@@ -1809,7 +1809,9 @@ export function DocumentWorkspace({
                             </h4>
                             <p className="line-clamp-1 text-[10px] text-slate-500">
                               {previews[index]
-                                ? `실제 ${work.formatLabel} 배치 검사 결과`
+                                ? isScreenPreview
+                                  ? '가상 배치 예시'
+                                  : `실제 ${work.formatLabel} 배치 검사 결과`
                                 : '저장된 초안 구성'}
                             </p>
                           </div>
@@ -1871,7 +1873,9 @@ export function DocumentWorkspace({
                       <span className="text-[10px] text-slate-400">
                         문서 버전 {doc.document_revision} ·{' '}
                         {previews.length
-                          ? `실제 ${work.formatLabel} 배치 검사 결과`
+                          ? isScreenPreview
+                            ? '가상 배치 예시'
+                            : `실제 ${work.formatLabel} 배치 검사 결과`
                           : '저장된 초안 구성'}
                       </span>
                     </div>
@@ -2003,7 +2007,9 @@ export function DocumentWorkspace({
                           [
                             '표시 기준',
                             previews.length
-                              ? `실제 ${work.formatLabel} 배치`
+                              ? isScreenPreview
+                                ? '가상 배치 예시'
+                                : `실제 ${work.formatLabel} 배치`
                               : '저장된 초안',
                           ],
                           [
@@ -2163,8 +2169,10 @@ export function DocumentWorkspace({
                     [
                       `${work.formatLabel} 배치 검사`,
                       layout
-                        ? `${stateLabel[layout.status]}${layout.actual_pages ? ` · 실제 ${layout.actual_pages}쪽` : ''}${layout.actual_pages && layout.actual_pages !== doc.target_pages ? ` (목표 ${doc.target_pages}쪽)` : ''}`
-                        : `글 넘침·빈 페이지·사진 배치를 실제 ${work.formatLabel}로 검사합니다.`,
+                        ? `${stateLabel[layout.status]}${layout.actual_pages ? ` · ${isScreenPreview ? '가상' : '실제'} ${layout.actual_pages}쪽` : ''}${layout.actual_pages && layout.actual_pages !== doc.target_pages ? ` (목표 ${doc.target_pages}쪽)` : ''}`
+                        : isScreenPreview
+                          ? '가상 배치 검사 결과를 보여줍니다.'
+                          : `글 넘침·빈 페이지·사진 배치를 실제 ${work.formatLabel}로 검사합니다.`,
                       layout?.status,
                       `${work.formatLabel} 배치 검사`,
                       () => void work.checkLayout(),

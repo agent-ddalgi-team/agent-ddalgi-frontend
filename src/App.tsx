@@ -6,6 +6,7 @@ import {
   User,
 } from 'lucide-react'
 import { useCallback, useState } from 'react'
+import { isScreenPreview } from './services/mockBackend'
 import { SourceSelectionView } from './components/session/SourceSelectionView'
 import { StepIndicator } from './components/session/StepIndicator'
 import type { WizardStep } from './components/session/StepIndicator'
@@ -22,7 +23,9 @@ function App() {
   }
   const onDraftAvailable = useCallback((available: boolean) => {
     setHasDraft(available)
-    setStep((current) => (available ? (current === 1 ? 2 : current) : 1))
+    setStep((current) =>
+      available ? (current === 1 && !isScreenPreview ? 2 : current) : 1,
+    )
   }, [])
   return (
     <div className="flex min-h-screen flex-col bg-[#F1F5F9] font-sans text-[#0F172A] antialiased">
@@ -55,7 +58,11 @@ function App() {
           <div className="flex items-center gap-3">
             <div className="hidden items-center gap-1.5 text-xs font-medium text-slate-400 lg:flex">
               <CloudCheck className="h-4 w-4 text-[#007A78]" />
-              <span>저장한 내용은 서버에 보관</span>
+              <span>
+                {isScreenPreview
+                  ? '가상 데이터 · 이 탭에서만 보관'
+                  : '저장한 내용은 서버에 보관'}
+              </span>
             </div>
             <button
               type="button"
@@ -72,6 +79,16 @@ function App() {
         </div>
       </header>
 
+      {isScreenPreview && (
+        <div
+          role="note"
+          className="border-b border-amber-200 bg-amber-50 px-4 py-3 text-center text-sm text-amber-900"
+        >
+          <strong>가상 데이터 화면 시연</strong> · 1·2·3단계를 눌러 이동하세요.
+          편집·검사·승인은 가상 결과이며, 실제 AI 호출·서버 저장·파일 다운로드는
+          실행되지 않습니다.
+        </div>
+      )}
       {/* 2. 3단계 진행 표시 */}
       <StepIndicator
         currentStep={step}
@@ -96,13 +113,16 @@ function App() {
             <span>© 2026 회사소개서 도우미</span>
             <span className="inline-flex items-center gap-1 rounded-full border border-blue-200/60 bg-blue-50 px-2.5 py-0.5 text-[11px] font-semibold text-blue-700">
               <ShieldCheck className="h-3 w-3" />
-              작업 종료 시 서버 자료 정리
+              {isScreenPreview
+                ? '작업 종료 시 가상 자료 정리'
+                : '작업 종료 시 서버 자료 정리'}
             </span>
           </div>
           <div className="flex items-center gap-4">
             <span className="text-slate-500">
-              첨부·초안·출력 파일은 작업 종료 또는 만료 시 서버에서 삭제되며,
-              내려받은 파일은 기기에 남습니다.
+              {isScreenPreview
+                ? '시연 데이터는 이 브라우저 탭에만 저장됩니다. 실제 파일은 생성하지 않습니다.'
+                : '첨부·초안·출력 파일은 작업 종료 또는 만료 시 서버에서 삭제되며, 내려받은 파일은 기기에 남습니다.'}
             </span>
             <button
               type="button"

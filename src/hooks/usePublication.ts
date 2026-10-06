@@ -1,3 +1,4 @@
+import { previewStorage } from '../services/mockBackend'
 import { useEffect, useRef, useState } from 'react'
 import { publicationApi } from '../api/publication'
 import type {
@@ -13,7 +14,7 @@ import type {
 import type { DraftResult } from '../api/aiWorkflow'
 import { SourceApiError } from '../api/sources'
 
-const STORAGE = 'ddalgi.sources.v1.publication'
+const STORAGE = previewStorage + '.publication'
 type JobRef = { id: string; kind: Action['kind']; revision: number }
 type ProposalRecovery = {
   key: string

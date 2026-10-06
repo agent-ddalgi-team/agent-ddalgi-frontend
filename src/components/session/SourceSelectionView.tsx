@@ -1,3 +1,4 @@
+import { screenAssetUrl } from '../../services/mockBackend'
 import { useEffect, useRef, useState } from 'react'
 import {
   AlertTriangle,
@@ -341,7 +342,7 @@ export function SourceSelectionView({
             </summary>
             <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4">
               {source.asset_ids.map((asset, index) => {
-                const href = `/api/v1/sessions/${encodeURIComponent(work.session!.session_id)}/assets/${encodeURIComponent(asset)}`
+                const href = screenAssetUrl(work.session!.session_id, asset)
                 return (
                   <a key={asset} href={href} target="_blank" rel="noreferrer">
                     <img

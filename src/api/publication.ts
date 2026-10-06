@@ -1,4 +1,5 @@
 import { apiClient } from './client'
+import { isScreenPreview } from '../services/mockBackend'
 import { request, SourceApiError } from './sources'
 import type { DraftBlock, DraftResult, EvidenceRef } from './aiWorkflow'
 
@@ -216,6 +217,12 @@ export const publicationApi = {
     eid: string,
     format: 'pdf' | 'docx' = 'pdf',
   ) => {
+    if (isScreenPreview)
+      throw new SourceApiError(
+        '화면 시연에서는 실제 파일을 내려받지 않습니다.',
+        422,
+        'SCREEN_PREVIEW_ONLY',
+      )
     // 파일로 저장하기 전에 오류 응답과 선택 형식의 MIME을 확인한다.
     const response = await fetch(
       `${root(sid)}/exports/${encodeURIComponent(eid)}/download`,

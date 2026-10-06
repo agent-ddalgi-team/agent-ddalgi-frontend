@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { createServer } from 'vite'
 
+const screenPreview = process.argv.includes('--screen-preview')
 const paid = process.env.AI_CHECK_LIVE === '1'
 const reviewReplay = process.argv.includes('--review-replay')
 const replayInput = reviewReplay ? process.env.AI_CHECK_REVIEW_INPUT : null
@@ -192,7 +193,8 @@ async function screenshot(name) {
   await writeFile(join(output, name), Buffer.from(shot.data, 'base64'))
 }
 try {
-  if (live && !isolatedLlm && !reviewReplay) origin = originLive
+  if (screenPreview) origin = 'http://localhost:5173/?preview=1'
+  else if (live && !isolatedLlm && !reviewReplay) origin = originLive
   else {
     backend = spawn(
       join(backendRoot, '.venv/Scripts/python.exe'),
@@ -408,7 +410,7 @@ finally:
       )
     else if (
       data.method === 'Network.requestWillBeSent' &&
-      data.params.request.url.includes('/api/')
+      new URL(data.params.request.url).pathname.startsWith('/api/v1/')
     ) {
       const r = data.params.request
       calls.push({
@@ -500,7 +502,134 @@ finally:
     deviceScaleFactor: 1,
     mobile: false,
   })
+  const normalStorage = Object.fromEntries(
+    ['ddalgi.sources.v1', 'ddalgi.sources.v1.ai', 'ddalgi.sources.v1.publication', 'ddalgi.sources.v1.upload'].map(
+      (key) => [key, JSON.stringify({ sentinel: 'normal-storage-preserved', key })],
+    ),
+  )
+  if (screenPreview)
+    await command('Page.addScriptToEvaluateOnNewDocument', {
+      source: `if (!sessionStorage.getItem('screen-check-normal-seeded')) {
+        sessionStorage.setItem('screen-check-normal-seeded', '1');
+        for (const [key, value] of Object.entries(${JSON.stringify(normalStorage)}))
+          sessionStorage.setItem(key, value);
+      }`,
+    })
   await command('Page.navigate', { url: origin })
+  if (screenPreview) {
+    await until(
+      () => has('button[aria-label^="3단계"]:not(:disabled)'),
+      'offline steps ready',
+    )
+    assert.ok(
+      await evaluate(
+        "document.body.innerText.includes('가상 데이터 화면 시연')",
+      ),
+    )
+    await screen(1)
+    await screenshot('screen-preview-1.png')
+    await screen(2)
+    await until(
+      () => has('textarea[data-edit-block="screen-text-0"]'),
+      'offline editor',
+    )
+    await evaluate(
+      `(()=>{const t=document.querySelector('textarea[data-edit-block="screen-text-0"]');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(t,'가상 데이터 편집 저장 확인');t.dispatchEvent(new Event('input',{bubbles:true}));})()`,
+    )
+    await click('문구 저장')
+    await until(
+      () =>
+        evaluate(
+          `JSON.parse(sessionStorage.getItem('ddalgi.screen-preview.state.v1')).document.document.document_revision === 2`,
+        ),
+      'offline saved',
+    )
+    await reload()
+    await screen(2)
+    assert.equal(
+      await evaluate(
+        `document.querySelector('textarea[data-edit-block="screen-text-0"]').value`,
+      ),
+      '가상 데이터 편집 저장 확인',
+    )
+    await screenshot('screen-preview-2.png')
+    await screen(3)
+    await click('내용 검증 실행')
+    await until(
+      () =>
+        evaluate(
+          `JSON.parse(sessionStorage.getItem('ddalgi.screen-preview.state.v1')).document.validation?.status === 'passed'`,
+        ),
+      'offline content check',
+    )
+    await idle()
+    await click('PDF 배치 검사')
+    await until(
+      () =>
+        evaluate(
+          `JSON.parse(sessionStorage.getItem('ddalgi.screen-preview.state.v1')).document.layout_checks.pdf?.status === 'passed'`,
+        ),
+      'offline layout check',
+    )
+    await until(
+      () => has('input[aria-label="PDF 최종 승인 동의"]:not(:disabled)'),
+      'offline approval ready',
+    )
+    await evaluate(
+      `document.querySelector('input[aria-label="PDF 최종 승인 동의"]').click()`,
+    )
+    await click('현재 PDF 최종 승인')
+    await until(
+      () =>
+        evaluate(
+          `JSON.parse(sessionStorage.getItem('ddalgi.screen-preview.state.v1')).document.approval?.format === 'pdf'`,
+        ),
+      'offline approved',
+    )
+    await screenshot('screen-preview-3.png')
+    await until(
+      () =>
+        evaluate(
+          `[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='승인된 PDF 준비'&&!b.disabled)`,
+        ),
+      'offline export button',
+    )
+    await click('승인된 PDF 준비')
+    await until(
+      () =>
+        evaluate(
+          `document.body.innerText.includes('실제 파일을 만들거나 내려받지 않습니다.')`,
+        ),
+      'offline export guard',
+    )
+    assert.equal(
+      calls.length,
+      0,
+      'No API or image requests may reach the backend',
+    )
+    assert.deepEqual(errors, [])
+    for (const [key, value] of Object.entries(normalStorage))
+      assert.equal(
+        await evaluate(`sessionStorage.getItem(${JSON.stringify(key)})`),
+        value,
+        `Preview must preserve existing normal storage: ${key}`,
+      )
+    console.log(
+      JSON.stringify({
+        result: 'PASS',
+        checks: [
+          'three screens',
+          'edit/save',
+          'reload persistence',
+          'simulated content/layout/approval',
+          'export guard',
+          'no backend API calls',
+          'normal storage untouched',
+        ],
+        diagnostics: output,
+      }),
+    )
+  } else {
   await until(
     () =>
       evaluate(
@@ -538,9 +667,13 @@ finally:
   )
   await idle()
   if (photoTrial) {
+    // DOCX limits enlargement to native pixels / 150ppi. Use enough pixels
+    // for two images to overflow; a small native image must remain small.
+    const photoWidth = docxTrial ? 1600 : 160
+    const photoHeight = docxTrial ? 1000 : 100
     await evaluate(`(async()=>{const input=document.querySelector('input[type=file]');const files=new DataTransfer();
       for(const [name,color] of [['red.png','red'],['blue.png','blue'],['unselected.png','green']]){
-        const c=document.createElement('canvas');c.width=160;c.height=100;const x=c.getContext('2d');x.fillStyle=color;x.fillRect(0,0,160,100);
+        const c=document.createElement('canvas');c.width=${photoWidth};c.height=${photoHeight};const x=c.getContext('2d');x.fillStyle=color;x.fillRect(0,0,${photoWidth},${photoHeight});
         const blob=await new Promise(r=>c.toBlob(r,'image/png'));files.items.add(new File([blob],name,{type:'image/png'}));
       } input.files=files.files;input.dispatchEvent(new Event('change',{bubbles:true}));})()`)
     for (const name of ['red.png', 'blue.png', 'unselected.png']) {
@@ -2254,6 +2387,7 @@ finally:
       screenshot: join(output, 'draft.png'),
     }),
   )
+  }
 } catch (error) {
   if (socket?.readyState === WebSocket.OPEN) {
     console.error(
