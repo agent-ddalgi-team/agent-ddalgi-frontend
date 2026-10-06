@@ -47,6 +47,7 @@ export interface Approval {
 export interface PublicationDocument extends DraftResult {
   validation: Validation | null
   approval: Approval | null
+  approvals_by_format?: { pdf: Approval | null; docx: Approval | null }
   layout_checks: { pdf: Layout | null; docx: Layout | null }
 }
 export interface ImpactReview {

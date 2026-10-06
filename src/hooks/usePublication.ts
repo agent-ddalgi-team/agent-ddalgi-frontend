@@ -131,6 +131,8 @@ function persist(saved: Saved) {
 }
 async function snapshot(sid: string, did: string) {
   const result = await publicationApi.document(sid, did)
+  if (result.approvals_by_format)
+    result.approval = result.approvals_by_format[read(sid, did).format || 'pdf']
   const issues = await publicationApi.issues(sid, did)
   if (
     issues.document_revision !== result.document.document_revision ||
@@ -536,7 +538,9 @@ export function usePublication(
     layout.layout_ok &&
     layout.publication_policy_ok &&
     openIssues.length === 0
-  const approval = result?.approval
+  const approval = result?.approvals_by_format
+    ? result.approvals_by_format[format]
+    : result?.approval
   const approved =
     !!approval &&
     approval.status === 'active' &&
