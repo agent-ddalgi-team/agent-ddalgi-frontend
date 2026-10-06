@@ -361,6 +361,7 @@ export const SessionUploadPanel: React.FC<SessionUploadPanelProps> = ({
                       }
                     }}
                     placeholder="직접 태그 입력 후 추가"
+                    maxLength={30}
                     className="flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs focus:border-[#007A78] focus:outline-hidden"
                     autoFocus
                   />
@@ -594,6 +595,7 @@ export const SessionUploadPanel: React.FC<SessionUploadPanelProps> = ({
                 value={companyHint}
                 onChange={(e) => onCompanyHintChange(e.target.value)}
                 placeholder="예: 주식회사 에이전트딸기"
+                maxLength={100}
                 className="w-full rounded-xl border border-slate-300 pl-8 pr-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-[#007A78] focus:ring-1 focus:ring-[#007A78] focus:outline-hidden"
               />
               <Building2 className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />

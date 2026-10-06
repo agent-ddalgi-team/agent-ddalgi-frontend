@@ -1223,6 +1223,7 @@ export const ApprovalExportView: React.FC<ApprovalExportViewProps> = ({
                               className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs placeholder:text-slate-400 focus:border-[#007A78] focus:outline-none focus:ring-1 focus:ring-[#007A78]"
                               aria-label={`경고 확인 사유 ${issue.id}`}
                               placeholder="경고를 확인한 사유를 입력하세요 (예: 시연용 수치 확인 완료)"
+                              maxLength={200}
                               value={issueReasons[issue.id] || ''}
                               onChange={(e) =>
                                 setIssueReasons((prev) => ({
