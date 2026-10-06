@@ -165,7 +165,7 @@ export function DocumentWorkspace({
     work.proposal?.target_block_ids.includes(b.block_id),
   )
   const validation = work.result?.validation
-  const layout = work.result?.layout_checks.pdf
+  const layout = work.result?.layout_checks[work.format]
   const currentIndex = Math.min(pageIndex, Math.max(0, doc.pages.length - 1))
   const page = doc.pages[currentIndex]
   const selectedBlock =
@@ -181,7 +181,11 @@ export function DocumentWorkspace({
   )
   const reviewIndex = previews.length ? currentPreview : currentIndex
   const openIssues = work.issues.filter(
-    (i) => i.status === 'open' && i.layout_format !== 'docx',
+    (i) =>
+      i.status === 'open' &&
+      (i.scope !== 'layout' ||
+        i.layout_format === null ||
+        i.layout_format === work.format),
   )
   const blockers = openIssues.filter((i) => i.severity === 'blocker')
   const warnings = openIssues.filter((i) => i.severity === 'warning')
@@ -243,7 +247,10 @@ export function DocumentWorkspace({
         ]
   const SaveIcon = saveBadge[2]
   const reviewBadge = work.approved
-    ? ['PDF 승인 완료', 'border-emerald-200 bg-emerald-50 text-emerald-800']
+    ? [
+        `${work.formatLabel} 승인 완료`,
+        'border-emerald-200 bg-emerald-50 text-emerald-800',
+      ]
     : !validation
       ? ['검사 전', 'border-slate-200 bg-slate-100 text-slate-600']
       : validation.status === 'passed' && layout?.status === 'passed'
@@ -283,7 +290,7 @@ export function DocumentWorkspace({
                 checked={work.confirmed}
                 onChange={(e) => work.setConfirmed(e.target.checked)}
               />
-              앞서 확인한 PDF의 최종 승인 요청을 다시 확인합니다.
+              앞서 확인한 {work.formatLabel}의 최종 승인 요청을 다시 확인합니다.
             </label>
           )}
           <button
@@ -474,7 +481,7 @@ export function DocumentWorkspace({
       id="draft-preview"
       data-testid="draft-result"
       hidden={step === 1}
-      aria-label="초안 편집과 PDF 출력"
+      aria-label={`초안 편집과 ${work.formatLabel} 출력`}
       className="document-workspace animate-fade-in flex flex-col gap-5 pb-28"
     >
       {/* ===================== S02 초안 편집 ===================== */}
@@ -1363,8 +1370,8 @@ export function DocumentWorkspace({
               확인한 내용을 승인하고 내려받으세요
             </h1>
             <p className="mt-1 text-sm text-slate-600">
-              저장된 내용과 PDF 배치를 검사한 결과를 살펴본 뒤, 직접 승인하고
-              다운로드합니다.
+              저장된 내용과 {work.formatLabel} 배치를 검사한 결과를 살펴본 뒤,
+              직접 승인하고 다운로드합니다.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -1428,8 +1435,8 @@ export function DocumentWorkspace({
               <div className="flex items-center gap-2 text-[11px] text-slate-500">
                 <span>
                   {previews.length
-                    ? `검사한 PDF · ${layout?.actual_pages ?? previews.length}쪽`
-                    : `구성 미리보기 · ${doc.pages.length}쪽 · PDF 배치 검사 전`}
+                    ? `검사한 ${work.formatLabel} · ${layout?.actual_pages ?? previews.length}쪽`
+                    : `구성 미리보기 · ${doc.pages.length}쪽 · ${work.formatLabel} 배치 검사 전`}
                 </span>
                 <button
                   type="button"
@@ -1457,8 +1464,8 @@ export function DocumentWorkspace({
                     className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${layout?.status === 'passed' ? 'bg-emerald-50 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}
                   >
                     {layout
-                      ? `PDF 배치 ${stateLabel[layout.status]}`
-                      : 'PDF 배치 검사 전'}
+                      ? `${work.formatLabel} 배치 ${stateLabel[layout.status]}`
+                      : `${work.formatLabel} 배치 검사 전`}
                   </span>
                 </div>
                 <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-3">
@@ -1507,7 +1514,7 @@ export function DocumentWorkspace({
                             {previews[index] ? (
                               <img
                                 className="aspect-[210/297] w-full object-contain"
-                                alt={`검사한 PDF ${index + 1}쪽`}
+                                alt={`검사한 ${work.formatLabel} ${index + 1}쪽`}
                                 src={assetUrl(previews[index])}
                               />
                             ) : (
@@ -1537,7 +1544,7 @@ export function DocumentWorkspace({
                             </h4>
                             <p className="line-clamp-1 text-[10px] text-slate-500">
                               {previews[index]
-                                ? '실제 PDF 배치 검사 결과'
+                                ? `실제 ${work.formatLabel} 배치 검사 결과`
                                 : '저장된 초안 구성'}
                             </p>
                           </div>
@@ -1576,7 +1583,7 @@ export function DocumentWorkspace({
                   <span>
                     {validation
                       ? `내용 검증 ${stateLabel[validation.status]} · 확인할 문제 ${openIssues.length}건`
-                      : '내용 검증과 PDF 배치 검사는 오른쪽 패널에서 실행합니다.'}
+                      : `내용 검증과 ${work.formatLabel} 배치 검사는 오른쪽 패널에서 실행합니다.`}
                   </span>
                   <button
                     type="button"
@@ -1599,7 +1606,7 @@ export function DocumentWorkspace({
                       <span className="text-[10px] text-slate-400">
                         문서 버전 {doc.document_revision} ·{' '}
                         {previews.length
-                          ? '실제 PDF 배치 검사 결과'
+                          ? `실제 ${work.formatLabel} 배치 검사 결과`
                           : '저장된 초안 구성'}
                       </span>
                     </div>
@@ -1661,7 +1668,7 @@ export function DocumentWorkspace({
                           <span
                             className={`min-w-0 truncate text-[11px] font-bold ${on ? 'text-[#007A78]' : 'text-slate-800'}`}
                           >
-                            {doc.pages[index]?.title || 'PDF'}
+                            {doc.pages[index]?.title || work.formatLabel}
                           </span>
                         </button>
                       )
@@ -1677,7 +1684,7 @@ export function DocumentWorkspace({
                       >
                         <img
                           className="w-full rounded-lg border border-slate-200 bg-white shadow-md"
-                          alt={`검사한 PDF ${currentPreview + 1}쪽`}
+                          alt={`검사한 ${work.formatLabel} ${currentPreview + 1}쪽`}
                           src={assetUrl(previews[currentPreview])}
                         />
                       </a>
@@ -1730,7 +1737,9 @@ export function DocumentWorkspace({
                           ['현재 쪽', `${reviewIndex + 1}쪽`],
                           [
                             '표시 기준',
-                            previews.length ? '실제 PDF 배치' : '저장된 초안',
+                            previews.length
+                              ? `실제 ${work.formatLabel} 배치`
+                              : '저장된 초안',
                           ],
                           [
                             '근거 연결',
@@ -1801,7 +1810,7 @@ export function DocumentWorkspace({
           )}
           <aside
             id="publication-panel"
-            aria-label="검증 승인 PDF 다운로드"
+            aria-label={`검증 승인 ${work.formatLabel} 다운로드`}
             className={`${panel} document-inspector flex flex-col gap-5 p-5 ${inspector ? 'inspector-open' : ''}`}
           >
             <div className="flex items-center justify-between">
@@ -1818,41 +1827,39 @@ export function DocumentWorkspace({
 
             <div>
               <p className="mb-2 text-sm font-bold text-slate-900">출력 형식</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="flex flex-col gap-1 rounded-xl border-2 border-[#007A78] bg-[#E6F4F1]/70 p-3.5 shadow-xs">
-                  <div className="flex w-full items-center justify-between">
-                    <span className="flex items-center gap-2">
-                      <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#007A78]">
-                        <span className="h-1.5 w-1.5 rounded-full bg-white" />
-                      </span>
-                      <span className="text-xs font-bold text-slate-900">
-                        PDF
-                      </span>
+              <div
+                className="grid grid-cols-2 gap-3"
+                role="group"
+                aria-label="출력 형식 선택"
+              >
+                {(['pdf', 'docx'] as const).map((format) => (
+                  <button
+                    key={format}
+                    type="button"
+                    aria-pressed={work.format === format}
+                    aria-label={`${format.toUpperCase()} 출력 선택`}
+                    disabled={work.blocked}
+                    onClick={() => {
+                      work.setFormat(format)
+                      setPreviewIndex(0)
+                    }}
+                    className={`flex flex-col gap-1 rounded-xl border-2 p-3.5 text-left disabled:opacity-50 ${work.format === format ? 'border-[#007A78] bg-[#E6F4F1]/70' : 'border-slate-200 bg-slate-50'}`}
+                  >
+                    <span className="text-xs font-bold text-slate-900">
+                      {format.toUpperCase()}
                     </span>
-                    <FileText className="h-4 w-4 text-[#007A78]" />
-                  </div>
-                  <p className="pl-6 text-[11px] text-slate-500">
-                    배포·인쇄용 (권장)
-                  </p>
-                </div>
-                <div
-                  className="flex flex-col gap-1 rounded-xl border border-slate-200 bg-slate-50 p-3.5 opacity-70"
-                  title="DOCX 배치 검사·승인 연결 준비 중"
-                >
-                  <div className="flex w-full items-center justify-between">
-                    <span className="flex items-center gap-2">
-                      <span className="h-4 w-4 rounded-full bg-slate-200" />
-                      <span className="text-xs font-semibold text-slate-900">
-                        DOCX
-                      </span>
+                    <span className="text-[11px] text-slate-500">
+                      {format === 'pdf' ? '배포·인쇄용 (권장)' : 'Word 편집용'}
                     </span>
-                    <FileText className="h-4 w-4 text-slate-400" />
-                  </div>
-                  <p className="pl-6 text-[11px] text-slate-500">
-                    Word 편집용 · 준비 중
-                  </p>
-                </div>
+                  </button>
+                ))}
               </div>
+              {work.format === 'docx' && (
+                <p className="mt-2 text-xs leading-relaxed text-slate-500">
+                  DOCX는 단일 열 편집 문서입니다. 미리보기는 LibreOffice 출력
+                  기준이며 Word의 글꼴·쪽 나눔과 다를 수 있습니다.
+                </p>
+              )}
             </div>
 
             <div className="flex flex-col gap-2 border-t border-slate-100 pt-4">
@@ -1889,12 +1896,12 @@ export function DocumentWorkspace({
                       () => void work.validate(),
                     ],
                     [
-                      'PDF 배치 검사',
+                      `${work.formatLabel} 배치 검사`,
                       layout
                         ? `${stateLabel[layout.status]}${layout.actual_pages ? ` · 실제 ${layout.actual_pages}쪽` : ''}${layout.actual_pages && layout.actual_pages !== doc.target_pages ? ` (목표 ${doc.target_pages}쪽)` : ''}`
-                        : '글 넘침·빈 페이지·사진 배치를 실제 PDF로 검사합니다.',
+                        : `글 넘침·빈 페이지·사진 배치를 실제 ${work.formatLabel}로 검사합니다.`,
                       layout?.status,
-                      'PDF 배치 검사',
+                      `${work.formatLabel} 배치 검사`,
                       () => void work.checkLayout(),
                     ],
                   ] as const
@@ -2127,7 +2134,7 @@ export function DocumentWorkspace({
                 className={`flex items-start gap-3 rounded-xl border p-3 transition-colors ${work.canApprove ? 'cursor-pointer border-slate-200 bg-slate-50 hover:bg-slate-100' : 'cursor-not-allowed border-slate-200 bg-slate-50 opacity-70'}`}
               >
                 <input
-                  aria-label="PDF 최종 승인 동의"
+                  aria-label={`${work.formatLabel} 최종 승인 동의`}
                   type="checkbox"
                   className="mt-0.5 h-4 w-4 accent-[#007A78]"
                   checked={work.confirmed}
@@ -2135,22 +2142,22 @@ export function DocumentWorkspace({
                   onChange={(e) => work.setConfirmed(e.target.checked)}
                 />
                 <span className="select-none text-xs font-bold leading-snug text-slate-900">
-                  내용·경고·PDF 미리보기를 확인했으며 현재 저장본의 PDF 출력을
-                  승인합니다.
+                  내용·경고·{work.formatLabel} 미리보기를 확인했으며 현재
+                  저장본의 {work.formatLabel} 출력을 승인합니다.
                 </span>
               </label>
               {!work.canApprove && !work.approved && (
                 <p className="text-[11px] leading-relaxed text-slate-500">
-                  내용 검증과 PDF 배치 검사를 모두 통과하고 열린 경고를 확인해야
-                  승인할 수 있습니다. 동의 체크만으로 승인 조건을 우회할 수
-                  없습니다.
+                  내용 검증과 {work.formatLabel} 배치 검사를 모두 통과하고 열린
+                  경고를 확인해야 승인할 수 있습니다. 동의 체크만으로 승인
+                  조건을 우회할 수 없습니다.
                 </p>
               )}
               {work.approved && (
                 <p className="flex items-center gap-2 rounded-xl bg-emerald-50 p-3 text-xs font-semibold text-emerald-800">
                   <CheckCircle2 size={16} />
-                  현재 문서의 PDF 승인이 완료되었습니다. 아래에서 파일을
-                  준비하고 내려받으세요.
+                  현재 문서의 {work.formatLabel} 승인이 완료되었습니다. 아래에서
+                  파일을 준비하고 내려받으세요.
                 </p>
               )}
               <div className="flex items-center gap-2.5 rounded-xl border border-blue-200/80 bg-blue-50 p-3 text-blue-900">
@@ -2174,10 +2181,10 @@ export function DocumentWorkspace({
               className={`h-2 w-2 rounded-full ${work.approved ? 'bg-[#007A78]' : 'bg-slate-300'}`}
             />
             {work.approved
-              ? '승인 완료 · PDF를 준비한 뒤 다운로드하세요.'
+              ? `승인 완료 · ${work.formatLabel}를 준비한 뒤 다운로드하세요.`
               : validation?.status === 'passed' && layout?.status === 'passed'
                 ? '검사 통과 · 동의 체크 후 최종 승인할 수 있습니다.'
-                : '내용 검증과 PDF 배치 검사 후 승인할 수 있습니다.'}
+                : `내용 검증과 ${work.formatLabel} 배치 검사 후 승인할 수 있습니다.`}
           </p>
           <button
             type="button"
@@ -2186,21 +2193,21 @@ export function DocumentWorkspace({
             onClick={() => void work.approve()}
           >
             <ShieldCheck className="h-4 w-4" />
-            현재 PDF 최종 승인
+            현재 {work.formatLabel} 최종 승인
           </button>
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               className={primary}
               disabled={work.actionBlocked || !work.approved}
-              onClick={() => void work.exportPdf()}
+              onClick={() => void work.exportDocument()}
             >
               {work.watch ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <FileText className="h-4 w-4" />
               )}
-              승인된 PDF 준비
+              승인된 {work.formatLabel} 준비
             </button>
             <button
               type="button"
@@ -2214,7 +2221,7 @@ export function DocumentWorkspace({
               onClick={() => void work.download()}
             >
               <Download className="h-4 w-4" />
-              PDF 다운로드
+              {work.formatLabel} 다운로드
             </button>
           </div>
         </footer>

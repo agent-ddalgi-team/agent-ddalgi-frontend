@@ -156,8 +156,12 @@ export const publicationApi = {
       }),
     )
   },
-  download: async (sid: string, eid: string) => {
-    // Fetch keeps JSON error responses readable before accepting PDF bytes.
+  download: async (
+    sid: string,
+    eid: string,
+    format: 'pdf' | 'docx' = 'pdf',
+  ) => {
+    // 파일로 저장하기 전에 오류 응답과 선택 형식의 MIME을 확인한다.
     const response = await fetch(
       `${root(sid)}/exports/${encodeURIComponent(eid)}/download`,
       { credentials: 'same-origin', signal: AbortSignal.timeout(60000) },
@@ -165,13 +169,20 @@ export const publicationApi = {
     if (!response.ok) {
       const payload = await response.json().catch(() => null)
       throw new SourceApiError(
-        payload?.error?.message || 'PDF를 내려받지 못했습니다.',
+        payload?.error?.message ||
+          `${format.toUpperCase()}를 내려받지 못했습니다.`,
         response.status,
         payload?.error?.code || 'DOWNLOAD_FAILED',
       )
     }
-    if (!response.headers.get('Content-Type')?.includes('application/pdf'))
-      throw new Error('서버가 PDF 파일을 반환하지 않았습니다.')
+    const mime =
+      format === 'pdf'
+        ? 'application/pdf'
+        : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    if (response.headers.get('Content-Type')?.split(';')[0].trim() !== mime)
+      throw new Error(
+        `서버가 ${format.toUpperCase()} 파일을 반환하지 않았습니다.`,
+      )
     return response.blob()
   },
 }

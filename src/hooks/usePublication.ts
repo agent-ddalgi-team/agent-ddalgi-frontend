@@ -24,6 +24,7 @@ type ProposalRecovery = {
 type Saved = {
   sid: string
   did: string
+  format?: 'pdf' | 'docx'
   pending?: Action
   job?: JobRef
   exportId?: string
@@ -36,6 +37,8 @@ function read(sid: string, did: string): Saved {
   try {
     const value = JSON.parse(sessionStorage.getItem(STORAGE) || 'null')
     if (!value || value.sid !== sid || value.did !== did) return blank
+    if (value.format !== undefined && !['pdf', 'docx'].includes(value.format))
+      return blank
     if (
       value.pending &&
       (![
@@ -126,6 +129,8 @@ export function usePublication(initial: DraftResult) {
   const active = useRef(true)
   const lock = useRef(false)
   const savedRef = useRef(saved)
+  const format = saved.format || 'pdf'
+  const formatLabel = format.toUpperCase()
   const dirty = Object.keys(edits).length > 0 || removed.length > 0
   function remember(value: Saved) {
     persist(value)
@@ -261,7 +266,7 @@ export function usePublication(initial: DraftResult) {
             ref!.kind === 'propose'
               ? '후보를 받았습니다. 내용을 확인하고 선택한 뒤 적용해 주세요.'
               : ref!.kind === 'export'
-                ? 'PDF 파일이 준비되었습니다.'
+                ? `${(savedRef.current.format || 'pdf').toUpperCase()} 파일이 준비되었습니다.`
                 : '검사가 완료되었습니다. 결과를 확인해 주세요.',
           )
           return
@@ -344,15 +349,15 @@ export function usePublication(initial: DraftResult) {
         }
         setNotice(
           action.kind === 'save'
-            ? '문서 변경을 저장했습니다. 내용·PDF 검사를 다시 실행해 주세요.'
+            ? '문서 변경을 저장했습니다. 내용·배치 검사를 다시 실행해 주세요.'
             : action.kind === 'applyProposal'
-              ? '수정안을 적용했습니다. 내용·PDF 검사를 다시 실행해 주세요.'
+              ? '수정안을 적용했습니다. 내용·배치 검사를 다시 실행해 주세요.'
               : action.kind === 'rejectProposal'
                 ? '수정안을 취소했습니다. 문서는 바뀌지 않았습니다.'
                 : action.kind === 'approve'
-                  ? '현재 PDF를 최종 승인했습니다.'
+                  ? `${formatLabel}를 최종 승인했습니다.`
                   : action.kind === 'export'
-                    ? 'PDF 파일이 준비되었습니다.'
+                    ? `${(savedRef.current.format || 'pdf').toUpperCase()} 파일이 준비되었습니다.`
                     : '경고 확인을 기록했습니다.',
         )
       }
@@ -402,7 +407,7 @@ export function usePublication(initial: DraftResult) {
     .slice(0, Math.max(0, document.pages.length - 1))
     .map((page) => page.page_id)
   const validation = result?.validation
-  const layout = result?.layout_checks.pdf
+  const layout = result?.layout_checks[format]
   const validVersion = (
     value:
       { document_revision: number; input_revision: number } | null | undefined,
@@ -414,7 +419,9 @@ export function usePublication(initial: DraftResult) {
     (i) =>
       i.status === 'open' &&
       i.severity !== 'info' &&
-      (i.scope !== 'layout' || i.layout_format !== 'docx'),
+      (i.scope !== 'layout' ||
+        i.layout_format === null ||
+        i.layout_format === format),
   )
   const canApprove =
     !actionBlocked &&
@@ -429,7 +436,7 @@ export function usePublication(initial: DraftResult) {
   const approved =
     !!approval &&
     approval.status === 'active' &&
-    approval.format === 'pdf' &&
+    approval.format === format &&
     validVersion(approval) &&
     approval.validation_id === validation?.validation_id &&
     approval.layout_check_id === layout?.layout_check_id
@@ -691,6 +698,15 @@ export function usePublication(initial: DraftResult) {
       })
     },
     conflict,
+    format,
+    formatLabel,
+    setFormat: (next: 'pdf' | 'docx') => {
+      if (blocked || next === format) return
+      remember({ ...savedRef.current, format: next })
+      setConfirmed(false)
+      setNotice('')
+      setError('')
+    },
     confirmed,
     setConfirmed,
     error,
@@ -764,7 +780,7 @@ export function usePublication(initial: DraftResult) {
       !actionBlocked &&
       run('layout', {
         expected_revision: document.document_revision,
-        format: 'pdf',
+        format,
       }),
     acknowledge: (issue: Issue, reason: string) => {
       if (actionBlocked || !validation || !reason.trim()) return
@@ -787,13 +803,13 @@ export function usePublication(initial: DraftResult) {
         input_revision: document.input_revision,
         validation_id: validation!.validation_id,
         layout_check_id: layout!.layout_check_id,
-        format: 'pdf',
+        format,
         confirmed: true,
       }),
-    exportPdf: () =>
+    exportDocument: () =>
       !actionBlocked &&
       approved &&
-      run('export', { approval_id: approval!.approval_id, format: 'pdf' }),
+      run('export', { approval_id: approval!.approval_id, format }),
     retry: () => {
       if (
         saved.pending &&
@@ -813,15 +829,15 @@ export function usePublication(initial: DraftResult) {
       setBusy(true)
       setError('')
       try {
-        const blob = await publicationApi.download(sid, saved.exportId)
+        const blob = await publicationApi.download(sid, saved.exportId, format)
         if (!active.current) return
         const url = URL.createObjectURL(blob),
           link = window.document.createElement('a')
         link.href = url
-        link.download = result?.demo ? '시연_회사소개서.pdf' : '회사소개서.pdf'
+        link.download = `${result?.demo ? '시연_' : ''}회사소개서.${format}`
         link.click()
         window.setTimeout(() => URL.revokeObjectURL(url), 30000)
-        setNotice('PDF 다운로드를 시작했습니다.')
+        setNotice(`${formatLabel} 다운로드를 시작했습니다.`)
       } catch (cause) {
         if (active.current) {
           setError(failure(cause))

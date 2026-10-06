@@ -25,6 +25,13 @@ assert(
 )
 const live = paid || reviewReplay
 const publication = process.argv.includes('--publication')
+const docxTrial = process.argv.includes('--docx')
+assert(
+  !docxTrial || (publication && !live),
+  '--docx requires isolated mock --publication',
+)
+const outputFormat = docxTrial ? 'docx' : 'pdf'
+const outputLabel = outputFormat.toUpperCase()
 const proposalTrial = process.argv.includes('--proposal')
 const photoTrial = process.argv.includes('--photos')
 assert(
@@ -78,7 +85,10 @@ function command(method, params = {}) {
 function intercept(method, params) {
   void command(method, params).catch((cause) => {
     // Reload can cancel a request after Fetch.requestPaused was delivered.
-    if (cause?.code === -32000 && /Invalid InterceptionId/i.test(cause.message))
+    if (
+      [-32000, -32602].includes(cause?.code) &&
+      /Invalid InterceptionId/i.test(cause.message)
+    )
       return
     errors.push('CDP interception: ' + JSON.stringify(cause))
   })
@@ -204,7 +214,20 @@ from app.db import init_orm_db
 from app import create_app
 import uvicorn
 root=Path(os.environ['AI_UI_TEMP'])
-settings=Settings(private_runs_dir=root/'runs',db_path=root/'runs'/'app.sqlite3',agent_mode='llm' if live_trial else 'mock',demo_mode=True,cleanup_sweep_interval_s=0)
+settings=Settings(private_runs_dir=root/'runs',db_path=root/'runs'/'app.sqlite3',agent_mode='llm' if live_trial else 'mock',demo_mode=True,cleanup_sweep_interval_s=0,export_libreoffice_path=os.environ.get('AI_UI_LIBREOFFICE') or None)
+# Mock diagnostics identify the subprocess stage without logging document contents.
+from app.services import export_render as _render
+_original_run=_render._run
+def _diagnostic_run(cmd, timeout, what):
+ print('RENDER_STAGE='+what,flush=True)
+ try:
+  result=_original_run(cmd,timeout,what)
+  print('RENDER_FINISHED='+what+':'+str(result.returncode),flush=True)
+  return result
+ except _render.RenderError as exc:
+  print('RENDER_ERROR='+what+':'+exc.code,flush=True)
+  raise
+if not live_trial: _render._run=_diagnostic_run
 init_orm_db(settings.db_path,settings.private_runs_dir)
 app=create_app(settings)
 trial_ledger=None
@@ -292,6 +315,9 @@ finally:
         env: {
           ...process.env,
           AI_UI_TEMP: output,
+          AI_UI_LIBREOFFICE: docxTrial
+            ? 'C:/Program Files/LibreOffice/program/soffice.com'
+            : '',
           AI_UI_LLM: isolatedLlm ? '1' : '0',
           AI_UI_REVIEW_INPUT: replayInput || '',
           PYTHON_DOTENV_DISABLED: '1',
@@ -1451,7 +1477,66 @@ finally:
       await idle()
     }
     assert.equal((await documentState()).validation.status, 'passed')
-    await click('PDF 배치 검사')
+    if (photoTrial) {
+      // The earlier photo-proposal scenario leaves two tall images on the cover.
+      // Verify overflow blocks approval, then explicitly remove the old image.
+      if (docxTrial)
+        await evaluate(
+          `document.querySelector('button[aria-label="DOCX 출력 선택"]').click()`,
+        )
+      await click(`${outputLabel} 배치 검사`)
+      await idle()
+      const overflowed = (await documentState()).layout_checks[outputFormat]
+      assert.equal(overflowed.status, 'failed')
+      assert.ok(
+        overflowed.actual_pages > (await documentState()).document.pages.length,
+      )
+      assert.equal(
+        await evaluate(
+          `document.querySelector('input[aria-label="${outputLabel} 최종 승인 동의"]').disabled`,
+        ),
+        true,
+      )
+      checks.push(
+        `${outputLabel} overflow result remains readable and blocks approval`,
+      )
+      const images = (await documentState()).document.pages
+        .flatMap((p) => p.blocks)
+        .filter((b) => b.type === 'image')
+      assert.ok(images.length >= 2)
+      await editorPage(images[0].block_id)
+      await evaluate(
+        `(()=>{const b=[...document.querySelectorAll('[data-block-id="${images[0].block_id}"] button')].find(b=>b.textContent.includes('삭제'));b.click()})()`,
+      )
+      await click('문구 저장')
+      await idle()
+      await screen(3)
+      await click('내용 검증 실행')
+      await idle()
+      const review = await evaluate(
+        `fetch('/api/v1/sessions/${sessionId}/documents/${(await documentState()).document.document_id}/issues').then(r=>r.json())`,
+      )
+      for (const issue of review.issues.filter(
+        (i) => i.status === 'open' && i.severity === 'warning',
+      )) {
+        const selector = `input[aria-label="경고 확인 사유 ${issue.issue_id}"]`
+        await evaluate(
+          `(()=>{const i=document.querySelector(${JSON.stringify(selector)});Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(i,'시연 자료임을 확인했습니다.');i.dispatchEvent(new Event('input',{bubbles:true}));})()`,
+        )
+        await evaluate(
+          `document.querySelector(${JSON.stringify(selector)}).parentElement.querySelector('button').click()`,
+        )
+        await idle()
+      }
+      checks.push(
+        `explicit editor image removal preserves remaining photo for ${outputLabel}`,
+      )
+    }
+    if (docxTrial)
+      await evaluate(
+        `document.querySelector('button[aria-label="DOCX 출력 선택"]').click()`,
+      )
+    await click(`${outputLabel} 배치 검사`)
     await until(
       async () => {
         const s = await documentState()
@@ -1459,45 +1544,76 @@ finally:
           `document.querySelector('[data-testid=draft-result] [role=alert]')?.textContent`,
         )
         if (alert) throw Error(alert)
-        return !!s.layout_checks.pdf && s.layout_checks.pdf.status !== 'pending'
+        return (
+          !!s.layout_checks[outputFormat] &&
+          s.layout_checks[outputFormat].status !== 'pending'
+        )
       },
-      'actual PDF render',
+      `${outputLabel} render`,
       120000,
     )
     await idle()
     const checked = await documentState()
     assert.equal(
-      checked.layout_checks.pdf.status,
+      checked.layout_checks[outputFormat].status,
       'passed',
-      JSON.stringify(checked.layout_checks.pdf.fail_reasons),
+      JSON.stringify(checked.layout_checks[outputFormat].fail_reasons),
     )
-    assert.ok(checked.layout_checks.pdf.actual_pages > 0)
+    assert.ok(checked.layout_checks[outputFormat].actual_pages > 0)
     await evaluate(
-      `document.querySelector('input[aria-label="PDF 최종 승인 동의"]').click()`,
+      `document.querySelector('input[aria-label="${outputLabel} 최종 승인 동의"]').click()`,
     )
+    if (docxTrial) {
+      await evaluate(
+        `document.querySelector('button[aria-label="PDF 출력 선택"]').click()`,
+      )
+      assert.equal(
+        await evaluate(
+          `document.querySelector('input[aria-label="PDF 최종 승인 동의"]').checked`,
+        ),
+        false,
+      )
+      assert.equal(
+        await evaluate(
+          `document.querySelector('input[aria-label="PDF 최종 승인 동의"]').disabled`,
+        ),
+        true,
+      )
+      await evaluate(
+        `document.querySelector('button[aria-label="DOCX 출력 선택"]').click()`,
+      )
+      assert.equal(
+        await evaluate(
+          `document.querySelector('input[aria-label="DOCX 최종 승인 동의"]').checked`,
+        ),
+        false,
+      )
+      checks.push('format switch resets consent and requires matching layout')
+    }
     await reload()
     await until(
-      () => has('input[aria-label="PDF 최종 승인 동의"]:not(:disabled)'),
+      () =>
+        has(`input[aria-label="${outputLabel} 최종 승인 동의"]:not(:disabled)`),
       'restore checks',
     )
     await screen(3)
     assert.equal(
       await evaluate(
-        `document.querySelector('input[aria-label="PDF 최종 승인 동의"]').checked`,
+        `document.querySelector('input[aria-label="${outputLabel} 최종 승인 동의"]').checked`,
       ),
       false,
     )
     await evaluate(
-      `document.querySelector('input[aria-label="PDF 최종 승인 동의"]').click()`,
+      `document.querySelector('input[aria-label="${outputLabel} 최종 승인 동의"]').click()`,
     )
-    await click('현재 PDF 최종 승인')
+    await click(`현재 ${outputLabel} 최종 승인`)
     await idle()
     assert.equal((await documentState()).approval.status, 'active')
-    await click('승인된 PDF 준비')
+    await click(`승인된 ${outputLabel} 준비`)
     await until(
       () =>
         evaluate(
-          `!![...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='PDF 다운로드'&&!b.disabled)`,
+          `!![...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='${outputLabel} 다운로드'&&!b.disabled)`,
         ),
       'export ready',
     )
@@ -1505,15 +1621,20 @@ finally:
       behavior: 'allow',
       downloadPath: output,
     })
-    await click('PDF 다운로드')
+    await click(`${outputLabel} 다운로드`)
     await idle()
     await until(
-      async () => (await readdir(output)).some((f) => f.endsWith('.pdf')),
+      async () =>
+        (await readdir(output)).some((f) => f.endsWith(`.${outputFormat}`)),
       'download file',
     )
-    const file = (await readdir(output)).find((f) => f.endsWith('.pdf'))
+    const file = (await readdir(output)).find((f) =>
+      f.endsWith(`.${outputFormat}`),
+    )
     const bytes = await readFile(join(output, file))
-    assert.equal(bytes.subarray(0, 5).toString(), '%PDF-')
+    if (docxTrial) assert.equal(bytes.subarray(0, 2).toString(), 'PK')
+    else assert.equal(bytes.subarray(0, 5).toString(), '%PDF-')
+    assert.equal((await documentState()).approval.format, outputFormat)
     const exportData = await evaluate(
       `JSON.parse(sessionStorage.getItem('ddalgi.sources.v1.publication'))`,
     )
@@ -1533,6 +1654,25 @@ finally:
       ).length,
       beforeAi,
     )
+    if (docxTrial) {
+      // A PDF response must never be saved as DOCX, including a 200 response.
+      await evaluate(
+        `(()=>{window.__originalDownloadFetch=window.fetch;window.fetch=(url,options)=>String(url).endsWith('/download')?Promise.resolve(new Response('%PDF-wrong-format',{status:200,headers:{'Content-Type':'application/pdf'}})):window.__originalDownloadFetch(url,options);})()`,
+      )
+      await click('DOCX 다운로드')
+      await idle()
+      assert.ok(
+        await evaluate(
+          `document.body.innerText.includes('서버가 DOCX 파일을 반환하지 않았습니다.')`,
+        ),
+      )
+      await evaluate(
+        `window.fetch=window.__originalDownloadFetch;delete window.__originalDownloadFetch`,
+      )
+      await click('DOCX 다운로드')
+      await idle()
+      checks.push('wrong MIME rejected before saving DOCX; retry works')
+    }
     await evaluate(
       `document.getElementById('publication-panel').scrollIntoView()`,
     )
@@ -1541,7 +1681,7 @@ finally:
     await until(
       () =>
         evaluate(`!!document.querySelector('.approval-split img')?.complete`),
-      'PDF image loaded',
+      `${outputLabel} image loaded`,
     )
     await evaluate('window.scrollTo(0,0)')
     await screenshot('s03-page-preview.png')
@@ -1596,10 +1736,10 @@ finally:
       mobile: false,
     })
     checks.push(
-      'S03 PDF cards/page preview and responsive inspectors; mobile no horizontal overflow',
+      `S03 ${outputLabel} preview and responsive inspectors; mobile no horizontal overflow`,
     )
     checks.push(
-      'content validation, warning acknowledgements, actual PDF layout, consent reset, approval and byte-identical download',
+      `content validation, warning acknowledgements, actual ${outputLabel} layout, consent reset, approval and byte-identical download`,
     )
     const beforeChange = await documentState()
     const paragraph = beforeChange.document.pages
@@ -1617,16 +1757,17 @@ finally:
     assert.equal(oldDownload, 409)
     assert.ok(
       await evaluate(
-        `[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='PDF 다운로드').disabled`,
+        `[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='${outputLabel} 다운로드').disabled`,
       ),
     )
     checks.push('later edit invalidates approval and blocks old download')
     console.log(
       JSON.stringify({
         publication: 'PASS',
-        pdf: join(output, file),
+        format: outputFormat,
+        artifact: join(output, file),
         bytes: bytes.length,
-        pages: checked.layout_checks.pdf.actual_pages,
+        pages: checked.layout_checks[outputFormat].actual_pages,
       }),
     )
   }
@@ -1654,6 +1795,7 @@ finally:
         : live
           ? 'llm'
           : 'mock',
+      outputFormat,
       checks,
       preflightRequests: posts('preflights').length,
       draftRequests: posts('drafts').length,
@@ -1674,6 +1816,7 @@ finally:
     await screenshot('failure.png').catch(() => {})
   }
   console.error('Diagnostics: ' + output)
+  console.error(backendLog.slice(-4000))
   if (!origin) console.error(backendLog)
   throw error
 } finally {
