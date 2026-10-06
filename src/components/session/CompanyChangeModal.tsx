@@ -1,11 +1,13 @@
-import { Building2, Check, RefreshCw, Sparkles, X } from 'lucide-react'
+import { Building2, Check, Sparkles, X } from 'lucide-react'
 import { useState } from 'react'
 
 export interface CompanyChangeModalProps {
   isOpen: boolean
   currentCompany: string
   onClose: () => void
-  onConfirm: (newCompanyName: string, refreshPublicData: boolean) => void
+  onConfirm: (newCompanyName: string) => Promise<boolean>
+  disabled?: boolean
+  hasSession?: boolean
 }
 
 const PRESET_COMPANIES = [
@@ -22,10 +24,12 @@ export function CompanyChangeModal({
   currentCompany,
   onClose,
   onConfirm,
+  disabled = false,
+  hasSession = false,
 }: CompanyChangeModalProps) {
   const [inputName, setInputName] = useState(currentCompany)
-  const [refreshPublicData, setRefreshPublicData] = useState(true)
   const [errorMsg, setErrorMsg] = useState('')
+  const [saving, setSaving] = useState(false)
 
   if (!isOpen) return null
 
@@ -34,8 +38,9 @@ export function CompanyChangeModal({
     setErrorMsg('')
   }
 
-  const handleSubmit = (e?: React.FormEvent) => {
+  const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault()
+    if (disabled || saving) return
     const trimmed = inputName.trim()
     if (!trimmed) {
       setErrorMsg('소속 기업/기관명을 입력해 주세요.')
@@ -46,10 +51,16 @@ export function CompanyChangeModal({
       return
     }
 
-    // XSS 방어: 스크립트나 위험 특수문자 제거
-    const sanitized = trimmed.replace(/[<>'"]/g, '')
-    onConfirm(sanitized, refreshPublicData)
-    onClose()
+    setSaving(true)
+    try {
+      if (await onConfirm(trimmed)) onClose()
+      else
+        setErrorMsg(
+          '변경을 저장하지 못했습니다. 작업 상태와 오류 안내를 확인해 주세요.',
+        )
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -75,11 +86,10 @@ export function CompanyChangeModal({
                 id="modal-title"
                 className="text-base font-bold text-slate-900"
               >
-                관리자 소속(기업/기관) 변경
+                소속 기업/기관 변경
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                소속을 변경하면 DART·특허청·조달청 공공데이터가 새 기업에 맞춰
-                연동됩니다.
+                대상 회사를 저장하고 해당 회사의 자료로 점검합니다.
               </p>
             </div>
           </div>
@@ -103,6 +113,7 @@ export function CompanyChangeModal({
             <div className="relative">
               <input
                 type="text"
+                aria-label="대상 회사명"
                 value={inputName}
                 onChange={(e) => {
                   setInputName(e.target.value)
@@ -128,10 +139,13 @@ export function CompanyChangeModal({
               )}
             </div>
             {errorMsg ? (
-              <p className="mt-1 text-xs text-rose-600 font-medium">{errorMsg}</p>
+              <p className="mt-1 text-xs text-rose-600 font-medium">
+                {errorMsg}
+              </p>
             ) : (
               <p className="mt-1 text-[11px] text-slate-400">
-                현재 소속: <strong className="text-slate-600">{currentCompany}</strong>
+                현재 소속:{' '}
+                <strong className="text-slate-600">{currentCompany}</strong>
               </p>
             )}
           </div>
@@ -175,28 +189,14 @@ export function CompanyChangeModal({
             </div>
           </div>
 
-          {/* 공개 데이터 자동 갱신 체크박스 */}
-          <div className="rounded-xl border border-teal-100 bg-teal-50/40 p-3">
-            <label className="flex items-start gap-2.5 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={refreshPublicData}
-                onChange={(e) => setRefreshPublicData(e.target.checked)}
-                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#007A78] focus:ring-teal-400 cursor-pointer"
-              />
-              <div className="text-xs">
-                <span className="font-bold text-slate-800 flex items-center gap-1">
-                  <RefreshCw className="h-3 w-3 text-[#007A78]" />
-                  소속 변경 시 공개 데이터(DART·특허·조달청)도 즉시 새로고침
-                </span>
-                <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
-                  새로 지정된 소속 기업의 최신 공공데이터 4건으로 연동 자료를 자동
-                  전환합니다.
-                </p>
-              </div>
-            </label>
-          </div>
-
+          <p className="rounded-xl bg-teal-50 p-3 text-xs text-teal-900">
+            {disabled
+              ? '진행 중인 작업을 마친 뒤, 초안이 있으면 자료 변경 시작을 먼저 선택해 주세요.'
+              : hasSession
+                ? '회사 변경 시 기존 자료 선택을 해제합니다. 파일과 문서는 보존되며 새 회사 자료를 선택해 다시 점검해야 합니다.'
+                : '선택한 회사는 작업을 시작할 때 서버에 저장됩니다.'}{' '}
+            공개 자료는 회사 저장 후 공개 데이터 가져오기에서 연결합니다.
+          </p>
           {/* 하단 버튼 */}
           <div className="flex items-center justify-end gap-2.5 pt-2">
             <button
@@ -208,10 +208,17 @@ export function CompanyChangeModal({
             </button>
             <button
               type="submit"
+              disabled={disabled || saving}
               className="inline-flex items-center gap-1.5 rounded-xl bg-[#007A78] px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#006663] transition-all cursor-pointer"
             >
               <Check className="h-3.5 w-3.5" />
-              <span>소속 변경 적용</span>
+              <span>
+                {saving
+                  ? '저장 중'
+                  : hasSession
+                    ? '회사 변경 및 자료 선택 해제'
+                    : '회사 선택'}
+              </span>
             </button>
           </div>
         </form>

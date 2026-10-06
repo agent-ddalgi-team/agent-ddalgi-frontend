@@ -1,3 +1,4 @@
+import { previewStorage } from '../services/mockBackend'
 import { useEffect, useRef, useState } from 'react'
 import { sourceApi, SourceApiError } from '../api/sources'
 import type {
@@ -7,7 +8,7 @@ import type {
   WorkSource,
 } from '../api/sources'
 
-const STORAGE = 'ddalgi.sources.v1'
+const STORAGE = previewStorage
 const UPLOAD = `${STORAGE}.upload`
 const INITIAL_BRIEF: SourceBrief = {
   purpose: '신규 고객 소개 (표준 제안용)',
@@ -96,7 +97,7 @@ async function fingerprint(files: File[]) {
   ).join('')
 }
 
-export function useSources() {
+export function useSources(allowDocumentChanges = false) {
   const [session, setSession] = useState<SourceSession | null>(null)
   const [demo, setDemo] = useState(true)
   const [sources, setSources] = useState<WorkSource[]>([])
@@ -111,6 +112,7 @@ export function useSources() {
   const mounted = useRef(false)
   const createAttempt = useRef<{ body: string; key: string } | null>(null)
   const pendingFiles = useRef<File[]>([])
+  const companyAttempt = useRef<{ body: string; key: string } | null>(null)
   const attempts = useRef(0)
   const generation = useRef(0)
 
@@ -330,44 +332,62 @@ export function useSources() {
   async function upload(files: File[]) {
     if (!session || !files.length) return
     await run('파일 업로드 중', async () => {
-      // [Security Hardening] 파일 확장자, 파일 크기, 파일명 유효성 종합 검증
-      const DANGEROUS_EXT_REGEX =
-        /\.(exe|bat|cmd|sh|vbs|scr|jar|js|msi|dll|com|pif|reg|ps1)\b/i
-
+      if (session.document_summary && !allowDocumentChanges)
+        throw new Error('자료 변경 시작을 먼저 선택해 주세요.')
+      if (
+        files.some(
+          (file) => !/\.(txt|md|pdf|docx|pptx|jpe?g|png)$/i.test(file.name),
+        )
+      )
+        throw new Error(
+          'TXT, MD, PDF, DOCX, PPTX, JPG, PNG 파일을 선택해 주세요.',
+        )
+      if (files.some((file) => file.size > 10 * 1024 * 1024))
+        throw new Error('파일당 최대 10MB까지 첨부할 수 있습니다.')
       for (const file of files) {
-        // 1. 파일명 길이 검증
-        if (!file.name || file.name.length > 150) {
+        if (!file.name || file.name.length > 150)
           throw new Error('파일명은 최대 150자 이내여야 합니다.')
-        }
-
-        // 2. Path Traversal 시도 차단
-        if (file.name.includes('..') || /[/\\]/.test(file.name)) {
-          throw new Error('파일명에 유효하지 않은 디렉터리 경로 문자가 포함되어 있습니다.')
-        }
-
-        // 3. 허용된 문서/이미지 확장자 검증
-        if (!/\.(txt|md|pdf|docx|pptx|jpe?g|png)$/i.test(file.name)) {
-          throw new Error(
-            '지원되지 않는 파일 형식입니다. (TXT, MD, PDF, DOCX, PPTX, JPG, PNG 지원)',
+        if (file.name.includes('..') || /[/\\]/.test(file.name))
+          throw new Error('파일명에 디렉터리 경로 문자를 사용할 수 없습니다.')
+        if (
+          /\.(exe|bat|cmd|sh|vbs|scr|jar|js|msi|dll|com|pif|reg|ps1)\b/i.test(
+            file.name,
           )
-        }
-
-        // 4. 위험한 실행 파일 위장 및 이중 확장자 차단 (예: exploit.exe.txt)
-        if (DANGEROUS_EXT_REGEX.test(file.name)) {
+        )
           throw new Error(
-            '보안상 실행 파일 또는 스크립트 확장자가 포함된 파일은 첨부할 수 없습니다.',
+            '실행 파일 확장자가 포함된 파일은 첨부할 수 없습니다.',
           )
-        }
-
-        // 5. 빈 파일(0 Byte) 및 크기 초과(10MB) 차단
-        if (file.size <= 0) {
-          throw new Error(`빈 파일(${file.name}, 0 byte)은 업로드할 수 없습니다.`)
-        }
-        if (file.size > 10 * 1024 * 1024) {
-          throw new Error('파일당 최대 10MB까지 첨부할 수 있습니다.')
-        }
+        if (file.size <= 0) throw new Error('빈 파일은 첨부할 수 없습니다.')
       }
-
+      // 응답 유실 재전송은 개수 제한 검사보다 먼저 구분한다.
+      const signature = await fingerprint(files)
+      const previous = JSON.parse(
+        sessionStorage.getItem(UPLOAD) || 'null',
+      ) as UploadAttempt | null
+      if (
+        previous &&
+        (previous.sessionId !== session.session_id ||
+          previous.fingerprint !== signature)
+      )
+        throw new Error(
+          '이전 업로드의 결과가 아직 확인되지 않았습니다. 같은 파일을 다시 선택해 재시도하거나 작업을 종료해 주세요.',
+        )
+      if (
+        !previous &&
+        sources.filter((source) => source.scope === 'session').length +
+          files.length >
+          10
+      )
+        throw new Error('이번 작업에는 최대 10개까지 첨부할 수 있습니다.')
+      const attempt = previous || {
+        sessionId: session.session_id,
+        fingerprint: signature,
+        key: crypto.randomUUID(),
+      }
+      sessionStorage.setItem(UPLOAD, JSON.stringify(attempt))
+      pendingFiles.current = files
+      setPendingUpload(true)
+      let result
       try {
         result = await sourceApi.upload(session.session_id, files, attempt.key)
       } catch (cause) {
@@ -397,77 +417,8 @@ export function useSources() {
     })
   }
 
-  function addWebPhotos(photos: WebCollectedPhoto[]) {
-    if (!session) return
-    const newItems: WorkSource[] = photos.map((p) => ({
-      source_id: `web-${p.id}-${Date.now()}`,
-      source_version: 1,
-      name: p.name,
-      scope: 'session',
-      origin_kind: 'demo',
-      kind: 'photo',
-      role: 'evidence',
-      use_as_company_evidence: true,
-      parse_status: 'complete',
-      text_available: false,
-      image_available: true,
-      asset_ids: [`asset-web-${p.id}`],
-      warnings: [],
-      size_bytes: 1250000,
-    }))
-
-    setSources((prev) => [...prev, ...newItems])
-    setSession((prev) =>
-      prev
-        ? {
-            ...prev,
-            selected_source_ids: [
-              ...new Set([
-                ...prev.selected_source_ids,
-                ...newItems.map((n) => n.source_id),
-              ]),
-            ],
-          }
-        : prev,
-    )
-    setNotice(`✓ 웹 사이트에서 ${photos.length}건의 사진을 가져와 첨부 자료에 자동 등록했습니다.`)
-  }
-
-  function addPublicSources(customSources: WorkSource[], replace = false) {
-    if (!session || !customSources.length) return
-    setSources((prev) => {
-      const base = replace
-        ? prev.filter(
-            (s) =>
-              !s.source_id.startsWith('src-pub-') &&
-              !s.warnings?.some((w) => w.message.includes('공개 데이터')),
-          )
-        : prev
-      const existingIds = new Set(base.map((s) => s.source_id))
-      const toAdd = customSources.filter((s) => !existingIds.has(s.source_id))
-      return [...base, ...toAdd]
-    })
-    setSession((prev) => {
-      if (!prev) return prev
-      const prevIds = replace
-        ? prev.selected_source_ids.filter((id) => !id.startsWith('src-pub-'))
-        : prev.selected_source_ids
-      return {
-        ...prev,
-        selected_source_ids: [
-          ...new Set([...prevIds, ...customSources.map((n) => n.source_id)]),
-        ],
-      }
-    })
-    setNotice(
-      replace
-        ? `✓ 관리자 소속 변경에 따라 공개 데이터 ${customSources.length}건을 새로 갱신했습니다.`
-        : `✓ 관리자 소속 공개 데이터 ${customSources.length}건을 자동으로 연동했습니다.`,
-    )
-  }
-
   async function select(source: WorkSource) {
-    if (!session || session.document_summary) return
+    if (!session || (session.document_summary && !allowDocumentChanges)) return
     await run('자료 선택 저장 중', async () => {
       const selected = session.selected_source_ids.includes(source.source_id)
         ? session.selected_source_ids.filter((id) => id !== source.source_id)
@@ -483,7 +434,7 @@ export function useSources() {
   }
 
   async function saveBrief() {
-    if (!session || session.document_summary) return
+    if (!session || (session.document_summary && !allowDocumentChanges)) return
     await run('작성 조건 저장 중', async () => {
       if (!brief.purpose.trim()) throw new Error('사용 목적을 입력해 주세요.')
       const result = await sourceApi.inputs(
@@ -496,8 +447,52 @@ export function useSources() {
     })
   }
 
+  async function changeCompany(name: string) {
+    const target = name.trim()
+    if (!target || target.length > 50 || lock.current) return false
+    if (session?.document_summary && !allowDocumentChanges) return false
+    if (target === (session?.brief.target_company || brief.target_company))
+      return true
+    if (!session) {
+      setBrief({ ...brief, target_company: target })
+      return true
+    }
+    let completed = false
+    await run('회사 변경 저장 중', async () => {
+      const next = { ...session.brief, target_company: target }
+      const change = { brief: next, selected_source_ids: [] }
+      const body = JSON.stringify({
+        session: session.session_id,
+        revision: session.input_revision,
+        change,
+      })
+      if (companyAttempt.current?.body !== body)
+        companyAttempt.current = { body, key: crypto.randomUUID() }
+      const result = await sourceApi.inputs(
+        session,
+        change,
+        companyAttempt.current.key,
+      )
+      setSession({ ...session, ...result, brief: next })
+      setBrief({ ...brief, target_company: target })
+      companyAttempt.current = null
+      setNotice(
+        '회사를 저장하고 자료 선택을 해제했습니다. 해당 회사 자료를 선택해 다시 점검해 주세요. 기존 파일과 문서는 보존됩니다.',
+      )
+      completed = true
+    })
+    return completed
+  }
+
+  async function importPublic() {
+    if (!session || (session.document_summary && !allowDocumentChanges)) return
+    await run('공개 자료 연결 확인 중', async () => {
+      await sourceApi.importPublic(session)
+    })
+  }
+
   async function remove(source: WorkSource) {
-    if (!session || session.document_summary) return
+    if (!session || (session.document_summary && !allowDocumentChanges)) return
     await run('첨부 삭제 중', async () => {
       await sourceApi.remove(session, source.source_id)
       apply(await snapshot(session.session_id, readSaved()?.jobs || []))
@@ -534,10 +529,10 @@ export function useSources() {
     start,
     refresh,
     upload,
-    addWebPhotos,
-    addPublicSources,
     select,
     saveBrief,
+    changeCompany,
+    importPublic,
     remove,
     close,
     retryUpload: () => upload(pendingFiles.current),

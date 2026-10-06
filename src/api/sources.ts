@@ -4,6 +4,7 @@ import { apiClient } from './client'
 // 백엔드 contracts.md 계약 1.5 중 자료 선택 단계에서 사용하는 형식.
 export interface SourceBrief {
   purpose: string
+  target_company?: string | null
   emphasis: string[]
   direction: 'balanced' | 'quality_process' | 'customer_response'
   target_pages: 1 | 4 | 6 | 8 | 10
@@ -56,7 +57,9 @@ export class SourceApiError extends Error {
   }
 }
 
-export async function request<T>(action: () => Promise<{ data: T }>): Promise<T> {
+export async function request<T>(
+  action: () => Promise<{ data: T }>,
+): Promise<T> {
   try {
     return (await action()).data
   } catch (error) {
@@ -136,6 +139,14 @@ export const sourceApi = {
           ...options,
           params: { expected_input_revision: session.input_revision },
         },
+      ),
+    ),
+  importPublic: (session: SourceSession) =>
+    request<never>(() =>
+      apiClient.post(
+        sessionPath(session.session_id) + '/public-data/import',
+        { expected_input_revision: session.input_revision },
+        options,
       ),
     ),
   close: (id: string) =>

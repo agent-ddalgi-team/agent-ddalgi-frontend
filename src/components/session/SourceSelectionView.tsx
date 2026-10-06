@@ -1,11 +1,13 @@
+import { screenAssetUrl } from '../../services/mockBackend'
 import { useEffect, useRef, useState } from 'react'
 import {
   AlertTriangle,
   ArrowRight,
   Building2,
+  DownloadCloud,
+  Pencil,
   Check,
   CheckCircle2,
-  DownloadCloud,
   FileSpreadsheet,
   FileText,
   FolderOpen,
@@ -14,7 +16,6 @@ import {
   Info,
   Lightbulb,
   Loader2,
-  Pencil,
   Plus,
   RefreshCw,
   ShieldCheck,
@@ -30,8 +31,6 @@ import { useAiWorkflow } from '../../hooks/useAiWorkflow'
 import { AiWorkflowPanel, Block } from './AiWorkflowPanel'
 import { DocumentWorkspace } from './DocumentWorkspace'
 import type { WizardStep } from './StepIndicator'
-import { WebPhotoCollector } from './WebPhotoCollector'
-import { getFallbackDraft, getPublicOrgSources } from '../../services/mockBackend'
 import { CompanyChangeModal } from './CompanyChangeModal'
 
 const statusText = {
@@ -102,122 +101,74 @@ export function SourceSelectionView({
   step,
   onNavigate,
   onCompanyChange,
-  companyName,
+  companyModalOpen,
+  onCompanyModalOpen,
+  onCompanyModalClose,
 }: {
   onDraftAvailable?: (available: boolean) => void
   step: WizardStep
   onNavigate: (step: WizardStep) => void
   onCompanyChange: (name: string) => void
-  companyName?: string
+  companyModalOpen: boolean
+  onCompanyModalOpen: () => void
+  onCompanyModalClose: () => void
 }) {
-  const work = useSources()
+  const [sourceEditing, setSourceEditing] = useState(false)
+  const [sourceChangeBlocked, setSourceChangeBlocked] = useState(true)
+  const work = useSources(sourceEditing && !sourceChangeBlocked)
   const ai = useAiWorkflow(work.session)
   const fileInput = useRef<HTMLInputElement>(null)
-  const [tab, setTab] = useState<'registered' | 'public' | 'session'>('registered')
+  const [tab, setTab] = useState<'registered' | 'public' | 'session'>(
+    'registered',
+  )
   const [dragging, setDragging] = useState(false)
   const [tag, setTag] = useState('')
   const [tagOpen, setTagOpen] = useState(false)
   const [confirmClose, setConfirmClose] = useState(false)
   const [deleteSource, setDeleteSource] = useState<WorkSource | null>(null)
   const [inspectorOpen, setInspectorOpen] = useState(false)
-  const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false)
+  const [sourceSession, setSourceSession] = useState(work.session?.session_id)
+  if (sourceSession !== work.session?.session_id) {
+    setSourceSession(work.session?.session_id)
+    setSourceEditing(false)
+  }
   const selected = new Set(work.session?.selected_source_ids || [])
   const hasDocument = !!work.session?.document_summary || !!ai.document
+  const documentAvailable = !!ai.document
   useEffect(() => {
-    onDraftAvailable?.(!!activeDocument)
-  }, [activeDocument, onDraftAvailable])
-
-  const rawTitle = activeDocument?.document.title || '거산케미칼'
-  const defaultExtractedName =
-    rawTitle.replace(/\s*(공식\s*)?회사소개서(\s*\d{4})?.*$/, '').trim() ||
-    '거산케미칼'
-
-  const [internalCompanyName, setInternalCompanyName] = useState<string>(() => {
-    return (
-      localStorage.getItem('admin_company_name') ||
-      companyName ||
-      defaultExtractedName
+    onDraftAvailable?.(documentAvailable)
+  }, [documentAvailable, onDraftAvailable])
+  useEffect(() => {
+    const title = ai.document?.document.title
+    onCompanyChange(
+      work.brief.target_company ||
+        title?.replace(/\s*(공식\s*)?회사소개서(\s*\d{4})?.*$/, '').trim() ||
+        title ||
+        '새 회사소개서',
     )
-  })
-
-  // 외부 companyName prop이 변경될 경우 내부 상태 동기화
-  useEffect(() => {
-    if (companyName && companyName !== internalCompanyName) {
-      setInternalCompanyName(companyName)
-    }
-  }, [companyName, internalCompanyName])
-
-  const currentCompanyName = internalCompanyName
-
-  useEffect(() => {
-    onCompanyChange(currentCompanyName)
-  }, [currentCompanyName, onCompanyChange])
-
-  // 관리자 소속 공개 데이터 자동 연동 관련 상태
-  const publicOrgSources = getPublicOrgSources(currentCompanyName)
-  const connectedPublicSources = work.sources.filter(
-    (s) =>
-      s.source_id.startsWith('src-pub-') ||
-      s.warnings?.some((w) => w.message.includes('공개 데이터')),
-  )
-  const isPublicDataConnected = connectedPublicSources.length > 0
-
-  const handleImportPublicOrgData = () => {
-    work.addPublicSources(publicOrgSources)
-    setTab('registered')
+  }, [ai.document?.document.title, work.brief.target_company, onCompanyChange])
+  const locked =
+    !!work.busy ||
+    ai.locked ||
+    (hasDocument && (!sourceEditing || sourceChangeBlocked))
+  const currentCompany = work.brief.target_company || ''
+  const sufficiency =
+    !work.briefDirty &&
+    ai.preflight?.input_revision === work.session?.input_revision
+      ? ai.preflight?.sufficiency
+      : null
+  const coverageLabels = {
+    supported: '근거 있음',
+    missing: '자료 필요',
+    needs_confirmation: '확인 필요',
+    conflict: '근거 충돌',
   }
-
-  const handleConfirmCompanyChange = (
-    newCompany: string,
-    refreshPublic: boolean,
-  ) => {
-    setInternalCompanyName(newCompany)
-    localStorage.setItem('admin_company_name', newCompany)
-    onCompanyChange(newCompany)
-
-    if (refreshPublic || isPublicDataConnected) {
-      const newPublicSources = getPublicOrgSources(newCompany)
-      work.addPublicSources(newPublicSources, true)
-    }
-  }
-
-  // 선택된 자료 기반 필수 데이터 충족도(Data Sufficiency) 분석
-  const selectedSourcesList = work.sources.filter((s) => selected.has(s.source_id))
-  const hasOverview = selectedSourcesList.some((s) =>
-    /소개서|인터뷰|연혁|사업보고서/i.test(s.name),
-  )
-  const hasProcess = selectedSourcesList.some((s) =>
-    /공정|설비|스마트팩토리|촉매|특허/i.test(s.name),
-  )
-  const hasPerformance = selectedSourcesList.some((s) =>
-    /납품|실적|조달청|고객사/i.test(s.name),
-  )
-  const hasCert = selectedSourcesList.some((s) =>
-    /인증|ISO|시험|성적서/i.test(s.name),
-  )
-
-  const fulfilledCount = [hasOverview, hasProcess, hasPerformance, hasCert].filter(Boolean).length
-  const sufficiencyScore = Math.min(
-    100,
-    Math.round(
-      (fulfilledCount / 4) * 75 +
-        (selectedSourcesList.length >= 6 ? 25 : selectedSourcesList.length * 4),
-    ),
-  )
-  const isDataInsufficient = sufficiencyScore < 85
-
-  const missingCategories = [
-    !hasOverview && '기업 개요·연혁',
-    !hasProcess && '제조 공정·설비',
-    !hasPerformance && '고객사 납품 실적',
-    !hasCert && '품질·공인 인증서',
-  ].filter(Boolean) as string[]
-
-  const locked = !!work.busy
   const isDemo = work.session ? work.session.demo : work.demo
   const counts = {
     registered: work.sources.filter((s) => s.scope === 'registered').length,
-    public: connectedPublicSources.length,
+    public: work.sources.filter((s) =>
+      s.warnings?.some((w) => w.code === 'PUBLIC_OPEN_DATA'),
+    ).length,
     session: work.sources.filter((s) => s.scope === 'session').length,
   }
   const selectedSession = work.sources.filter(
@@ -236,7 +187,10 @@ export function SourceSelectionView({
     work.pendingUpload ||
     pending > 0
   const canAnalyze =
-    !aiBlocked && !ai.locked && !hasDocument && selected.size > 0
+    !aiBlocked &&
+    !ai.locked &&
+    (!hasDocument || sourceEditing) &&
+    selected.size > 0
   const openInspector = (target = 'ai-workflow') => {
     setInspectorOpen(true)
     document
@@ -269,7 +223,9 @@ export function SourceSelectionView({
   }
   const suggestedPages = ai.preflight?.recommendations.suggested_pages
   const dockLabel = hasDocument
-    ? '생성된 초안 보기'
+    ? sourceEditing && !ai.preflight
+      ? '변경 자료 AI 점검'
+      : '편집 화면으로 돌아가기'
     : ai.locked
       ? 'AI 작업 확인 중'
       : ai.preflight
@@ -278,14 +234,18 @@ export function SourceSelectionView({
           : '점검 결과 확인 · 초안 만들기'
         : 'AI 자료 점검'
   const dockAction = hasDocument
-    ? () => onNavigate(2)
+    ? sourceEditing && !ai.preflight
+      ? analyze
+      : () => onNavigate(2)
     : ai.preflight
       ? ai.confirmed && ai.canConfirm && !aiBlocked
         ? () => void ai.generate()
         : () => openInspector()
       : analyze
   const dockDisabled = hasDocument
-    ? !ai.document
+    ? sourceEditing && !ai.preflight
+      ? !canAnalyze
+      : !ai.document
     : ai.preflight
       ? aiBlocked || ai.locked
       : !canAnalyze
@@ -425,7 +385,7 @@ export function SourceSelectionView({
             </summary>
             <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4">
               {source.asset_ids.map((asset, index) => {
-                const href = `/api/v1/sessions/${encodeURIComponent(work.session!.session_id)}/assets/${encodeURIComponent(asset)}`
+                const href = screenAssetUrl(work.session!.session_id, asset)
                 return (
                   <a key={asset} href={href} target="_blank" rel="noreferrer">
                     <img
@@ -471,6 +431,47 @@ export function SourceSelectionView({
         data-screen="S01"
         className="screen-source animate-fade-in flex w-full flex-col gap-5 pb-28"
       >
+        {hasDocument && (
+          <div
+            role="status"
+            className={`${panel} text-xs text-amber-900 bg-amber-50`}
+          >
+            <p>
+              자료나 작성 조건을 바꿔도 기존 문서는 유지됩니다. 재점검 후 편집
+              화면에서 변경 영향을 확인하고 적용해 주세요.
+            </p>
+            <button
+              className={`${button} mt-3`}
+              disabled={sourceChangeBlocked || !!work.busy || ai.locked}
+              onClick={() => setSourceEditing(true)}
+            >
+              자료 변경 시작
+            </button>
+            {sourceEditing && (
+              <button
+                className={`${button} mt-3 ml-2`}
+                disabled={!canAnalyze}
+                onClick={analyze}
+              >
+                변경 자료 AI 점검
+              </button>
+            )}
+            {sourceEditing && (
+              <button
+                className={`${button} mt-3 ml-2`}
+                onClick={() => onNavigate(2)}
+              >
+                편집 화면으로 돌아가기
+              </button>
+            )}
+            {sourceChangeBlocked && (
+              <p className="mt-2">
+                작성 중인 문구를 저장하거나 진행 중인 문서 작업을 먼저 마쳐
+                주세요.
+              </p>
+            )}
+          </div>
+        )}
         {/* 화면 제목 영역 */}
         <div className="flex flex-col justify-between gap-4 pt-1 md:flex-row md:items-end">
           <div>
@@ -575,8 +576,8 @@ export function SourceSelectionView({
         </div>
         {hasDocument && (
           <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
-            이미 초안이 있는 작업입니다. 기존 편집을 보존하기 위해 자료 변경을
-            잠갔습니다. 새 자료 반영은 다음 단계에서 연결합니다.
+            기존 초안은 유지됩니다. 자료 변경 시작을 선택한 뒤 재점검과 영향
+            확인을 진행해 주세요.
           </p>
         )}
         {work.pendingUpload && (
@@ -906,129 +907,97 @@ export function SourceSelectionView({
               </div>
             </div>
 
-            {/* 1. 관리자 소속 공개 데이터 자동 연동 배너 */}
             <div className="rounded-xl border border-teal-200/90 bg-gradient-to-r from-teal-50/80 via-white to-teal-50/30 p-3 text-xs shadow-2xs">
               <div className="flex flex-wrap items-center justify-between gap-2.5">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#007A78] text-white shadow-2xs">
-                    <Building2 className="h-4.5 w-4.5" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="font-bold text-slate-900">
-                        관리자 소속 공개 데이터 자동 연동
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setIsCompanyModalOpen(true)}
-                        className="inline-flex items-center gap-1 rounded-full bg-teal-100 hover:bg-teal-200 border border-teal-300/80 px-2.5 py-0.5 text-[11px] font-bold text-teal-900 transition-colors cursor-pointer group"
-                        title="소속 기업/기관 변경하기"
-                      >
-                        <span>소속: {currentCompanyName}</span>
-                        <Pencil className="h-2.5 w-2.5 text-teal-700 group-hover:scale-110 transition-transform" />
-                      </button>
-                    </div>
-                    <p className="text-[11px] text-slate-500 mt-0.5">
-                      {isPublicDataConnected
-                        ? `금융감독원 DART 공시, 특허청 KIPRIS, 조달청 나라장터 등 공공데이터 ${counts.public}건이 자동 연동되었습니다.`
-                        : `관리자가 속한 [${currentCompanyName}]의 전자공시(DART), 특허청, 조달청 등 공개된 공공데이터 4건이 감지되었습니다.`}
+                <div className="flex items-center gap-2.5">
+                  <Building2 className="h-8 w-8 rounded-lg bg-[#007A78] p-1.5 text-white" />
+                  <div>
+                    <p className="font-bold">
+                      관리자 소속 공개 데이터 자동 연동
                     </p>
+                    <button
+                      type="button"
+                      className="mt-1 inline-flex items-center gap-1 rounded-full bg-teal-100 px-2 py-1 text-teal-900"
+                      onClick={onCompanyModalOpen}
+                    >
+                      소속: {currentCompany || '회사 선택'}{' '}
+                      <Pencil className="h-3 w-3" />
+                    </button>
                   </div>
                 </div>
                 <button
                   type="button"
-                  onClick={handleImportPublicOrgData}
-                  disabled={locked || !work.session}
-                  className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-xl bg-[#007A78] px-3.5 py-1.5 text-xs font-bold text-white shadow-xs transition-all hover:bg-[#006663] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+                  className={primary}
+                  disabled={locked || !work.session || !currentCompany}
+                  onClick={() => void work.importPublic()}
                 >
-                  {isPublicDataConnected ? (
-                    <>
-                      <CheckCircle2 className="h-3.5 w-3.5 text-teal-200" />
-                      <span>공개 데이터 연동 완료 ({counts.public}건)</span>
-                    </>
-                  ) : (
-                    <>
-                      <DownloadCloud className="h-3.5 w-3.5" />
-                      <span>공개 데이터 자동으로 가져오기 (4건)</span>
-                    </>
-                  )}
+                  <DownloadCloud className="h-4 w-4" /> 공개 데이터 자동으로
+                  가져오기
                 </button>
               </div>
+              <p className="mt-2 text-slate-600">
+                DART·특허청·나라장터 연결 준비 중 · API 키 미설정. 실제로 등록된
+                공개 자료 {counts.public}건
+              </p>
             </div>
-
-            {/* 2. 필수 데이터 충족도 진단 & 부족 시 파일 첨부 가이드 배너 */}
             <div
-              className={`rounded-xl border p-3 text-xs transition-all ${
-                isDataInsufficient
-                  ? 'border-amber-300 bg-amber-50/80 text-amber-950'
-                  : 'border-emerald-200 bg-emerald-50/70 text-emerald-950'
-              }`}
+              className="rounded-xl border border-amber-200 bg-amber-50/80 p-3 text-xs"
+              aria-label="자료 충족도"
             >
-              <div className="flex flex-col gap-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-2xs text-xs font-bold">
-                      {isDataInsufficient ? '⚠️' : '✓'}
-                    </span>
-                    <span className="font-bold text-xs">
-                      {isDataInsufficient
-                        ? `데이터 충족도 ${sufficiencyScore}% (주의: 필수 팩트 데이터 부족)`
-                        : `데이터 충족도 ${sufficiencyScore}% (우수: 핵심 팩트 충족)`}
-                    </span>
-                  </div>
-                  {isDataInsufficient ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        fileInput.current?.click()
-                        document
-                          .getElementById('file-upload-dropzone')
-                          ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                      }}
-                      className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-amber-800 px-2.5 py-1 text-[11px] font-bold text-white shadow-2xs hover:bg-amber-900 transition-colors"
-                    >
-                      <Plus className="h-3 w-3" />
-                      부족한 자료 파일 직접 첨부
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => fileInput.current?.click()}
-                      className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-emerald-800 px-2.5 py-1 text-[11px] font-bold text-white shadow-2xs hover:bg-emerald-900 transition-colors"
-                    >
-                      <Plus className="h-3 w-3" />
-                      추가 파일 첨부
-                    </button>
-                  )}
-                </div>
-
-                {/* 충족률 프로그레스 바 */}
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200/70">
-                  <div
-                    className={`h-full transition-all duration-500 ${
-                      isDataInsufficient ? 'bg-amber-500' : 'bg-[#007A78]'
-                    }`}
-                    style={{ width: `${sufficiencyScore}%` }}
-                  />
-                </div>
-
-                <p className="text-[11px] leading-relaxed">
-                  {isDataInsufficient ? (
-                    <span>
-                      현재 <strong>{missingCategories.join(', ')}</strong> 관련 팩트가
-                      부족합니다. 공개 데이터에 없는 사내 최신 카탈로그, 인터뷰
-                      녹취록, 상세 공정도 파일을 직접 첨부해 주시면 더욱 정확한
-                      회사소개서가 완성됩니다.
-                    </span>
-                  ) : (
-                    <span>
-                      기업 개요, 기술 공정, 납품 실적, 품질 인증에 필요한 핵심 팩트가
-                      충분히 반영되었습니다. 사내 대외비 추가 자료가 필요한 경우
-                      아래에서 보강할 수 있습니다.
-                    </span>
-                  )}
-                </p>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <strong>
+                  {sufficiency
+                    ? '데이터 충족도 ' + sufficiency.score + '%'
+                    : '데이터 충족도 · 점검 필요'}
+                </strong>
+                <button
+                  type="button"
+                  className={button}
+                  disabled={locked || !work.session}
+                  onClick={() => fileInput.current?.click()}
+                >
+                  <Plus className="h-3 w-3" /> 부족한 자료 파일 직접 첨부
+                </button>
               </div>
+              <div
+                className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200"
+                role="progressbar"
+                aria-label="근거 항목 충족률"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={sufficiency?.score}
+                aria-valuetext={
+                  sufficiency ? sufficiency.score + '%' : '점검 필요'
+                }
+              >
+                <div
+                  className="h-full bg-[#007A78]"
+                  style={{ width: (sufficiency?.score || 0) + '%' }}
+                />
+              </div>
+              {sufficiency ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {sufficiency.categories.map((category) => (
+                    <span
+                      key={category.key}
+                      className="rounded bg-white px-2 py-1"
+                    >
+                      {category.label}: {coverageLabels[category.status]}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-2">
+                  자료를 선택하고 AI 점검을 실행하면 근거 기준의 충족도를
+                  표시합니다. 자료·작성 조건 변경 시 다시 점검합니다.
+                </p>
+              )}
+              <p className="mt-2 text-slate-600">
+                개요·공정·실적·인증 4개 분야의 근거 포함 비율입니다. 사실의
+                진위나 최종 승인 통과율을 뜻하지 않습니다.
+                {sufficiency?.has_blockers &&
+                  ' 해결해야 할 필수 문제가 있습니다.'}
+              </p>
             </div>
 
             {!work.session ? (
@@ -1047,7 +1016,7 @@ export function SourceSelectionView({
                 {tab === 'registered'
                   ? '등록된 자료가 없습니다. 이번 작업에 파일을 첨부할 수 있습니다.'
                   : tab === 'public'
-                    ? '연동된 공개 데이터가 없습니다. 상단의 ‘공개 데이터 자동으로 가져오기’를 눌러 주세요.'
+                    ? '연동된 공개 자료가 없습니다. 회사 선택 후 공개 데이터 가져오기에서 연결 상태를 확인할 수 있습니다.'
                     : '첨부한 파일이 없습니다. 아래에서 파일을 추가해 주세요.'}
               </p>
             ) : (
@@ -1056,7 +1025,9 @@ export function SourceSelectionView({
                   ? work.sources.filter(
                       (s) =>
                         s.source_id.startsWith('src-pub-') ||
-                        s.warnings?.some((w) => w.message.includes('공개 데이터')),
+                        s.warnings?.some((w) =>
+                          w.message.includes('공개 데이터'),
+                        ),
                     )
                   : tab === 'registered'
                     ? work.sources.filter((s) => s.scope === 'registered')
@@ -1260,6 +1231,20 @@ export function SourceSelectionView({
         <DocumentWorkspace
           key={ai.document.document.document_id}
           initial={ai.document}
+          inputRevision={
+            work.session?.input_revision || ai.document.document.input_revision
+          }
+          preflight={ai.preflight}
+          inputBusy={
+            !!work.busy ||
+            ai.locked ||
+            work.briefDirty ||
+            work.pendingUpload ||
+            pending > 0
+          }
+          sources={work.sources}
+          onEditingStateChange={setSourceChangeBlocked}
+          onImpactApplied={() => setSourceEditing(false)}
           step={step}
           onNavigate={onNavigate}
           onClose={() => setConfirmClose(true)}
@@ -1317,13 +1302,14 @@ export function SourceSelectionView({
           </div>
         </div>
       )}
-
-      {/* 관리자 소속(기업/기관) 변경 모달 */}
       <CompanyChangeModal
-        isOpen={isCompanyModalOpen}
-        currentCompany={currentCompanyName}
-        onClose={() => setIsCompanyModalOpen(false)}
-        onConfirm={handleConfirmCompanyChange}
+        key={currentCompany + String(companyModalOpen)}
+        isOpen={companyModalOpen}
+        currentCompany={currentCompany}
+        onClose={onCompanyModalClose}
+        onConfirm={work.changeCompany}
+        disabled={locked}
+        hasSession={!!work.session}
       />
     </>
   )

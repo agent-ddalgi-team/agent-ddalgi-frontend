@@ -38,9 +38,7 @@ export const WebPhotoCollector: React.FC<WebPhotoCollectorProps> = ({
   onAddPhotos,
   disabled = false,
 }) => {
-  const [query, setQuery] = useState(
-    `https://www.${companyName ? 'geosan.co.kr' : 'company.com'}`,
-  )
+  const [query, setQuery] = useState(companyName)
   const [category, setCategory] = useState('all')
   const [isSearching, setIsSearching] = useState(false)
   const [photos, setPhotos] = useState<WebCollectedPhoto[]>(
@@ -49,17 +47,32 @@ export const WebPhotoCollector: React.FC<WebPhotoCollectorProps> = ({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(
     new Set(CURATED_ENTERPRISE_PHOTOS.slice(0, 4).map((p) => p.id)),
   )
-  const [lastResultMeta, setLastResultMeta] = useState<WebPhotoSearchResult | null>(null)
+  const [lastResultMeta, setLastResultMeta] =
+    useState<WebPhotoSearchResult | null>(null)
   const [feedback, setFeedback] = useState<{
     type: 'success' | 'info' | 'warning'
     text: string
   } | null>(null)
 
   // [Security Hardening] 위험 스킴(javascript:, data:, file:) 및 비정상 입력 차단
-  const validateWebQueryOrUrl = (raw: string): { valid: boolean; clean: string; error?: string } => {
-    const trimmed = raw.trim().replace(/[\x00-\x1f\x7f]/g, '').slice(0, 300)
+  const validateWebQueryOrUrl = (
+    raw: string,
+  ): { valid: boolean; clean: string; error?: string } => {
+    const trimmed = raw
+      .trim()
+      .split('')
+      .filter(
+        (character) =>
+          character.charCodeAt(0) > 31 && character.charCodeAt(0) !== 127,
+      )
+      .join('')
+      .slice(0, 300)
     if (!trimmed) {
-      return { valid: false, clean: '', error: '검색어 또는 URL을 입력해 주세요.' }
+      return {
+        valid: false,
+        clean: '',
+        error: '검색어 또는 URL을 입력해 주세요.',
+      }
     }
 
     const lower = trimmed.toLowerCase()
@@ -72,7 +85,8 @@ export const WebPhotoCollector: React.FC<WebPhotoCollectorProps> = ({
       return {
         valid: false,
         clean: '',
-        error: '보안상 허용되지 않는 위험한 프로토콜(javascript, data, file)입니다. 일반 웹 주소(http/https) 또는 기업명을 입력해 주세요.',
+        error:
+          '보안상 허용되지 않는 위험한 프로토콜(javascript, data, file)입니다. 일반 웹 주소(http/https) 또는 기업명을 입력해 주세요.',
       }
     }
 
@@ -80,7 +94,10 @@ export const WebPhotoCollector: React.FC<WebPhotoCollectorProps> = ({
   }
 
   // 웹 사진 검색 / 크롤링 실행 핸들러
-  const handleSearch = async (targetQuery = query, targetCategory = category) => {
+  const handleSearch = async (
+    targetQuery = query,
+    targetCategory = category,
+  ) => {
     const check = validateWebQueryOrUrl(targetQuery)
     if (!check.valid) {
       if (check.error) {
@@ -102,10 +119,17 @@ export const WebPhotoCollector: React.FC<WebPhotoCollectorProps> = ({
       setPhotos(res.photos)
       // 검색 결과의 상위 4개를 기본 선택
       setSelectedIds(
-        new Set(res.photos.slice(0, Math.min(4, res.photos.length)).map((p) => p.id)),
+        new Set(
+          res.photos.slice(0, Math.min(4, res.photos.length)).map((p) => p.id),
+        ),
       )
 
-      if (res.sourceKind === 'website') {
+      if (!res.photos.length) {
+        setFeedback({
+          type: 'info',
+          text: '검색된 사진이 없습니다. 원본 사진을 직접 첨부해 주세요.',
+        })
+      } else if (res.sourceKind === 'website') {
         setFeedback({
           type: 'success',
           text: `🌐 [공식 웹사이트 크롤링] ${res.domain}에서 시설·사옥·연구소 관련 실사 사진 ${res.photos.length}건을 성공적으로 수집했습니다.`,
@@ -121,10 +145,14 @@ export const WebPhotoCollector: React.FC<WebPhotoCollectorProps> = ({
           text: `🔍 [대형 플랫폼 실시간 탐색] 회사 웹사이트가 없거나 접근이 어려워 대형 플랫폼(Google·Naver·Bing)에서 "${res.companyTitle || q}" 관련 고화질 실사 사진 ${res.photos.length}건을 자동 수집했습니다.`,
         })
       }
-    } catch {
+    } catch (cause) {
+      setPhotos([])
+      setSelectedIds(new Set())
+      setLastResultMeta(null)
       setFeedback({
         type: 'warning',
-        text: '웹 사진 탐색 중 네트워크 지연이 발생했습니다. 다시 시도해 주세요.',
+        text:
+          cause instanceof Error ? cause.message : '사진 검색에 실패했습니다.',
       })
     } finally {
       setIsSearching(false)
@@ -197,7 +225,9 @@ export const WebPhotoCollector: React.FC<WebPhotoCollectorProps> = ({
               </span>
             </h3>
             <p className="text-[10px] text-slate-500">
-              회사 공식 사이트가 있는 경우 사이트 내 실제 사진을 우선 수집하고, 사이트가 없으면 구글·네이버·Bing 등 대형 플랫폼에서 관련 고화질 실사 사진을 자동 수집합니다.
+              회사 공식 사이트가 있는 경우 사이트 내 실제 사진을 우선 수집하고,
+              사이트가 없으면 구글·네이버·Bing 등 대형 플랫폼에서 관련 고화질
+              실사 사진을 자동 수집합니다.
             </p>
           </div>
         </div>
@@ -212,7 +242,9 @@ export const WebPhotoCollector: React.FC<WebPhotoCollectorProps> = ({
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && void handleSearch(query, category)}
+              onKeyDown={(e) =>
+                e.key === 'Enter' && void handleSearch(query, category)
+              }
               placeholder="회사 홈페이지 URL (예: https://www.kaeri.re.kr) 또는 기업명 입력"
               maxLength={300}
               autoComplete="off"
@@ -381,7 +413,8 @@ export const WebPhotoCollector: React.FC<WebPhotoCollectorProps> = ({
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-white/80 backdrop-blur-2xs rounded-xl">
               <Loader2 className="h-6 w-6 animate-spin text-[#007A78]" />
               <p className="text-xs font-semibold text-slate-700">
-                웹 사이트 및 대형 검색 플랫폼(Google·Naver·Bing)에서 실사 사진을 수집하는 중...
+                웹 사이트 및 대형 검색 플랫폼(Google·Naver·Bing)에서 실사 사진을
+                수집하는 중...
               </p>
             </div>
           )}
@@ -389,7 +422,9 @@ export const WebPhotoCollector: React.FC<WebPhotoCollectorProps> = ({
           {photos.length === 0 && !isSearching ? (
             <div className="flex flex-col items-center justify-center py-8 text-center text-slate-400">
               <ImageIcon className="h-8 w-8 text-slate-300 mb-1" />
-              <p className="text-xs font-medium">검색된 실사 사진이 없습니다.</p>
+              <p className="text-xs font-medium">
+                검색된 실사 사진이 없습니다.
+              </p>
               <p className="text-[10px] mt-0.5">
                 다른 홈페이지 URL 또는 회사명을 입력해 보세요.
               </p>
@@ -511,7 +546,8 @@ export const WebPhotoCollector: React.FC<WebPhotoCollectorProps> = ({
       {/* 5. 선택한 사진들을 첨부 자료로 등록하는 버튼 */}
       <div className="flex items-center justify-between border-t border-teal-100 pt-2 text-xs">
         <span className="text-[11px] text-slate-500">
-          선택한 사진은 <strong>300DPI 인쇄 표준 규격</strong>으로 첨부 및 초안에 배치됩니다.
+          선택한 사진은 <strong>300DPI 인쇄 표준 규격</strong>으로 첨부 및
+          초안에 배치됩니다.
         </span>
         <button
           type="button"
@@ -526,4 +562,3 @@ export const WebPhotoCollector: React.FC<WebPhotoCollectorProps> = ({
     </div>
   )
 }
-

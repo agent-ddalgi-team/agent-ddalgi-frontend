@@ -17,6 +17,15 @@ export interface Preflight {
   usable_source_ids: string[]
   can_generate: boolean
   confirmed_at: string | null
+  sufficiency?: {
+    score: number
+    has_blockers: boolean
+    categories: {
+      key: string
+      label: string
+      status: 'supported' | 'missing' | 'needs_confirmation' | 'conflict'
+    }[]
+  } | null
   facts: {
     fact_id: string
     field_key: string
@@ -54,6 +63,8 @@ export interface DraftBlock {
 }
 
 export interface DraftResult {
+  input_review_required?: boolean
+  latest_preflight_id?: string | null
   demo: boolean
   document: {
     document_id: string

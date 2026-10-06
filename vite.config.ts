@@ -1,5 +1,7 @@
 import http, { type IncomingMessage, type ServerResponse } from 'node:http'
 import https from 'node:https'
+import { lookup } from 'node:dns/promises'
+import { isIP } from 'node:net'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig, loadEnv, type Plugin } from 'vite'
@@ -15,237 +17,182 @@ interface CrawledPhoto {
   sourcePageUrl: string
 }
 
-const httpsAgent = new https.Agent({ rejectUnauthorized: false })
-
-/**
- * SSL 인증서 오류 및 리다이렉트를 안전하게 처리하는 견고한 HTTP/HTTPS 요청 함수
- */
-async function robustFetch(
-  targetUrl: string,
-  timeoutMs = 7000,
-): Promise<{ ok: boolean; status: number; text: () => Promise<string> }> {
-  return new Promise((resolve) => {
-    let handled = false
-    const safeResolve = (val: {
-      ok: boolean
-      status: number
-      text: () => Promise<string>
-    }) => {
-      if (!handled) {
-        handled = true
-        resolve(val)
-      }
-    }
-
-    try {
-      const isHttps = targetUrl.startsWith('https://')
-      const client = isHttps ? https : http
-      const agent = isHttps ? httpsAgent : undefined
-
-      const req = client.get(
-        targetUrl,
-        {
-          agent,
-          headers: {
-            'User-Agent':
-              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-            Accept:
-              'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-            'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
-          },
-          timeout: timeoutMs,
-        },
-        (res) => {
-          if (
-            [301, 302, 307, 308].includes(res.statusCode || 0) &&
-            res.headers.location
-          ) {
-            let redirectUrl = res.headers.location
-            if (!redirectUrl.startsWith('http')) {
-              try {
-                const origin = new URL(targetUrl).origin
-                redirectUrl = new URL(redirectUrl, origin).toString()
-              } catch {}
-            }
-            if (redirectUrl.startsWith('http')) {
-              return robustFetch(redirectUrl, timeoutMs)
-                .then(safeResolve)
-                .catch(() =>
-                  safeResolve({ ok: false, status: 500, text: async () => '' }),
-                )
-            }
-          }
-
-          let data = ''
-          res.setEncoding('utf8')
-          res.on('data', (chunk) => {
-            data += chunk
-          })
-          res.on('end', () => {
-            const status = res.statusCode || 200
-            safeResolve({
-              ok: status >= 200 && status < 400,
-              status,
-              text: async () => data,
-            })
-          })
-        },
-      )
-
-      req.on('error', () => {
-        // https 접속 실패 시 http로 자동 재시도
-        if (targetUrl.startsWith('https://')) {
-          const httpUrl = targetUrl.replace(/^https:\/\//i, 'http://')
-          robustFetch(httpUrl, timeoutMs)
-            .then(safeResolve)
-            .catch(() =>
-              safeResolve({ ok: false, status: 500, text: async () => '' }),
-            )
-        } else {
-          safeResolve({ ok: false, status: 500, text: async () => '' })
-        }
-      })
-
-      req.on('timeout', () => {
-        req.destroy()
-        safeResolve({ ok: false, status: 504, text: async () => '' })
-      })
-    } catch {
-      safeResolve({ ok: false, status: 500, text: async () => '' })
-    }
-  })
+function publicAddress(address: string): boolean {
+  const host = address.replace(/^\[|\]$/g, '').toLowerCase()
+  if (isIP(host) === 4) {
+    const [a, b] = host.split('.').map(Number)
+    return !(
+      a === 0 ||
+      a === 10 ||
+      a === 127 ||
+      a >= 224 ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && (b === 0 || b === 168)) ||
+      (a === 198 && (b === 18 || b === 19 || b === 51)) ||
+      (a === 203 && b === 0)
+    )
+  }
+  // Global unicast IPv6 only; deny mapped IPv4, local and transition ranges.
+  return (
+    isIP(host) === 6 &&
+    /^[23][0-9a-f]{3}:/.test(host) &&
+    !/^(2002:|3fff:)/.test(host) &&
+    !(
+      host.startsWith('2001:') &&
+      (parseInt(host.split(':')[1] || '0', 16) <= 0x1ff ||
+        host.split(':')[1] === 'db8')
+    )
+  )
 }
 
-/**
- * 프록시 전송용 바이너리 버퍼 수신 함수
- */
-async function robustFetchBuffer(
+async function safeFetchBuffer(
   targetUrl: string,
-  refererOrigin?: string,
-  timeoutMs = 9000,
+  timeoutMs: number,
+  maxBytes: number,
+  deadline = Date.now() + timeoutMs,
+  redirects = 0,
 ): Promise<{
   ok: boolean
   status: number
   contentType: string
   buffer: Buffer
 }> {
-  return new Promise((resolve) => {
-    let handled = false
-    const safeResolve = (val: {
-      ok: boolean
+  const failure = (status = 502) => ({
+    ok: false,
+    status,
+    contentType: '',
+    buffer: Buffer.alloc(0),
+  })
+  try {
+    const url = new URL(targetUrl)
+    if (
+      !['http:', 'https:'].includes(url.protocol) ||
+      url.username ||
+      url.password ||
+      (url.port && !['80', '443'].includes(url.port)) ||
+      redirects > 5
+    )
+      return failure(400)
+    const host = url.hostname.replace(/^\[|\]$/g, '')
+    const remaining = deadline - Date.now()
+    if (remaining <= 0) return failure(504)
+    let dnsTimer: ReturnType<typeof setTimeout> | undefined
+    const records = isIP(host)
+      ? [{ address: host, family: isIP(host) }]
+      : await Promise.race([
+          lookup(host, { all: true, verbatim: true }),
+          new Promise<never>((_, reject) => {
+            dnsTimer = setTimeout(
+              () => reject(new Error('DNS timeout')),
+              remaining,
+            )
+          }),
+        ]).finally(() => clearTimeout(dnsTimer))
+    if (!records.length || records.some((r) => !publicAddress(r.address)))
+      return failure(400)
+    if (Date.now() >= deadline) return failure(504)
+    const pinned = records[0]
+    const result = await new Promise<{
       status: number
       contentType: string
       buffer: Buffer
-    }) => {
-      if (!handled) {
-        handled = true
-        resolve(val)
-      }
-    }
-
-    try {
-      const isHttps = targetUrl.startsWith('https://')
-      const client = isHttps ? https : http
-      const agent = isHttps ? httpsAgent : undefined
-
-      const req = client.get(
-        targetUrl,
+      location?: string
+    }>((resolve, reject) => {
+      const req = (url.protocol === 'https:' ? https : http).get(
+        url,
         {
-          agent,
-          headers: {
-            'User-Agent':
-              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-            Accept:
-              'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-            Referer: refererOrigin || 'https://www.google.com/',
+          // Connect to the checked address; TLS still verifies the original hostname.
+          agent: false,
+          lookup: (_hostname, options, callback) => {
+            if (options.all)
+              callback(null, [
+                { address: pinned.address, family: pinned.family },
+              ])
+            else callback(null, pinned.address, pinned.family)
           },
-          timeout: timeoutMs,
+          headers: {
+            'User-Agent': 'CompanyIntroPhotoReview/1.0',
+            Accept: '*/*',
+          },
         },
         (res) => {
+          const status = res.statusCode || 502
           if (
-            [301, 302, 307, 308].includes(res.statusCode || 0) &&
+            [301, 302, 303, 307, 308].includes(status) &&
             res.headers.location
           ) {
-            let redirectUrl = res.headers.location
-            if (!redirectUrl.startsWith('http')) {
-              try {
-                const origin = new URL(targetUrl).origin
-                redirectUrl = new URL(redirectUrl, origin).toString()
-              } catch {}
-            }
-            if (redirectUrl.startsWith('http')) {
-              return robustFetchBuffer(redirectUrl, refererOrigin, timeoutMs)
-                .then(safeResolve)
-                .catch(() =>
-                  safeResolve({
-                    ok: false,
-                    status: 500,
-                    contentType: 'image/jpeg',
-                    buffer: Buffer.alloc(0),
-                  }),
-                )
-            }
-          }
-
-          const chunks: Buffer[] = []
-          res.on('data', (chunk) => {
-            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
-          })
-          res.on('end', () => {
-            const status = res.statusCode || 200
-            const contentType =
-              (res.headers['content-type'] as string) || 'image/jpeg'
-            safeResolve({
-              ok: status >= 200 && status < 400,
+            res.destroy()
+            resolve({
               status,
-              contentType,
-              buffer: Buffer.concat(chunks),
+              contentType: '',
+              buffer: Buffer.alloc(0),
+              location: res.headers.location,
             })
+            return
+          }
+          const chunks: Buffer[] = []
+          let size = 0
+          res.on('data', (chunk: Buffer) => {
+            size += chunk.length
+            if (size > maxBytes) req.destroy(new Error('Response too large'))
+            else chunks.push(chunk)
           })
+          res.on('error', reject)
+          res.on('aborted', () => reject(new Error('Response aborted')))
+          res.on('end', () =>
+            resolve({
+              status,
+              contentType: String(res.headers['content-type'] || ''),
+              buffer: Buffer.concat(chunks),
+            }),
+          )
         },
       )
-
-      req.on('error', () => {
-        if (targetUrl.startsWith('https://')) {
-          const httpUrl = targetUrl.replace(/^https:\/\//i, 'http://')
-          robustFetchBuffer(httpUrl, refererOrigin, timeoutMs)
-            .then(safeResolve)
-            .catch(() =>
-              safeResolve({
-                ok: false,
-                status: 500,
-                contentType: 'image/jpeg',
-                buffer: Buffer.alloc(0),
-              }),
-            )
-        } else {
-          safeResolve({
-            ok: false,
-            status: 500,
-            contentType: 'image/jpeg',
-            buffer: Buffer.alloc(0),
-          })
-        }
-      })
-
-      req.on('timeout', () => {
-        req.destroy()
-        safeResolve({
-          ok: false,
-          status: 504,
-          contentType: 'image/jpeg',
-          buffer: Buffer.alloc(0),
-        })
-      })
-    } catch {
-      safeResolve({
-        ok: false,
-        status: 500,
-        contentType: 'image/jpeg',
-        buffer: Buffer.alloc(0),
-      })
+      const timer = setTimeout(
+        () => req.destroy(new Error('Request timeout')),
+        Math.max(1, deadline - Date.now()),
+      )
+      req.on('error', reject)
+      req.on('close', () => clearTimeout(timer))
+    })
+    if (result.location) {
+      const next = new URL(result.location, url)
+      if (url.protocol === 'https:' && next.protocol !== 'https:')
+        return failure(400)
+      return safeFetchBuffer(
+        next.href,
+        timeoutMs,
+        maxBytes,
+        deadline,
+        redirects + 1,
+      )
     }
-  })
+    return { ok: result.status >= 200 && result.status < 300, ...result }
+  } catch {
+    return failure()
+  }
+}
+
+async function robustFetch(targetUrl: string, timeoutMs = 7000) {
+  const result = await safeFetchBuffer(targetUrl, timeoutMs, 5 * 1024 * 1024)
+  return {
+    ok: result.ok,
+    status: result.status,
+    text: async () => result.buffer.toString('utf8'),
+  }
+}
+
+async function robustFetchBuffer(
+  targetUrl: string,
+  _refererOrigin?: string,
+  timeoutMs = 9000,
+) {
+  const result = await safeFetchBuffer(targetUrl, timeoutMs, 10 * 1024 * 1024)
+  if (!/^image\/(jpeg|png|webp|gif|avif)(;|$)/i.test(result.contentType))
+    return { ok: false, status: 415, contentType: '', buffer: Buffer.alloc(0) }
+  return result
 }
 
 /**
@@ -286,7 +233,14 @@ async function searchDuckDuckGo(
       },
     )
     if (!imgRes.ok) return []
-    const data = (await imgRes.json()) as any
+    const data = (await imgRes.json()) as {
+      results?: {
+        title?: string
+        image?: string
+        source?: string
+        url?: string
+      }[]
+    }
     const list = data.results || []
 
     const results: CrawledPhoto[] = []
@@ -298,7 +252,8 @@ async function searchDuckDuckGo(
       if (isIrrelevantPhoto(title, imgUrl, companyName)) continue
 
       const cat = classifyCategory(title, imgUrl)
-      const cleanTitle = title.length > 55 ? title.substring(0, 55) + '...' : title
+      const cleanTitle =
+        title.length > 55 ? title.substring(0, 55) + '...' : title
       const proxyUrl = `/crawl-api/proxy-image?url=${encodeURIComponent(imgUrl)}`
 
       results.push({
@@ -350,7 +305,7 @@ async function searchNaver(
     let m: RegExpExecArray | null
     while ((m = re.exec(html)) !== null) {
       const orig = m[1].replace(/\\/g, '')
-      let title = m[3]
+      const title = m[3]
         ? m[3]
             .replace(/<[^>]+>/g, '')
             .replace(/\\u[\dA-F]{4}/gi, (match) =>
@@ -459,7 +414,11 @@ function isIrrelevantPhoto(
  */
 function classifyCategory(text: string, url: string): CrawledPhoto['category'] {
   const c = `${text} ${url}`.toLowerCase()
-  if (/연구|lab|분석|실험|원자|핵|science|rnd|r&d|개발|기술|시험|계측|화학/.test(c)) {
+  if (
+    /연구|lab|분석|실험|원자|핵|science|rnd|r&d|개발|기술|시험|계측|화학/.test(
+      c,
+    )
+  ) {
     return 'lab'
   }
   if (
@@ -476,7 +435,11 @@ function classifyCategory(text: string, url: string): CrawledPhoto['category'] {
   ) {
     return 'building'
   }
-  if (/제품|원천|성과|product|solution|business|패키징|출하|소재|부품|원료|반도체/.test(c)) {
+  if (
+    /제품|원천|성과|product|solution|business|패키징|출하|소재|부품|원료|반도체/.test(
+      c,
+    )
+  ) {
     return 'product'
   }
   if (/인증|특허|iso|cert|상장|수상|award|특례|표창|선정|규격/.test(c)) {
@@ -512,7 +475,7 @@ function resolveCompanyHint(domain: string, target: string): string {
 
 /**
  * 특정 웹 사이트 URL 또는 키워드로부터 기업 고화질 사진을 크롤링 및 수집합니다.
- * 1. 회사 공식 사이트가 있는 경우 SSL 우회 및 서브페이지 딥 크롤링을 통해 사이트 실제 사진만 100% 수집
+ * 1. 회사 공식 사이트가 있는 경우 TLS 검증을 유지하며 서브페이지의 사진 후보 수집
  * 2. 사이트 접속 실패 시에만 대형 플랫폼(Naver·Bing)에서 정밀 필터링하여 관련 실사 수집
  */
 async function crawlWebsitePhotos(
@@ -567,7 +530,7 @@ async function crawlWebsitePhotos(
   // 1. [회사 사이트가 있는 경우] 공식 홈페이지 및 주요 서브페이지 직접 크롤링
   if (isUrl && baseUrl) {
     try {
-      // robustFetch로 SSL 인증서 불일치 우회 및 실제 HTML 수신
+      // 외부 주소와 TLS 인증서를 검증한 뒤 HTML 수신
       const res = await robustFetch(targetUrl, 7000)
 
       if (res.ok) {
@@ -578,7 +541,7 @@ async function crawlWebsitePhotos(
         const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
         if (titleMatch) {
           const rawTitle = titleMatch[1]
-            .replace(/[-|_|–|•|·|\|].*$/, '')
+            .replace(/[-_–•·|].*$/, '')
             .replace(/홈페이지|공식|환영합니다|welcome/gi, '')
             .trim()
           if (rawTitle.length >= 2) companyTitle = rawTitle
@@ -593,7 +556,7 @@ async function crawlWebsitePhotos(
           const cleanSrc = rawSrc.trim().replace(/&amp;/g, '&')
           if (cleanSrc.startsWith('data:') || cleanSrc.length < 4) return
 
-          let fullUrl = ''
+          let fullUrl: string
           try {
             fullUrl = new URL(cleanSrc, baseUrl).toString()
           } catch {
@@ -631,7 +594,7 @@ async function crawlWebsitePhotos(
           }
 
           const urlFilename = fullUrl.split('/').pop()?.split('?')[0] || ''
-          let decodedFilename = ''
+          let decodedFilename: string
           try {
             decodedFilename = decodeURIComponent(urlFilename)
           } catch {
@@ -728,7 +691,9 @@ async function crawlWebsitePhotos(
               ) {
                 subLinks.push({ url: fullSub, label })
               }
-            } catch {}
+            } catch {
+              // Skip unavailable or malformed optional crawl data.
+            }
           }
           if (subLinks.length >= 3) break
         }
@@ -753,14 +718,16 @@ async function crawlWebsitePhotos(
                   if (collected.length >= 24) break
                 }
               }
-            } catch {}
+            } catch {
+              // Skip unavailable or malformed optional crawl data.
+            }
           }),
         )
       }
-    } catch (err: any) {
+    } catch (err) {
       console.warn(
         `[Crawler] Failed to directly fetch ${targetUrl}:`,
-        err.message,
+        err instanceof Error ? err.message : 'request failed',
       )
     }
   }
@@ -787,7 +754,7 @@ async function crawlWebsitePhotos(
   }
 
   // 3. [사이트가 없거나, 접속 실패 시] 대형 검색 플랫폼에서 해당 기업 정밀 실사 수집
-  let sourceKind: 'website' | 'platform' | 'hybrid' = siteFetchSuccess
+  const sourceKind: 'website' | 'platform' | 'hybrid' = siteFetchSuccess
     ? 'hybrid'
     : 'platform'
 
@@ -839,41 +806,24 @@ function webPhotoCrawlerPlugin(): Plugin {
     name: 'web-photo-crawler-plugin',
     configureServer(server) {
       // [Security Hardening] 개발 서버 크롤러 SSRF 방어 가드
-      const isSafeTargetUrl = (urlStr: string): boolean => {
-        if (!urlStr || typeof urlStr !== 'string') return false
-        const lower = urlStr.trim().toLowerCase()
-        if (
-          lower.startsWith('javascript:') ||
-          lower.startsWith('data:') ||
-          lower.startsWith('file:') ||
-          lower.startsWith('gopher:') ||
-          lower.startsWith('ftp:')
-        ) {
-          return false
-        }
+      const isSafeTargetUrl = (value: string): boolean => {
         try {
-          const parsed = new URL(
-            urlStr.startsWith('http://') || urlStr.startsWith('https://')
-              ? urlStr
-              : `https://${urlStr}`,
+          const url = new URL(
+            /^https?:\/\//i.test(value) ? value : 'https://' + value,
           )
-          const host = parsed.hostname.toLowerCase()
-          if (
-            host === 'localhost' ||
-            host === '127.0.0.1' ||
-            host === '0.0.0.0' ||
-            host === '::1' ||
-            host === '169.254.169.254' ||
-            host.startsWith('10.') ||
-            host.startsWith('192.168.') ||
-            host.startsWith('127.')
-          ) {
-            return false
-          }
+          const host = url.hostname.replace(/^\[|\]$/g, '').toLowerCase()
+          return (
+            ['http:', 'https:'].includes(url.protocol) &&
+            !url.username &&
+            !url.password &&
+            host !== 'localhost' &&
+            !host.endsWith('.localhost') &&
+            !host.endsWith('.local') &&
+            (!isIP(host) || publicAddress(host))
+          )
         } catch {
           return false
         }
-        return true
       }
 
       const handleCrawl = async (req: IncomingMessage, res: ServerResponse) => {
@@ -888,7 +838,8 @@ function webPhotoCrawlerPlugin(): Plugin {
             })
             res.end(
               JSON.stringify({
-                error: '유효하지 않거나 안전하지 않은 URL입니다. (외부 도메인만 허용)',
+                error:
+                  '유효하지 않거나 안전하지 않은 URL입니다. (외부 도메인만 허용)',
               }),
             )
             return
@@ -900,14 +851,14 @@ function webPhotoCrawlerPlugin(): Plugin {
             'Access-Control-Allow-Origin': '*',
           })
           res.end(JSON.stringify(result))
-        } catch (err: any) {
+        } catch {
           res.writeHead(500, {
             'Content-Type': 'application/json; charset=utf-8',
             'Access-Control-Allow-Origin': '*',
           })
           res.end(
             JSON.stringify({
-              error: err?.message || '크롤링 중 오류가 발생했습니다.',
+              error: '크롤링 중 오류가 발생했습니다.',
             }),
           )
         }
@@ -931,10 +882,16 @@ function webPhotoCrawlerPlugin(): Plugin {
           try {
             const parsed = new URL(imageUrl)
             refererOrigin = parsed.origin + '/'
-          } catch {}
+          } catch {
+            // Skip unavailable or malformed optional crawl data.
+          }
 
-          // robustFetchBuffer로 SSL 오류 없이 안전하게 이미지 버퍼 취득
-          const imgResult = await robustFetchBuffer(imageUrl, refererOrigin, 9000)
+          // 외부 주소와 TLS 인증서를 검증한 뒤 이미지 버퍼 취득
+          const imgResult = await robustFetchBuffer(
+            imageUrl,
+            refererOrigin,
+            9000,
+          )
 
           if (!imgResult.ok || imgResult.buffer.length === 0) {
             res.writeHead(imgResult.status || 502, {
@@ -948,7 +905,8 @@ function webPhotoCrawlerPlugin(): Plugin {
             'Content-Type': imgResult.contentType,
             'Content-Length': imgResult.buffer.length,
             'Access-Control-Allow-Origin': '*',
-            'Cache-Control': 'public, max-age=86400',
+            'Cache-Control': 'private, max-age=3600',
+            'X-Content-Type-Options': 'nosniff',
           })
           res.end(imgResult.buffer)
         } catch {
@@ -970,8 +928,6 @@ function webPhotoCrawlerPlugin(): Plugin {
     },
   }
 }
-
-
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {

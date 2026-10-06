@@ -9,6 +9,192 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { createServer } from 'vite'
 
+// Read production helpers into an isolated VM: no network or real session data.
+async function reviewRegressions() {
+  const ts = await import('typescript')
+  const { runInNewContext } = await import('node:vm')
+  const { EventEmitter } = await import('node:events')
+  const { isIP } = await import('node:net')
+  const transpile = (text) =>
+    ts.transpileModule(text, {
+      compilerOptions: {
+        target: ts.ScriptTarget.ES2022,
+        module: ts.ModuleKind.CommonJS,
+      },
+    }).outputText
+  const config = await readFile(
+    new URL('../vite.config.ts', import.meta.url),
+    'utf8',
+  )
+  const ast = ts.createSourceFile(
+    'vite.config.ts',
+    config,
+    ts.ScriptTarget.Latest,
+    true,
+  )
+  const names = ['publicAddress', 'safeFetchBuffer', 'robustFetchBuffer']
+  const helpers = ast.statements
+    .filter((n) => ts.isFunctionDeclaration(n) && names.includes(n.name?.text))
+    .map((n) => n.getText(ast))
+    .join('\n')
+  let requests = [],
+    dnsMode = 'public',
+    responseMode = 'image'
+  const transport = {
+    get(url, options, receive) {
+      requests.push({ url: url.href, options })
+      const req = new EventEmitter()
+      req.destroy = (error) => {
+        if (error) req.emit('error', error)
+        req.emit('close')
+      }
+      queueMicrotask(() => {
+        if (responseMode === 'tls-error') {
+          req.destroy(new Error('certificate failure'))
+          return
+        }
+        const res = new EventEmitter()
+        res.destroy = () => req.emit('close')
+        res.resume = () => {}
+        res.headers = {
+          'content-type': responseMode === 'html' ? 'text/html' : 'image/png',
+        }
+        res.statusCode = 200
+        if (responseMode === 'private-redirect' || responseMode === 'loop') {
+          res.statusCode = 302
+          res.headers.location =
+            responseMode === 'loop' ? '/again' : 'https://127.0.0.1/'
+        }
+        receive(res)
+        res.emit('data', Buffer.from('test-image'))
+        res.emit('end')
+        req.emit('close')
+      })
+      return req
+    },
+  }
+  const context = {
+    URL,
+    Buffer,
+    Date,
+    setTimeout,
+    clearTimeout,
+    isIP,
+    http: transport,
+    https: transport,
+    lookup: async () =>
+      dnsMode === 'private'
+        ? [{ address: '10.1.2.3', family: 4 }]
+        : [{ address: '8.8.8.8', family: 4 }],
+  }
+  runInNewContext(transpile(helpers), context)
+  for (const host of [
+    '127.0.0.1',
+    '172.16.0.1',
+    '169.254.20.1',
+    '::1',
+    '::ffff:127.0.0.1',
+    'fc00::1',
+    'fe80::1',
+    '100.64.0.1',
+  ])
+    assert.equal(context.publicAddress(host), false, host)
+  assert.equal(context.publicAddress('8.8.8.8'), true)
+  assert.equal(context.publicAddress('2001:4860:4860::8888'), true)
+  dnsMode = 'private'
+  assert.equal(
+    (await context.safeFetchBuffer('https://example.org', 1000, 100)).ok,
+    false,
+  )
+  assert.equal(requests.length, 0)
+  dnsMode = 'public'
+  assert.equal(
+    (await context.robustFetchBuffer('https://example.org')).ok,
+    true,
+  )
+  const options = requests[0].options
+  options.lookup('example.org', { all: true }, (error, addresses) => {
+    assert.equal(error, null)
+    assert.equal(addresses[0].address, '8.8.8.8')
+  })
+  assert.notEqual(options.rejectUnauthorized, false)
+  requests = []
+  responseMode = 'private-redirect'
+  assert.equal(
+    (await context.safeFetchBuffer('https://example.org', 1000, 100)).ok,
+    false,
+  )
+  assert.equal(requests.length, 1)
+  requests = []
+  responseMode = 'loop'
+  assert.equal(
+    (await context.safeFetchBuffer('https://example.org', 1000, 100)).ok,
+    false,
+  )
+  assert.equal(requests.length, 6)
+  requests = []
+  responseMode = 'tls-error'
+  assert.equal(
+    (await context.safeFetchBuffer('https://example.org', 1000, 100)).ok,
+    false,
+  )
+  assert.equal(requests.length, 1, 'No HTTP downgrade after TLS failure')
+  responseMode = 'html'
+  assert.equal(
+    (await context.robustFetchBuffer('https://example.org')).status,
+    415,
+  )
+  responseMode = 'image'
+  assert.equal(
+    (await context.safeFetchBuffer('https://example.org', 1000, 2)).ok,
+    false,
+  )
+  const crawler = {
+    exports: {},
+    AbortSignal,
+    fetch: async () => {
+      throw new Error('offline')
+    },
+  }
+  runInNewContext(
+    transpile(
+      await readFile(
+        new URL('../src/services/webPhotoCrawler.ts', import.meta.url),
+        'utf8',
+      ),
+    ),
+    crawler,
+  )
+  await assert.rejects(
+    () => crawler.exports.searchWebPhotosDetailed('https://example.org'),
+    /offline/,
+  )
+  crawler.fetch = async () => ({
+    ok: true,
+    headers: { get: () => 'text/html' },
+  })
+  await assert.rejects(
+    () => crawler.exports.searchWebPhotosDetailed('https://example.org'),
+    /수집 서버/,
+  )
+  crawler.fetch = async () => ({
+    ok: true,
+    headers: { get: () => 'application/json' },
+    json: async () => ({ sourceKind: 'platform', photos: [] }),
+  })
+  assert.equal(
+    (await crawler.exports.searchWebPhotosDetailed('https://example.org'))
+      .photos.length,
+    0,
+  )
+  console.log(
+    'Review regressions PASS: private IP/DNS/redirect, DNS pinning, redirect limit, TLS failure, MIME/size bounds, no fabricated fallback.',
+  )
+}
+await reviewRegressions()
+if (process.argv.includes('--review-regressions-only')) process.exit(0)
+
+const screenPreview = process.argv.includes('--screen-preview')
 const paid = process.env.AI_CHECK_LIVE === '1'
 const reviewReplay = process.argv.includes('--review-replay')
 const replayInput = reviewReplay ? process.env.AI_CHECK_REVIEW_INPUT : null
@@ -25,6 +211,18 @@ assert(
 )
 const live = paid || reviewReplay
 const publication = process.argv.includes('--publication')
+const docxTrial = process.argv.includes('--docx')
+assert(
+  !docxTrial || (publication && !live),
+  '--docx requires isolated mock --publication',
+)
+const impactTrial = process.argv.includes('--impact')
+assert(
+  !impactTrial || (publication && !live),
+  '--impact requires isolated mock --publication',
+)
+const outputFormat = docxTrial ? 'docx' : 'pdf'
+const outputLabel = outputFormat.toUpperCase()
 const proposalTrial = process.argv.includes('--proposal')
 const photoTrial = process.argv.includes('--photos')
 assert(
@@ -50,7 +248,9 @@ let sequence = 0,
   failPoll = false,
   failedPoll = false
 let dropSave = false,
-  dropApply = false
+  dropApply = false,
+  dropImpactCreate = false,
+  dropImpactApply = false
 const pending = new Map(),
   errors = [],
   calls = [],
@@ -78,7 +278,10 @@ function command(method, params = {}) {
 function intercept(method, params) {
   void command(method, params).catch((cause) => {
     // Reload can cancel a request after Fetch.requestPaused was delivered.
-    if (cause?.code === -32000 && /Invalid InterceptionId/i.test(cause.message))
+    if (
+      [-32000, -32602].includes(cause?.code) &&
+      /Invalid InterceptionId/i.test(cause.message)
+    )
       return
     errors.push('CDP interception: ' + JSON.stringify(cause))
   })
@@ -175,7 +378,8 @@ async function screenshot(name) {
   await writeFile(join(output, name), Buffer.from(shot.data, 'base64'))
 }
 try {
-  if (live && !isolatedLlm && !reviewReplay) origin = originLive
+  if (screenPreview) origin = 'http://localhost:5173/?preview=1'
+  else if (live && !isolatedLlm && !reviewReplay) origin = originLive
   else {
     backend = spawn(
       join(backendRoot, '.venv/Scripts/python.exe'),
@@ -204,7 +408,20 @@ from app.db import init_orm_db
 from app import create_app
 import uvicorn
 root=Path(os.environ['AI_UI_TEMP'])
-settings=Settings(private_runs_dir=root/'runs',db_path=root/'runs'/'app.sqlite3',agent_mode='llm' if live_trial else 'mock',demo_mode=True,cleanup_sweep_interval_s=0)
+settings=Settings(private_runs_dir=root/'runs',db_path=root/'runs'/'app.sqlite3',agent_mode='llm' if live_trial else 'mock',demo_mode=True,cleanup_sweep_interval_s=0,export_libreoffice_path=os.environ.get('AI_UI_LIBREOFFICE') or None)
+# Mock diagnostics identify the subprocess stage without logging document contents.
+from app.services import export_render as _render
+_original_run=_render._run
+def _diagnostic_run(cmd, timeout, what):
+ print('RENDER_STAGE='+what,flush=True)
+ try:
+  result=_original_run(cmd,timeout,what)
+  print('RENDER_FINISHED='+what+':'+str(result.returncode),flush=True)
+  return result
+ except _render.RenderError as exc:
+  print('RENDER_ERROR='+what+':'+exc.code,flush=True)
+  raise
+if not live_trial: _render._run=_diagnostic_run
 init_orm_db(settings.db_path,settings.private_runs_dir)
 app=create_app(settings)
 trial_ledger=None
@@ -292,6 +509,9 @@ finally:
         env: {
           ...process.env,
           AI_UI_TEMP: output,
+          AI_UI_LIBREOFFICE: docxTrial
+            ? 'C:/Program Files/LibreOffice/program/soffice.com'
+            : '',
           AI_UI_LLM: isolatedLlm ? '1' : '0',
           AI_UI_REVIEW_INPUT: replayInput || '',
           PYTHON_DOTENV_DISABLED: '1',
@@ -375,7 +595,7 @@ finally:
       )
     else if (
       data.method === 'Network.requestWillBeSent' &&
-      data.params.request.url.includes('/api/')
+      new URL(data.params.request.url).pathname.startsWith('/api/v1/')
     ) {
       const r = data.params.request
       calls.push({
@@ -392,6 +612,25 @@ finally:
         p.responseStatusCode === 200
       ) {
         dropApply = false
+        dropped = true
+        intercept('Fetch.failRequest', {
+          requestId: p.requestId,
+          errorReason: 'ConnectionReset',
+        })
+        return
+      }
+      if (
+        (dropImpactCreate &&
+          p.request.method === 'POST' &&
+          p.request.url.endsWith('/impact-reviews') &&
+          p.responseStatusCode === 201) ||
+        (dropImpactApply &&
+          p.request.method === 'POST' &&
+          /impact-reviews\/[^/]+\/apply$/.test(p.request.url) &&
+          p.responseStatusCode === 200)
+      ) {
+        dropImpactCreate = false
+        dropImpactApply = false
         dropped = true
         intercept('Fetch.failRequest', {
           requestId: p.requestId,
@@ -448,7 +687,134 @@ finally:
     deviceScaleFactor: 1,
     mobile: false,
   })
+  const normalStorage = Object.fromEntries(
+    ['ddalgi.sources.v1', 'ddalgi.sources.v1.ai', 'ddalgi.sources.v1.publication', 'ddalgi.sources.v1.upload'].map(
+      (key) => [key, JSON.stringify({ sentinel: 'normal-storage-preserved', key })],
+    ),
+  )
+  if (screenPreview)
+    await command('Page.addScriptToEvaluateOnNewDocument', {
+      source: `if (!sessionStorage.getItem('screen-check-normal-seeded')) {
+        sessionStorage.setItem('screen-check-normal-seeded', '1');
+        for (const [key, value] of Object.entries(${JSON.stringify(normalStorage)}))
+          sessionStorage.setItem(key, value);
+      }`,
+    })
   await command('Page.navigate', { url: origin })
+  if (screenPreview) {
+    await until(
+      () => has('button[aria-label^="3단계"]:not(:disabled)'),
+      'offline steps ready',
+    )
+    assert.ok(
+      await evaluate(
+        "document.body.innerText.includes('가상 데이터 화면 시연')",
+      ),
+    )
+    await screen(1)
+    await screenshot('screen-preview-1.png')
+    await screen(2)
+    await until(
+      () => has('textarea[data-edit-block="screen-text-0"]'),
+      'offline editor',
+    )
+    await evaluate(
+      `(()=>{const t=document.querySelector('textarea[data-edit-block="screen-text-0"]');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(t,'가상 데이터 편집 저장 확인');t.dispatchEvent(new Event('input',{bubbles:true}));})()`,
+    )
+    await click('문구 저장')
+    await until(
+      () =>
+        evaluate(
+          `JSON.parse(sessionStorage.getItem('ddalgi.screen-preview.state.v1')).document.document.document_revision === 2`,
+        ),
+      'offline saved',
+    )
+    await reload()
+    await screen(2)
+    assert.equal(
+      await evaluate(
+        `document.querySelector('textarea[data-edit-block="screen-text-0"]').value`,
+      ),
+      '가상 데이터 편집 저장 확인',
+    )
+    await screenshot('screen-preview-2.png')
+    await screen(3)
+    await click('내용 검증 실행')
+    await until(
+      () =>
+        evaluate(
+          `JSON.parse(sessionStorage.getItem('ddalgi.screen-preview.state.v1')).document.validation?.status === 'passed'`,
+        ),
+      'offline content check',
+    )
+    await idle()
+    await click('PDF 배치 검사')
+    await until(
+      () =>
+        evaluate(
+          `JSON.parse(sessionStorage.getItem('ddalgi.screen-preview.state.v1')).document.layout_checks.pdf?.status === 'passed'`,
+        ),
+      'offline layout check',
+    )
+    await until(
+      () => has('input[aria-label="PDF 최종 승인 동의"]:not(:disabled)'),
+      'offline approval ready',
+    )
+    await evaluate(
+      `document.querySelector('input[aria-label="PDF 최종 승인 동의"]').click()`,
+    )
+    await click('현재 PDF 최종 승인')
+    await until(
+      () =>
+        evaluate(
+          `JSON.parse(sessionStorage.getItem('ddalgi.screen-preview.state.v1')).document.approval?.format === 'pdf'`,
+        ),
+      'offline approved',
+    )
+    await screenshot('screen-preview-3.png')
+    await until(
+      () =>
+        evaluate(
+          `[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='승인된 PDF 준비'&&!b.disabled)`,
+        ),
+      'offline export button',
+    )
+    await click('승인된 PDF 준비')
+    await until(
+      () =>
+        evaluate(
+          `document.body.innerText.includes('실제 파일을 만들거나 내려받지 않습니다.')`,
+        ),
+      'offline export guard',
+    )
+    assert.equal(
+      calls.length,
+      0,
+      'No API or image requests may reach the backend',
+    )
+    assert.deepEqual(errors, [])
+    for (const [key, value] of Object.entries(normalStorage))
+      assert.equal(
+        await evaluate(`sessionStorage.getItem(${JSON.stringify(key)})`),
+        value,
+        `Preview must preserve existing normal storage: ${key}`,
+      )
+    console.log(
+      JSON.stringify({
+        result: 'PASS',
+        checks: [
+          'three screens',
+          'edit/save',
+          'reload persistence',
+          'simulated content/layout/approval',
+          'export guard',
+          'no backend API calls',
+          'normal storage untouched',
+        ],
+        diagnostics: output,
+      }),
+    )
+  } else {
   await until(
     () =>
       evaluate(
@@ -456,6 +822,12 @@ finally:
       ),
     'start screen',
   )
+  if (!live) {
+    await evaluate("document.querySelector('button[title=\"소속 기업/기관 변경\"]').click()")
+    await until(() => has('input[aria-label="대상 회사명"]'), 'company dialog before session')
+    await evaluate("(()=>{const e=document.querySelector('input[aria-label=\"대상 회사명\"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,\"value\").set.call(e,\"이전 시연 회사\");e.dispatchEvent(new Event(\"input\",{bubbles:true}))})()")
+    await click('회사 선택')
+  }
   await click('작업 시작 / 이어하기')
   await idle()
   sessionId = await evaluate(
@@ -485,10 +857,39 @@ finally:
     `document.querySelector('input[aria-label="ai-connection-demo.txt 선택"]').click()`,
   )
   await idle()
+  if (!live) {
+    const sessionState = () => evaluate('fetch("/api/v1/sessions/"+JSON.parse(sessionStorage.getItem("ddalgi.sources.v1")).sessionId).then(r=>r.json())')
+    assert.equal((await sessionState()).brief.target_company, '이전 시연 회사')
+    await evaluate("document.querySelector('button[title=\"소속 기업/기관 변경\"]').click()")
+    await until(() => has('input[aria-label="대상 회사명"]'), 'company dialog')
+    await evaluate("(()=>{const e=document.querySelector('input[aria-label=\"대상 회사명\"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,\"value\").set.call(e,\"테스트나무\");e.dispatchEvent(new Event(\"input\",{bubbles:true}))})()")
+    await click('회사 변경 및 자료 선택 해제')
+    await idle()
+    await until(async () => !(await has('[role="dialog"]')), 'company saved')
+    assert.equal((await sessionState()).brief.target_company, '테스트나무')
+    assert.deepEqual((await sessionState()).selected_source_ids, [])
+    await reload()
+    await evaluate("[...document.querySelectorAll('[role=\"tab\"]')].find(t=>t.textContent.includes(\"이번 작업 첨부\")).click()")
+    await until(() => has('input[aria-label="ai-connection-demo.txt 선택"]:not(:disabled)'), 'company reload')
+    assert.equal((await sessionState()).brief.target_company, '테스트나무')
+    assert.equal(await evaluate('document.querySelector(\'input[aria-label="ai-connection-demo.txt 선택"]\').checked'), false)
+    const beforePublic = await sessionState()
+    await click('공개 데이터 자동으로 가져오기')
+    await idle()
+    assert.ok(await evaluate('document.body.innerText.includes("외부 API 키와 수집 연결을 아직 설정하지 않았습니다.")'))
+    assert.deepEqual(await sessionState(), beforePublic)
+    await evaluate("document.querySelector('input[aria-label=\"ai-connection-demo.txt 선택\"]').click()")
+    await idle()
+    checks.push('company saved/reloaded; changed company clears selection and retains uploads; public import without keys reports error without mutation')
+  }
   if (photoTrial) {
+    // DOCX limits enlargement to native pixels / 150ppi. Use enough pixels
+    // for two images to overflow; a small native image must remain small.
+    const photoWidth = docxTrial ? 1600 : 160
+    const photoHeight = docxTrial ? 1000 : 100
     await evaluate(`(async()=>{const input=document.querySelector('input[type=file]');const files=new DataTransfer();
       for(const [name,color] of [['red.png','red'],['blue.png','blue'],['unselected.png','green']]){
-        const c=document.createElement('canvas');c.width=160;c.height=100;const x=c.getContext('2d');x.fillStyle=color;x.fillRect(0,0,160,100);
+        const c=document.createElement('canvas');c.width=${photoWidth};c.height=${photoHeight};const x=c.getContext('2d');x.fillStyle=color;x.fillRect(0,0,${photoWidth},${photoHeight});
         const blob=await new Promise(r=>c.toBlob(r,'image/png'));files.items.add(new File([blob],name,{type:'image/png'}));
       } input.files=files.files;input.dispatchEvent(new Event('change',{bubbles:true}));})()`)
     for (const name of ['red.png', 'blue.png', 'unselected.png']) {
@@ -566,8 +967,13 @@ finally:
   assert.equal(await draftDisabled(), true)
   checks.push('facts and evidence; explicit confirmation resets on reload')
   if (!live) {
+    assert.ok(await evaluate('document.querySelector(\'[aria-label="자료 충족도"]\').textContent.includes("%")'))
+    checks.push('server evidence coverage displayed after preflight')
+  }
+  if (!live) {
     await changePurpose('수정된 소개 목적')
     await idle()
+    assert.ok(await evaluate("document.querySelector('[aria-label=\"자료 충족도\"]').textContent.includes(\"점검 필요\")"))
     assert.equal(await draftDisabled(), true)
     await click('작성 조건 저장')
     await idle()
@@ -655,6 +1061,431 @@ finally:
       )
     }
     let prepared = await documentState()
+    if (impactTrial) {
+      const oldPf = await evaluate(
+        `fetch('/api/v1/sessions/${sessionId}/preflights/'+JSON.parse(sessionStorage.getItem('ddalgi.sources.v1.ai')).preflightId).then(r=>r.json())`,
+      )
+      const paragraph = prepared.document.pages
+        .flatMap((p) => p.blocks)
+        .find((b) => b.type === 'paragraph' && b.fact_ids.length)
+      const preservedText =
+        paragraph.content.text + ' 사용자가 직접 편집한 내용입니다.'
+      await setText(paragraph.block_id, preservedText)
+      await screen(1)
+      assert.equal(
+        await evaluate(
+          `[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='자료 변경 시작').disabled`,
+        ),
+        true,
+      )
+      await screen(2)
+      await click('문구 저장')
+      await until(
+        async () =>
+          (await documentState()).document.pages
+            .flatMap((p) => p.blocks)
+            .find((b) => b.block_id === paragraph.block_id).content.text ===
+          preservedText,
+        'edit saved before impact',
+      )
+      const beforeImpact = await documentState()
+      await screen(1)
+      await until(
+        () =>
+          evaluate(
+            `[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='자료 변경 시작' && !b.disabled)`,
+          ),
+        'source changes enabled after saved edits',
+      )
+      await click('자료 변경 시작')
+      await upload('impact-replacement.txt', fixture)
+      await until(
+        () =>
+          has('input[aria-label="impact-replacement.txt 선택"]:not(:disabled)'),
+        'replacement source read',
+      )
+      for (const name of ['ai-connection-demo.txt', 'impact-replacement.txt']) {
+        await until(
+          () => has(`input[aria-label="${name} 선택"]:not(:disabled)`),
+          'source selection ready ' + name,
+        )
+        await evaluate(
+          `document.querySelector('input[aria-label="${name} 선택"]').click()`,
+        )
+        await until(
+          () =>
+            evaluate(
+              `document.querySelector('input[aria-label="${name} 선택"]').checked === ${name === 'impact-replacement.txt'}`,
+            ),
+          'source selection saved ' + name,
+        )
+        await until(
+          () => has(`input[aria-label="${name} 선택"]:not(:disabled)`),
+          'source mutation settled ' + name,
+        )
+        await idle()
+      }
+      await until(
+        async () => !(await has('[data-testid=preflight-result]')),
+        'previous preflight invalidated',
+      )
+      assert.equal(
+        await evaluate(
+          `document.querySelector('textarea[data-edit-block="${paragraph.block_id}"]').value`,
+        ),
+        preservedText,
+      )
+      assert.deepEqual(
+        (await documentState()).document.pages,
+        beforeImpact.document.pages,
+      )
+      await click('변경 자료 AI 점검')
+      await until(
+        () => has('[data-testid=preflight-result]'),
+        'new source preflight',
+      )
+      await screen(2)
+      await until(
+        () => has('input[aria-label="최신 점검 확인"]'),
+        'impact panel',
+      )
+      assert.equal(
+        await evaluate(
+          `[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='변경 영향 불러오기').disabled`,
+        ),
+        true,
+      )
+      await until(
+        () => has('input[aria-label="최신 점검 확인"]:not(:disabled)'),
+        'latest confirmation ready',
+      )
+      await evaluate(
+        `document.querySelector('input[aria-label="최신 점검 확인"]').click()`,
+      )
+      await until(
+        () =>
+          evaluate(
+            `[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='변경 영향 불러오기' && !b.disabled)`,
+          ),
+        'review creation ready',
+      )
+      dropImpactCreate = true
+      dropped = false
+      await click('변경 영향 불러오기')
+      await until(() => dropped, 'impact creation response lost')
+      await reload()
+      await screen(2)
+      await until(
+        () => has('input[aria-label="최신 점검 확인"]'),
+        'confirmation restored',
+      )
+      assert.equal(
+        await evaluate(
+          `document.querySelector('input[aria-label="최신 점검 확인"]').checked`,
+        ),
+        false,
+      )
+      await until(
+        () => has('input[aria-label="최신 점검 확인"]:not(:disabled)'),
+        'latest confirmation ready',
+      )
+      await evaluate(
+        `document.querySelector('input[aria-label="최신 점검 확인"]').click()`,
+      )
+      await until(
+        () =>
+          evaluate(
+            `[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='변경 영향 불러오기' && !b.disabled)`,
+          ),
+        'review creation ready',
+      )
+      await click('변경 영향 불러오기')
+      await until(() => has('[data-impact-block]'), 'impact list recovered')
+      const creationCalls = calls.filter(
+        (c) => c.method === 'POST' && /impact-reviews$/.test(c.path),
+      )
+      assert.equal(creationCalls.at(-1).key, creationCalls.at(-2).key)
+      assert.deepEqual(
+        (await documentState()).document.pages,
+        beforeImpact.document.pages,
+      )
+      // Reanalysis with the same input revision must invalidate a pending review.
+      await screen(1)
+      await until(
+        () =>
+          evaluate(
+            `[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='자료 변경 시작' && !b.disabled)`,
+          ),
+        'source changes enabled after saved edits',
+      )
+      await click('자료 변경 시작')
+      await click('변경 자료 AI 점검')
+      await until(
+        () => has('[data-testid=preflight-result]'),
+        'same input reanalysis',
+      )
+      await screen(2)
+      await until(
+        () =>
+          evaluate(
+            `document.querySelector('[data-testid=impact-review]').textContent.includes('검토 기준이 변경되었습니다')`,
+          ),
+        'stale review shown',
+      )
+      assert.equal(
+        await evaluate(
+          `document.querySelector('input[aria-label="최신 점검 확인"]').checked`,
+        ),
+        false,
+      )
+      await until(
+        () => has('input[aria-label="최신 점검 확인"]:not(:disabled)'),
+        'latest confirmation ready',
+      )
+      await evaluate(
+        `document.querySelector('input[aria-label="최신 점검 확인"]').click()`,
+      )
+      await until(
+        () =>
+          evaluate(
+            `[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='변경 영향 불러오기' && !b.disabled)`,
+          ),
+        'review creation ready',
+      )
+      await click('변경 영향 불러오기')
+      await until(
+        async () =>
+          !(await evaluate(
+            `document.querySelector('[data-testid=impact-review]').textContent.includes('검토 기준이 변경되었습니다')`,
+          )),
+        'fresh review',
+      )
+      const state = await documentState()
+      const latest = await evaluate(
+        `fetch('/api/v1/sessions/${sessionId}/preflights/${state.latest_preflight_id}').then(r=>r.json())`,
+      )
+      const rid = await evaluate(
+        `JSON.parse(sessionStorage.getItem('ddalgi.sources.v1.publication')).impactReviewId`,
+      )
+      const review = await evaluate(
+        `fetch(${JSON.stringify(route)}+'/impact-reviews/'+${JSON.stringify(rid)}).then(r=>r.json())`,
+      )
+      assert.ok(review.items.some((i) => i.code === 'FACT_REVIEW_REQUIRED'))
+      const selectedFacts = {}
+      for (const id of new Set(
+        review.items
+          .filter((i) => i.requires_change && i.block_id)
+          .map((i) => i.block_id),
+      )) {
+        const block = beforeImpact.document.pages
+          .flatMap((p) => p.blocks)
+          .find((b) => b.block_id === id)
+        const facts = block.fact_ids
+          .map((fid) => oldPf.facts.find((f) => f.fact_id === fid))
+          .map((old) =>
+            latest.facts.find(
+              (f) =>
+                f.field_key === old.field_key &&
+                f.value === old.value &&
+                f.status === 'supported',
+            ),
+          )
+        assert.ok(
+          facts.length && facts.every(Boolean),
+          'current evidence choices available',
+        )
+        selectedFacts[id] = facts
+        for (const fact of facts)
+          await evaluate(
+            `document.querySelector('[data-impact-block="${id}"] input[data-impact-fact="${fact.fact_id}"]').click()`,
+          )
+      }
+      const amendedText = preservedText + ' 변경 자료를 검토했습니다.'
+      await setText(paragraph.block_id, amendedText)
+      const reason =
+        '원문 근거를 새 자료에서 확인하고 선택한 문구만 수정했습니다.'
+      await evaluate(
+        `(()=>{const t=document.querySelector('textarea[aria-label="변경 유지 사유"]');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(t,${JSON.stringify(reason)});t.dispatchEvent(new Event('input',{bubbles:true}))})()`,
+      )
+      await until(
+        () =>
+          evaluate(
+            `[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='선택한 변경 적용·전체 재검증' && !b.disabled)`,
+          ),
+        'explicit changes ready',
+      )
+      await evaluate(
+        `document.querySelector('[data-testid=impact-review]').scrollIntoView()`,
+      )
+      await screenshot('impact-review.png')
+      dropImpactApply = true
+      dropped = false
+      await click('선택한 변경 적용·전체 재검증')
+      await until(() => dropped, 'impact apply response lost')
+      const savedImpact = await evaluate(
+        `sessionStorage.getItem('ddalgi.sources.v1.publication')`,
+      )
+      assert.ok(
+        !savedImpact.includes(reason) && !savedImpact.includes(amendedText),
+      )
+      await reload()
+      await screen(2)
+      await until(
+        async () =>
+          !(await evaluate(
+            `JSON.parse(sessionStorage.getItem('ddalgi.sources.v1.publication')).impactRecovery`,
+          )),
+        'applied review restored by GET',
+      )
+      const afterImpact = await documentState()
+      assert.equal(
+        afterImpact.document.document_revision,
+        beforeImpact.document.document_revision + 1,
+      )
+      assert.equal(afterImpact.input_review_required, false)
+      assert.equal(afterImpact.approval, null)
+      const expected = structuredClone(beforeImpact.document.pages)
+      for (const page of expected)
+        for (const block of page.blocks) {
+          if (selectedFacts[block.block_id]) {
+            block.fact_ids = selectedFacts[block.block_id].map((f) => f.fact_id)
+            block.evidence_refs = [
+              ...new Map(
+                selectedFacts[block.block_id]
+                  .flatMap((f) => f.evidence_refs)
+                  .map((ref) => [JSON.stringify(ref), ref]),
+              ).values(),
+            ]
+          }
+          if (block.block_id === paragraph.block_id)
+            block.content.text = amendedText
+        }
+      assert.deepEqual(afterImpact.document.pages, expected)
+      assert.equal(
+        calls.filter(
+          (c) =>
+            c.method === 'POST' && /impact-reviews\/[^/]+\/apply$/.test(c.path),
+        ).length,
+        1,
+      )
+      assert.equal(posts('drafts').length, beforeDrafts)
+      checks.push(
+        'C-05: source replacement preserves edits/photos; explicit confirmation resets; lost create reuses key; same-input reanalysis stales review; selected text/references applied once; lost apply restores by GET; reason/body absent from storage; full validation without regeneration',
+      )
+      prepared = afterImpact
+      await until(async () => {
+        const checked = (await documentState()).validation
+        return checked && ['passed', 'needs_review'].includes(checked.status)
+      }, 'impact full validation')
+      const impactValidation = (await documentState()).validation
+      assert.equal(
+        impactValidation.document_revision,
+        afterImpact.document.document_revision,
+      )
+      assert.equal(
+        impactValidation.input_revision,
+        afterImpact.document.input_revision,
+      )
+      assert.deepEqual(
+        new Set(impactValidation.checked_block_ids),
+        new Set(
+          afterImpact.document.pages
+            .flatMap((p) => p.blocks)
+            .map((b) => b.block_id),
+        ),
+      )
+      await click('문서 상태 새로고침')
+      // Normal apply responses must also connect and poll their returned full-validation job.
+      const lastValidation = impactValidation.validation_id
+      const jobsBefore = calls.length
+      const latestPfId = latest.preflight_id
+      await screen(1)
+      await until(
+        () =>
+          evaluate(
+            `[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='자료 변경 시작' && !b.disabled)`,
+          ),
+        'normal review source gate',
+      )
+      await click('자료 변경 시작')
+      await click('변경 자료 AI 점검')
+      await until(
+        async () =>
+          (await saved()).preflightId &&
+          (await saved()).preflightId !== latestPfId,
+        'normal review new preflight',
+      )
+      await screen(2)
+      await until(
+        () => has('input[aria-label="최신 점검 확인"]:not(:disabled)'),
+        'normal confirmation ready',
+      )
+      await evaluate(
+        `document.querySelector('input[aria-label="최신 점검 확인"]').click()`,
+      )
+      await click('변경 영향 불러오기')
+      await until(
+        () => has('textarea[aria-label="변경 유지 사유"]:not(:disabled)'),
+        'normal review loaded',
+      )
+      const normalRid = await evaluate(
+        `JSON.parse(sessionStorage.getItem('ddalgi.sources.v1.publication')).impactReviewId`,
+      )
+      const normalReview = await evaluate(
+        `fetch(${JSON.stringify(route)}+'/impact-reviews/'+${JSON.stringify(normalRid)}).then(r=>r.json())`,
+      )
+      assert.equal(normalReview.status, 'pending')
+      await evaluate(
+        `(()=>{const t=document.querySelector('textarea[aria-label="변경 유지 사유"]');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(t,'같은 입력의 최신 점검을 확인하고 기존 내용을 유지합니다.');t.dispatchEvent(new Event('input',{bubbles:true}))})()`,
+      )
+      await click('선택한 변경 적용·전체 재검증')
+      await until(async () => {
+        const out = await documentState()
+        return (
+          out.document.document_revision ===
+            afterImpact.document.document_revision + 1 &&
+          out.validation &&
+          out.validation.validation_id !== lastValidation &&
+          out.validation.status !== 'pending'
+        )
+      }, 'normal apply full validation')
+      await until(
+        () =>
+          evaluate(
+            `!JSON.parse(sessionStorage.getItem('ddalgi.sources.v1.publication')).job`,
+          ),
+        'normal validation job polled',
+      )
+      prepared = await documentState()
+      const observedJobs = await Promise.all(
+        calls
+          .slice(jobsBefore)
+          .filter((c) => c.method === 'GET' && /\/jobs\//.test(c.path))
+          .map((c) =>
+            evaluate(`fetch(${JSON.stringify(c.path)}).then(r=>r.json())`),
+          ),
+      )
+      assert.ok(
+        observedJobs.some(
+          (job) =>
+            job.status === 'succeeded' &&
+            job.result_ref?.validation_id === prepared.validation.validation_id,
+        ),
+        'returned full-validation job was queried',
+      )
+      assert.equal(prepared.input_review_required, false)
+      const rebound = structuredClone(afterImpact.document.pages)
+      for (const page of rebound)
+        for (const block of page.blocks)
+          block.fact_ids = block.fact_ids.map(
+            (fid) => normalReview.fact_rebindings[fid] || fid,
+          )
+      assert.deepEqual(prepared.document.pages, rebound)
+      assert.equal(posts('drafts').length, beforeDrafts)
+      checks.push(
+        'normal C-05 apply polls full-validation job; same-input reanalysis rebounds facts without changing text/photos; no regeneration',
+      )
+    }
     const blocks = prepared.document.pages.flatMap((p) => p.blocks)
     let editable = blocks.find(
       (b) => b.type === 'paragraph' && b.fact_ids.length,
@@ -1451,7 +2282,66 @@ finally:
       await idle()
     }
     assert.equal((await documentState()).validation.status, 'passed')
-    await click('PDF 배치 검사')
+    if (photoTrial) {
+      // The earlier photo-proposal scenario leaves two tall images on the cover.
+      // Verify overflow blocks approval, then explicitly remove the old image.
+      if (docxTrial)
+        await evaluate(
+          `document.querySelector('button[aria-label="DOCX 출력 선택"]').click()`,
+        )
+      await click(`${outputLabel} 배치 검사`)
+      await idle()
+      const overflowed = (await documentState()).layout_checks[outputFormat]
+      assert.equal(overflowed.status, 'failed')
+      assert.ok(
+        overflowed.actual_pages > (await documentState()).document.pages.length,
+      )
+      assert.equal(
+        await evaluate(
+          `document.querySelector('input[aria-label="${outputLabel} 최종 승인 동의"]').disabled`,
+        ),
+        true,
+      )
+      checks.push(
+        `${outputLabel} overflow result remains readable and blocks approval`,
+      )
+      const images = (await documentState()).document.pages
+        .flatMap((p) => p.blocks)
+        .filter((b) => b.type === 'image')
+      assert.ok(images.length >= 2)
+      await editorPage(images[0].block_id)
+      await evaluate(
+        `(()=>{const b=[...document.querySelectorAll('[data-block-id="${images[0].block_id}"] button')].find(b=>b.textContent.includes('삭제'));b.click()})()`,
+      )
+      await click('문구 저장')
+      await idle()
+      await screen(3)
+      await click('내용 검증 실행')
+      await idle()
+      const review = await evaluate(
+        `fetch('/api/v1/sessions/${sessionId}/documents/${(await documentState()).document.document_id}/issues').then(r=>r.json())`,
+      )
+      for (const issue of review.issues.filter(
+        (i) => i.status === 'open' && i.severity === 'warning',
+      )) {
+        const selector = `input[aria-label="경고 확인 사유 ${issue.issue_id}"]`
+        await evaluate(
+          `(()=>{const i=document.querySelector(${JSON.stringify(selector)});Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(i,'시연 자료임을 확인했습니다.');i.dispatchEvent(new Event('input',{bubbles:true}));})()`,
+        )
+        await evaluate(
+          `document.querySelector(${JSON.stringify(selector)}).parentElement.querySelector('button').click()`,
+        )
+        await idle()
+      }
+      checks.push(
+        `explicit editor image removal preserves remaining photo for ${outputLabel}`,
+      )
+    }
+    if (docxTrial)
+      await evaluate(
+        `document.querySelector('button[aria-label="DOCX 출력 선택"]').click()`,
+      )
+    await click(`${outputLabel} 배치 검사`)
     await until(
       async () => {
         const s = await documentState()
@@ -1459,45 +2349,76 @@ finally:
           `document.querySelector('[data-testid=draft-result] [role=alert]')?.textContent`,
         )
         if (alert) throw Error(alert)
-        return !!s.layout_checks.pdf && s.layout_checks.pdf.status !== 'pending'
+        return (
+          !!s.layout_checks[outputFormat] &&
+          s.layout_checks[outputFormat].status !== 'pending'
+        )
       },
-      'actual PDF render',
+      `${outputLabel} render`,
       120000,
     )
     await idle()
     const checked = await documentState()
     assert.equal(
-      checked.layout_checks.pdf.status,
+      checked.layout_checks[outputFormat].status,
       'passed',
-      JSON.stringify(checked.layout_checks.pdf.fail_reasons),
+      JSON.stringify(checked.layout_checks[outputFormat].fail_reasons),
     )
-    assert.ok(checked.layout_checks.pdf.actual_pages > 0)
+    assert.ok(checked.layout_checks[outputFormat].actual_pages > 0)
     await evaluate(
-      `document.querySelector('input[aria-label="PDF 최종 승인 동의"]').click()`,
+      `document.querySelector('input[aria-label="${outputLabel} 최종 승인 동의"]').click()`,
     )
+    if (docxTrial) {
+      await evaluate(
+        `document.querySelector('button[aria-label="PDF 출력 선택"]').click()`,
+      )
+      assert.equal(
+        await evaluate(
+          `document.querySelector('input[aria-label="PDF 최종 승인 동의"]').checked`,
+        ),
+        false,
+      )
+      assert.equal(
+        await evaluate(
+          `document.querySelector('input[aria-label="PDF 최종 승인 동의"]').disabled`,
+        ),
+        true,
+      )
+      await evaluate(
+        `document.querySelector('button[aria-label="DOCX 출력 선택"]').click()`,
+      )
+      assert.equal(
+        await evaluate(
+          `document.querySelector('input[aria-label="DOCX 최종 승인 동의"]').checked`,
+        ),
+        false,
+      )
+      checks.push('format switch resets consent and requires matching layout')
+    }
     await reload()
     await until(
-      () => has('input[aria-label="PDF 최종 승인 동의"]:not(:disabled)'),
+      () =>
+        has(`input[aria-label="${outputLabel} 최종 승인 동의"]:not(:disabled)`),
       'restore checks',
     )
     await screen(3)
     assert.equal(
       await evaluate(
-        `document.querySelector('input[aria-label="PDF 최종 승인 동의"]').checked`,
+        `document.querySelector('input[aria-label="${outputLabel} 최종 승인 동의"]').checked`,
       ),
       false,
     )
     await evaluate(
-      `document.querySelector('input[aria-label="PDF 최종 승인 동의"]').click()`,
+      `document.querySelector('input[aria-label="${outputLabel} 최종 승인 동의"]').click()`,
     )
-    await click('현재 PDF 최종 승인')
+    await click(`현재 ${outputLabel} 최종 승인`)
     await idle()
     assert.equal((await documentState()).approval.status, 'active')
-    await click('승인된 PDF 준비')
+    await click(`승인된 ${outputLabel} 준비`)
     await until(
       () =>
         evaluate(
-          `!![...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='PDF 다운로드'&&!b.disabled)`,
+          `!![...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='${outputLabel} 다운로드'&&!b.disabled)`,
         ),
       'export ready',
     )
@@ -1505,15 +2426,20 @@ finally:
       behavior: 'allow',
       downloadPath: output,
     })
-    await click('PDF 다운로드')
+    await click(`${outputLabel} 다운로드`)
     await idle()
     await until(
-      async () => (await readdir(output)).some((f) => f.endsWith('.pdf')),
+      async () =>
+        (await readdir(output)).some((f) => f.endsWith(`.${outputFormat}`)),
       'download file',
     )
-    const file = (await readdir(output)).find((f) => f.endsWith('.pdf'))
+    const file = (await readdir(output)).find((f) =>
+      f.endsWith(`.${outputFormat}`),
+    )
     const bytes = await readFile(join(output, file))
-    assert.equal(bytes.subarray(0, 5).toString(), '%PDF-')
+    if (docxTrial) assert.equal(bytes.subarray(0, 2).toString(), 'PK')
+    else assert.equal(bytes.subarray(0, 5).toString(), '%PDF-')
+    assert.equal((await documentState()).approval.format, outputFormat)
     const exportData = await evaluate(
       `JSON.parse(sessionStorage.getItem('ddalgi.sources.v1.publication'))`,
     )
@@ -1533,6 +2459,84 @@ finally:
       ).length,
       beforeAi,
     )
+    if (docxTrial) {
+      // A PDF response must never be saved as DOCX, including a 200 response.
+      await evaluate(
+        `(()=>{window.__originalDownloadFetch=window.fetch;window.fetch=(url,options)=>String(url).endsWith('/download')?Promise.resolve(new Response('%PDF-wrong-format',{status:200,headers:{'Content-Type':'application/pdf'}})):window.__originalDownloadFetch(url,options);})()`,
+      )
+      await click('DOCX 다운로드')
+      await idle()
+      assert.ok(
+        await evaluate(
+          `document.body.innerText.includes('서버가 DOCX 파일을 반환하지 않았습니다.')`,
+        ),
+      )
+      await evaluate(
+        `window.fetch=window.__originalDownloadFetch;delete window.__originalDownloadFetch`,
+      )
+      await click('DOCX 다운로드')
+      await idle()
+      checks.push('wrong MIME rejected before saving DOCX; retry works')
+        // Both formats approved: changing format must not reuse the old export ID.
+        await evaluate(
+          'document.querySelector(\'button[aria-label="PDF 출력 선택"]\').click()',
+        )
+        await click('PDF 배치 검사')
+        await until(
+          async () =>
+            (await documentState()).layout_checks.pdf?.status === 'passed',
+          'PDF alternate format',
+          120000,
+        )
+        await idle()
+        await evaluate(
+          'document.querySelector(\'input[aria-label="PDF 최종 승인 동의"]\').click()',
+        )
+        await click('현재 PDF 최종 승인')
+        await idle()
+        await click('승인된 PDF 준비')
+        await until(
+          () =>
+            evaluate(
+              "!![...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='PDF 다운로드'&&!b.disabled)",
+            ),
+          'PDF export ready',
+        )
+        await evaluate(
+          'document.querySelector(\'button[aria-label="DOCX 출력 선택"]\').click()',
+        )
+        assert.equal(
+          await evaluate(
+            "[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='DOCX 다운로드').disabled",
+          ),
+          true,
+        )
+        assert.equal(
+          await evaluate(
+            "JSON.parse(sessionStorage.getItem('ddalgi.sources.v1.publication')).exportId || null",
+          ),
+          null,
+        )
+        await click('승인된 DOCX 준비')
+        await until(
+          () =>
+            evaluate(
+              "!![...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='DOCX 다운로드'&&!b.disabled)",
+            ),
+          'DOCX export restored after switching',
+        )
+        assert.equal(
+          await evaluate(
+            "JSON.parse(sessionStorage.getItem('ddalgi.sources.v1.publication')).exportId",
+          ),
+          exportData.exportId,
+        )
+        await click('DOCX 다운로드')
+        await idle()
+        checks.push(
+          'two approved formats switch without stale export ID; prepare reuses correct DOCX',
+        )
+    }
     await evaluate(
       `document.getElementById('publication-panel').scrollIntoView()`,
     )
@@ -1541,7 +2545,7 @@ finally:
     await until(
       () =>
         evaluate(`!!document.querySelector('.approval-split img')?.complete`),
-      'PDF image loaded',
+      `${outputLabel} image loaded`,
     )
     await evaluate('window.scrollTo(0,0)')
     await screenshot('s03-page-preview.png')
@@ -1596,10 +2600,10 @@ finally:
       mobile: false,
     })
     checks.push(
-      'S03 PDF cards/page preview and responsive inspectors; mobile no horizontal overflow',
+      `S03 ${outputLabel} preview and responsive inspectors; mobile no horizontal overflow`,
     )
     checks.push(
-      'content validation, warning acknowledgements, actual PDF layout, consent reset, approval and byte-identical download',
+      `content validation, warning acknowledgements, actual ${outputLabel} layout, consent reset, approval and byte-identical download`,
     )
     const beforeChange = await documentState()
     const paragraph = beforeChange.document.pages
@@ -1617,16 +2621,17 @@ finally:
     assert.equal(oldDownload, 409)
     assert.ok(
       await evaluate(
-        `[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='PDF 다운로드').disabled`,
+        `[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='${outputLabel} 다운로드').disabled`,
       ),
     )
     checks.push('later edit invalidates approval and blocks old download')
     console.log(
       JSON.stringify({
         publication: 'PASS',
-        pdf: join(output, file),
+        format: outputFormat,
+        artifact: join(output, file),
         bytes: bytes.length,
-        pages: checked.layout_checks.pdf.actual_pages,
+        pages: checked.layout_checks[outputFormat].actual_pages,
       }),
     )
   }
@@ -1654,6 +2659,7 @@ finally:
         : live
           ? 'llm'
           : 'mock',
+      outputFormat,
       checks,
       preflightRequests: posts('preflights').length,
       draftRequests: posts('drafts').length,
@@ -1661,6 +2667,7 @@ finally:
       screenshot: join(output, 'draft.png'),
     }),
   )
+  }
 } catch (error) {
   if (socket?.readyState === WebSocket.OPEN) {
     console.error(
@@ -1674,6 +2681,7 @@ finally:
     await screenshot('failure.png').catch(() => {})
   }
   console.error('Diagnostics: ' + output)
+  console.error(backendLog.slice(-4000))
   if (!origin) console.error(backendLog)
   throw error
 } finally {

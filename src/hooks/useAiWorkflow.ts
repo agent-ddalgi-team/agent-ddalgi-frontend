@@ -1,10 +1,11 @@
+import { previewStorage } from '../services/mockBackend'
 import { useEffect, useRef, useState } from 'react'
 import { aiApi } from '../api/aiWorkflow'
 import type { AiJob, DraftResult, Preflight } from '../api/aiWorkflow'
 import { sourceApi, SourceApiError } from '../api/sources'
 import type { SourceSession } from '../api/sources'
 
-const STORAGE = 'ddalgi.sources.v1.ai'
+const STORAGE = previewStorage + '.ai'
 type Attempt = {
   kind: 'preflight' | 'draft'
   key: string
@@ -88,7 +89,9 @@ export function useAiWorkflow(session: SourceSession | null) {
   const revision = session?.input_revision || 0
   const documentId = session?.document_summary?.document_id
   const current =
-    state.sessionId === sid && state.revision === revision ? state : empty
+    state.sessionId === sid && state.revision === revision
+      ? state
+      : { ...empty, document: state.sessionId === sid ? state.document : null }
 
   useEffect(() => {
     const version = ++epoch.current
@@ -114,18 +117,38 @@ export function useAiWorkflow(session: SourceSession | null) {
             ? '자료나 작성 조건이 바뀌었습니다. AI 점검을 다시 실행해 주세요.'
             : '',
       }
-      setState(initial)
+      setState((previousState) => ({
+        ...initial,
+        document:
+          previousState.sessionId === sid ? previousState.document : null,
+      }))
       try {
-        const [preflight, document] = await Promise.all([
+        const [restoredPreflight, document] = await Promise.all([
           saved.preflightId ? aiApi.preflight(sid, saved.preflightId) : null,
           documentId ? aiApi.document(sid, documentId) : null,
         ])
+        let preflight = restoredPreflight
         if (cancelled || epoch.current !== version) return
         if (preflight && preflight.input_revision !== revision)
           throw new Error(
             '이전 입력의 점검입니다. AI 점검을 다시 실행해 주세요.',
           )
-        const restored = document ? { ...saved, attempt: undefined } : saved
+        if (
+          document?.latest_preflight_id &&
+          document.latest_preflight_id !== preflight?.preflight_id &&
+          !saved.attempt
+        ) {
+          preflight = await aiApi.preflight(sid, document.latest_preflight_id)
+          if (cancelled || epoch.current !== version) return
+        }
+        const restored = {
+          ...saved,
+          preflightId: preflight?.preflight_id,
+          attempt:
+            document && saved.attempt?.kind === 'draft'
+              ? undefined
+              : saved.attempt,
+        }
         persist(restored)
         setState({
           ...initial,
@@ -137,12 +160,14 @@ export function useAiWorkflow(session: SourceSession | null) {
         })
       } catch (cause) {
         if (!cancelled && epoch.current === version)
-          setState({
+          setState((previousState) => ({
             ...initial,
+            document:
+              previousState.sessionId === sid ? previousState.document : null,
             busy: false,
             error: message(cause),
             watch: false,
-          })
+          }))
       }
     }
     void restore()
@@ -358,7 +383,7 @@ export function useAiWorkflow(session: SourceSession | null) {
     setConfirmed: (confirmed: boolean) =>
       setState((s) => ({ ...s, confirmed })),
     analyze: () => {
-      if (!session || locked || current.document || documentId) return
+      if (!session || locked) return
       return submit(
         { kind: 'preflight', key: crypto.randomUUID() },
         { sessionId: sid, revision },
