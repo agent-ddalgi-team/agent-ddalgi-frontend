@@ -1,3 +1,4 @@
+import { readableIssueMessage } from '../../constants/profileLabels'
 import {
   AlertTriangle,
   Check,
@@ -173,7 +174,6 @@ export function AiWorkflowPanel({
   blocked,
   canAnalyze,
   onAnalyze,
-  onGenerate,
 }: {
   ai: Workflow
   sources: WorkSource[]
@@ -183,7 +183,6 @@ export function AiWorkflowPanel({
   blocked: boolean
   canAnalyze: boolean
   onAnalyze: () => void
-  onGenerate?: () => void
 }) {
   const { preflight, document: result, job } = ai
   const document = result?.document
@@ -438,7 +437,24 @@ export function AiWorkflowPanel({
                           ? '주의'
                           : '안내'}
                     </span>
-                    {issue.message}
+                    {readableIssueMessage(issue.message)}
+                    {facts
+                      .filter((fact) => issue.fact_ids?.includes(fact.fact_id))
+                      .map((fact) => (
+                        <div
+                          key={fact.fact_id}
+                          className="mt-2 rounded-md bg-white/70 p-2 text-slate-700"
+                        >
+                          <p>
+                            <strong>확인할 내용:</strong>{' '}
+                            {fact.value || '자료별 내용 비교가 필요합니다.'}
+                          </p>
+                          <Evidence
+                            refs={fact.evidence_refs}
+                            sources={sources}
+                          />
+                        </div>
+                      ))}
                   </li>
                 ))}
               </ul>
@@ -498,7 +514,7 @@ export function AiWorkflowPanel({
                   type="checkbox"
                   className="mt-0.5 h-4 w-4 cursor-pointer accent-[#007A78]"
                   checked={ai.confirmed}
-                  disabled={working}
+                  disabled={blocked || !ai.canConfirm}
                   onChange={(e) => ai.setConfirmed(e.target.checked)}
                 />
                 <span className="flex flex-col">
@@ -514,15 +530,8 @@ export function AiWorkflowPanel({
               <button
                 type="button"
                 className={`${primary} w-full`}
-                disabled={working}
-                onClick={() => {
-                  ai.setConfirmed(true)
-                  if (onGenerate) {
-                    onGenerate()
-                  } else {
-                    void ai.generate()
-                  }
-                }}
+                disabled={blocked || !ai.canConfirm || !ai.confirmed}
+                onClick={() => void ai.generate()}
               >
                 <Sparkles className="h-4 w-4" />
                 <span>확인한 자료로 초안 생성</span>

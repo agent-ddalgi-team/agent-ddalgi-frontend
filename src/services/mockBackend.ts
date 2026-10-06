@@ -1,6 +1,3 @@
-import type { SourceBrief, SourceSession, WorkSource } from '../api/sources'
-import type { DraftBlock, DraftResult, Preflight } from '../api/aiWorkflow'
-
 export interface WebCollectedPhoto {
   id: string
   name: string
@@ -12,89 +9,8 @@ export interface WebCollectedPhoto {
   sourcePageUrl: string
 }
 
-// 고화질 기업/산업 실사 사진 카탈로그 (홈페이지/웹 크롤링 수집용 고해상도 소스)
-export const CURATED_ENTERPRISE_PHOTOS: WebCollectedPhoto[] = [
-  {
-    id: 'web-photo-01',
-    name: '스마트팩토리_자동화제어설비_전경.jpg',
-    caption: '군산 제2 스마트 팩토리 첨단 자동화 제어 공정 라인',
-    category: 'facility',
-    url: '/assets/photos/geosan_cleanroom_automated_pipes.jpg',
-    thumbnailUrl: '/assets/photos/geosan_cleanroom_automated_pipes.jpg',
-    sourceDomain: 'geosan.co.kr',
-    sourcePageUrl: 'https://www.geosan.co.kr/infra/factory-02',
-  },
-  {
-    id: 'web-photo-02',
-    name: '품질검사_챔버_정밀계측설비.jpg',
-    caption: '0.02ppm 허용오차 정밀 검증을 위한 특수 품질검사 챔버',
-    category: 'facility',
-    url: '/assets/photos/geosan_quality_testing_chamber.jpg',
-    thumbnailUrl: '/assets/photos/geosan_quality_testing_chamber.jpg',
-    sourceDomain: 'geosan.co.kr',
-    sourcePageUrl: 'https://www.geosan.co.kr/technology/cleanroom',
-  },
-  {
-    id: 'web-photo-03',
-    name: 'ISO공인_중앙기술연구소_분석실.jpg',
-    caption: '0.02ppm 정밀 순도 측정을 위한 ISO 공인 중앙분석실',
-    category: 'lab',
-    url: '/assets/photos/geosan_distillation_lab.jpg',
-    thumbnailUrl: '/assets/photos/geosan_distillation_lab.jpg',
-    sourceDomain: 'geosan.co.kr',
-    sourcePageUrl: 'https://www.geosan.co.kr/rnd/laboratory',
-  },
-  {
-    id: 'web-photo-04',
-    name: '글로벌_엔터프라이즈_본사사옥.jpg',
-    caption: '글로벌 친환경 화학 소재 R&D 및 영업 총괄 본사 사옥 전경',
-    category: 'building',
-    url: '/assets/photos/geosan_headquarters_facade.jpg',
-    thumbnailUrl: '/assets/photos/geosan_headquarters_facade.jpg',
-    sourceDomain: 'geosan.co.kr',
-    sourcePageUrl: 'https://www.geosan.co.kr/company/about',
-  },
-  {
-    id: 'web-photo-05',
-    name: '고압촉매반응기_파일럿플랜트.jpg',
-    caption: '연간 150,000톤 정밀 소재 생산 고압 연속 촉매 반응기',
-    category: 'facility',
-    url: '/assets/photos/geosan_catalytic_reactor_process.jpg',
-    thumbnailUrl: '/assets/photos/geosan_catalytic_reactor_process.jpg',
-    sourceDomain: 'geosan.co.kr',
-    sourcePageUrl: 'https://www.geosan.co.kr/infra/pilot-plant',
-  },
-  {
-    id: 'web-photo-06',
-    name: '무균충전_드럼패키징_물류출하.jpg',
-    caption: '완제품 품질 유지를 위한 특수 질소 충전 패키징 및 출하장',
-    category: 'product',
-    url: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=1600&auto=format&fit=crop&q=85',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=400&auto=format&fit=crop&q=80',
-    sourceDomain: 'geosan.co.kr',
-    sourcePageUrl: 'https://www.geosan.co.kr/logistics/dispatch',
-  },
-  {
-    id: 'web-photo-07',
-    name: '기술지원_컨택센터_오피스.jpg',
-    caption: '신규 고객사 2시간 이내 샘플 접수 및 기술 상담 센터',
-    category: 'building',
-    url: 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=1600&auto=format&fit=crop&q=85',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=400&auto=format&fit=crop&q=80',
-    sourceDomain: 'geosan.co.kr',
-    sourcePageUrl: 'https://www.geosan.co.kr/support/center',
-  },
-  {
-    id: 'web-photo-08',
-    name: '국제표준_ISO9001_14001_인증서.jpg',
-    caption: '국제 품질 및 환경 경영 표준 규격 공식 인증서',
-    category: 'cert',
-    url: 'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=1600&auto=format&fit=crop&q=85',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=400&auto=format&fit=crop&q=80',
-    sourceDomain: 'iso.org',
-    sourcePageUrl: 'https://www.geosan.co.kr/quality/certification',
-  },
-]
+// 이전 사진 수집 UI와의 타입 호환만 유지한다. 고정 예시 자료는 제공하지 않는다.
+export const CURATED_ENTERPRISE_PHOTOS: WebCollectedPhoto[] = []
 
 import {
   searchWebPhotosDynamic,

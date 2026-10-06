@@ -31,6 +31,8 @@ export interface Preflight {
     status: 'open' | 'resolved' | 'excluded' | 'acknowledged'
     message: string
     code: string
+    fact_ids?: string[]
+    source_ids?: string[]
   }[]
   recommendations: { suggested_pages: number; reason: string; needed: string[] }
 }
@@ -61,7 +63,12 @@ export interface DraftResult {
     title: string
     target_pages: number
     status: string
-    pages: { page_id: string; title: string; blocks: DraftBlock[] }[]
+    pages: {
+      page_id: string
+      title: string
+      layout_key: string
+      blocks: DraftBlock[]
+    }[]
   }
 }
 
