@@ -54,6 +54,8 @@ export interface DraftBlock {
 }
 
 export interface DraftResult {
+  input_review_required?: boolean
+  latest_preflight_id?: string | null
   demo: boolean
   document: {
     document_id: string

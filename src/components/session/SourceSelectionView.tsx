@@ -101,7 +101,9 @@ export function SourceSelectionView({
   onNavigate: (step: WizardStep) => void
   onCompanyChange: (name: string) => void
 }) {
-  const work = useSources()
+  const [sourceEditing, setSourceEditing] = useState(false)
+  const [sourceChangeBlocked, setSourceChangeBlocked] = useState(true)
+  const work = useSources(sourceEditing && !sourceChangeBlocked)
   const ai = useAiWorkflow(work.session)
   const fileInput = useRef<HTMLInputElement>(null)
   const [tab, setTab] = useState<'registered' | 'session'>('registered')
@@ -111,11 +113,17 @@ export function SourceSelectionView({
   const [confirmClose, setConfirmClose] = useState(false)
   const [deleteSource, setDeleteSource] = useState<WorkSource | null>(null)
   const [inspectorOpen, setInspectorOpen] = useState(false)
+  const [sourceSession, setSourceSession] = useState(work.session?.session_id)
+  if (sourceSession !== work.session?.session_id) {
+    setSourceSession(work.session?.session_id)
+    setSourceEditing(false)
+  }
   const selected = new Set(work.session?.selected_source_ids || [])
   const hasDocument = !!work.session?.document_summary || !!ai.document
+  const documentAvailable = !!ai.document
   useEffect(() => {
-    onDraftAvailable?.(!!ai.document)
-  }, [ai.document, onDraftAvailable])
+    onDraftAvailable?.(documentAvailable)
+  }, [documentAvailable, onDraftAvailable])
   useEffect(() => {
     const title = ai.document?.document.title
     onCompanyChange(
@@ -124,7 +132,10 @@ export function SourceSelectionView({
         '새 회사소개서',
     )
   }, [ai.document?.document.title, onCompanyChange])
-  const locked = !!work.busy || ai.locked || hasDocument
+  const locked =
+    !!work.busy ||
+    ai.locked ||
+    (hasDocument && (!sourceEditing || sourceChangeBlocked))
   const isDemo = work.session ? work.session.demo : work.demo
   const counts = {
     registered: work.sources.filter((s) => s.scope === 'registered').length,
@@ -146,7 +157,10 @@ export function SourceSelectionView({
     work.pendingUpload ||
     pending > 0
   const canAnalyze =
-    !aiBlocked && !ai.locked && !hasDocument && selected.size > 0
+    !aiBlocked &&
+    !ai.locked &&
+    (!hasDocument || sourceEditing) &&
+    selected.size > 0
   const openInspector = (target = 'ai-workflow') => {
     setInspectorOpen(true)
     document
@@ -179,7 +193,9 @@ export function SourceSelectionView({
   }
   const suggestedPages = ai.preflight?.recommendations.suggested_pages
   const dockLabel = hasDocument
-    ? '생성된 초안 보기'
+    ? sourceEditing && !ai.preflight
+      ? '변경 자료 AI 점검'
+      : '편집 화면으로 돌아가기'
     : ai.locked
       ? 'AI 작업 확인 중'
       : ai.preflight
@@ -188,14 +204,18 @@ export function SourceSelectionView({
           : '점검 결과 확인 · 초안 만들기'
         : 'AI 자료 점검'
   const dockAction = hasDocument
-    ? () => onNavigate(2)
+    ? sourceEditing && !ai.preflight
+      ? analyze
+      : () => onNavigate(2)
     : ai.preflight
       ? ai.confirmed && ai.canConfirm && !aiBlocked
         ? () => void ai.generate()
         : () => openInspector()
       : analyze
   const dockDisabled = hasDocument
-    ? !ai.document
+    ? sourceEditing && !ai.preflight
+      ? !canAnalyze
+      : !ai.document
     : ai.preflight
       ? aiBlocked || ai.locked
       : !canAnalyze
@@ -367,6 +387,47 @@ export function SourceSelectionView({
         data-screen="S01"
         className="screen-source animate-fade-in flex w-full flex-col gap-5 pb-28"
       >
+        {hasDocument && (
+          <div
+            role="status"
+            className={`${panel} text-xs text-amber-900 bg-amber-50`}
+          >
+            <p>
+              자료나 작성 조건을 바꿔도 기존 문서는 유지됩니다. 재점검 후 편집
+              화면에서 변경 영향을 확인하고 적용해 주세요.
+            </p>
+            <button
+              className={`${button} mt-3`}
+              disabled={sourceChangeBlocked || !!work.busy || ai.locked}
+              onClick={() => setSourceEditing(true)}
+            >
+              자료 변경 시작
+            </button>
+            {sourceEditing && (
+              <button
+                className={`${button} mt-3 ml-2`}
+                disabled={!canAnalyze}
+                onClick={analyze}
+              >
+                변경 자료 AI 점검
+              </button>
+            )}
+            {sourceEditing && (
+              <button
+                className={`${button} mt-3 ml-2`}
+                onClick={() => onNavigate(2)}
+              >
+                편집 화면으로 돌아가기
+              </button>
+            )}
+            {sourceChangeBlocked && (
+              <p className="mt-2">
+                작성 중인 문구를 저장하거나 진행 중인 문서 작업을 먼저 마쳐
+                주세요.
+              </p>
+            )}
+          </div>
+        )}
         {/* 화면 제목 영역 */}
         <div className="flex flex-col justify-between gap-4 pt-1 md:flex-row md:items-end">
           <div>
@@ -471,8 +532,8 @@ export function SourceSelectionView({
         </div>
         {hasDocument && (
           <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
-            이미 초안이 있는 작업입니다. 기존 편집을 보존하기 위해 자료 변경을
-            잠갔습니다. 새 자료 반영은 다음 단계에서 연결합니다.
+            기존 초안은 유지됩니다. 자료 변경 시작을 선택한 뒤 재점검과 영향
+            확인을 진행해 주세요.
           </p>
         )}
         {work.pendingUpload && (
@@ -1018,6 +1079,20 @@ export function SourceSelectionView({
         <DocumentWorkspace
           key={ai.document.document.document_id}
           initial={ai.document}
+          inputRevision={
+            work.session?.input_revision || ai.document.document.input_revision
+          }
+          preflight={ai.preflight}
+          inputBusy={
+            !!work.busy ||
+            ai.locked ||
+            work.briefDirty ||
+            work.pendingUpload ||
+            pending > 0
+          }
+          sources={work.sources}
+          onEditingStateChange={setSourceChangeBlocked}
+          onImpactApplied={() => setSourceEditing(false)}
           step={step}
           onNavigate={onNavigate}
           onClose={() => setConfirmClose(true)}

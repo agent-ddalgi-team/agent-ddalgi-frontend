@@ -30,6 +30,11 @@ assert(
   !docxTrial || (publication && !live),
   '--docx requires isolated mock --publication',
 )
+const impactTrial = process.argv.includes('--impact')
+assert(
+  !impactTrial || (publication && !live),
+  '--impact requires isolated mock --publication',
+)
 const outputFormat = docxTrial ? 'docx' : 'pdf'
 const outputLabel = outputFormat.toUpperCase()
 const proposalTrial = process.argv.includes('--proposal')
@@ -57,7 +62,9 @@ let sequence = 0,
   failPoll = false,
   failedPoll = false
 let dropSave = false,
-  dropApply = false
+  dropApply = false,
+  dropImpactCreate = false,
+  dropImpactApply = false
 const pending = new Map(),
   errors = [],
   calls = [],
@@ -426,6 +433,25 @@ finally:
         return
       }
       if (
+        (dropImpactCreate &&
+          p.request.method === 'POST' &&
+          p.request.url.endsWith('/impact-reviews') &&
+          p.responseStatusCode === 201) ||
+        (dropImpactApply &&
+          p.request.method === 'POST' &&
+          /impact-reviews\/[^/]+\/apply$/.test(p.request.url) &&
+          p.responseStatusCode === 200)
+      ) {
+        dropImpactCreate = false
+        dropImpactApply = false
+        dropped = true
+        intercept('Fetch.failRequest', {
+          requestId: p.requestId,
+          errorReason: 'ConnectionReset',
+        })
+        return
+      }
+      if (
         dropSave &&
         p.request.method === 'PATCH' &&
         p.request.url.includes('/documents/') &&
@@ -681,6 +707,431 @@ finally:
       )
     }
     let prepared = await documentState()
+    if (impactTrial) {
+      const oldPf = await evaluate(
+        `fetch('/api/v1/sessions/${sessionId}/preflights/'+JSON.parse(sessionStorage.getItem('ddalgi.sources.v1.ai')).preflightId).then(r=>r.json())`,
+      )
+      const paragraph = prepared.document.pages
+        .flatMap((p) => p.blocks)
+        .find((b) => b.type === 'paragraph' && b.fact_ids.length)
+      const preservedText =
+        paragraph.content.text + ' 사용자가 직접 편집한 내용입니다.'
+      await setText(paragraph.block_id, preservedText)
+      await screen(1)
+      assert.equal(
+        await evaluate(
+          `[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='자료 변경 시작').disabled`,
+        ),
+        true,
+      )
+      await screen(2)
+      await click('문구 저장')
+      await until(
+        async () =>
+          (await documentState()).document.pages
+            .flatMap((p) => p.blocks)
+            .find((b) => b.block_id === paragraph.block_id).content.text ===
+          preservedText,
+        'edit saved before impact',
+      )
+      const beforeImpact = await documentState()
+      await screen(1)
+      await until(
+        () =>
+          evaluate(
+            `[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='자료 변경 시작' && !b.disabled)`,
+          ),
+        'source changes enabled after saved edits',
+      )
+      await click('자료 변경 시작')
+      await upload('impact-replacement.txt', fixture)
+      await until(
+        () =>
+          has('input[aria-label="impact-replacement.txt 선택"]:not(:disabled)'),
+        'replacement source read',
+      )
+      for (const name of ['ai-connection-demo.txt', 'impact-replacement.txt']) {
+        await until(
+          () => has(`input[aria-label="${name} 선택"]:not(:disabled)`),
+          'source selection ready ' + name,
+        )
+        await evaluate(
+          `document.querySelector('input[aria-label="${name} 선택"]').click()`,
+        )
+        await until(
+          () =>
+            evaluate(
+              `document.querySelector('input[aria-label="${name} 선택"]').checked === ${name === 'impact-replacement.txt'}`,
+            ),
+          'source selection saved ' + name,
+        )
+        await until(
+          () => has(`input[aria-label="${name} 선택"]:not(:disabled)`),
+          'source mutation settled ' + name,
+        )
+        await idle()
+      }
+      await until(
+        async () => !(await has('[data-testid=preflight-result]')),
+        'previous preflight invalidated',
+      )
+      assert.equal(
+        await evaluate(
+          `document.querySelector('textarea[data-edit-block="${paragraph.block_id}"]').value`,
+        ),
+        preservedText,
+      )
+      assert.deepEqual(
+        (await documentState()).document.pages,
+        beforeImpact.document.pages,
+      )
+      await click('변경 자료 AI 점검')
+      await until(
+        () => has('[data-testid=preflight-result]'),
+        'new source preflight',
+      )
+      await screen(2)
+      await until(
+        () => has('input[aria-label="최신 점검 확인"]'),
+        'impact panel',
+      )
+      assert.equal(
+        await evaluate(
+          `[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='변경 영향 불러오기').disabled`,
+        ),
+        true,
+      )
+      await until(
+        () => has('input[aria-label="최신 점검 확인"]:not(:disabled)'),
+        'latest confirmation ready',
+      )
+      await evaluate(
+        `document.querySelector('input[aria-label="최신 점검 확인"]').click()`,
+      )
+      await until(
+        () =>
+          evaluate(
+            `[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='변경 영향 불러오기' && !b.disabled)`,
+          ),
+        'review creation ready',
+      )
+      dropImpactCreate = true
+      dropped = false
+      await click('변경 영향 불러오기')
+      await until(() => dropped, 'impact creation response lost')
+      await reload()
+      await screen(2)
+      await until(
+        () => has('input[aria-label="최신 점검 확인"]'),
+        'confirmation restored',
+      )
+      assert.equal(
+        await evaluate(
+          `document.querySelector('input[aria-label="최신 점검 확인"]').checked`,
+        ),
+        false,
+      )
+      await until(
+        () => has('input[aria-label="최신 점검 확인"]:not(:disabled)'),
+        'latest confirmation ready',
+      )
+      await evaluate(
+        `document.querySelector('input[aria-label="최신 점검 확인"]').click()`,
+      )
+      await until(
+        () =>
+          evaluate(
+            `[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='변경 영향 불러오기' && !b.disabled)`,
+          ),
+        'review creation ready',
+      )
+      await click('변경 영향 불러오기')
+      await until(() => has('[data-impact-block]'), 'impact list recovered')
+      const creationCalls = calls.filter(
+        (c) => c.method === 'POST' && /impact-reviews$/.test(c.path),
+      )
+      assert.equal(creationCalls.at(-1).key, creationCalls.at(-2).key)
+      assert.deepEqual(
+        (await documentState()).document.pages,
+        beforeImpact.document.pages,
+      )
+      // Reanalysis with the same input revision must invalidate a pending review.
+      await screen(1)
+      await until(
+        () =>
+          evaluate(
+            `[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='자료 변경 시작' && !b.disabled)`,
+          ),
+        'source changes enabled after saved edits',
+      )
+      await click('자료 변경 시작')
+      await click('변경 자료 AI 점검')
+      await until(
+        () => has('[data-testid=preflight-result]'),
+        'same input reanalysis',
+      )
+      await screen(2)
+      await until(
+        () =>
+          evaluate(
+            `document.querySelector('[data-testid=impact-review]').textContent.includes('검토 기준이 변경되었습니다')`,
+          ),
+        'stale review shown',
+      )
+      assert.equal(
+        await evaluate(
+          `document.querySelector('input[aria-label="최신 점검 확인"]').checked`,
+        ),
+        false,
+      )
+      await until(
+        () => has('input[aria-label="최신 점검 확인"]:not(:disabled)'),
+        'latest confirmation ready',
+      )
+      await evaluate(
+        `document.querySelector('input[aria-label="최신 점검 확인"]').click()`,
+      )
+      await until(
+        () =>
+          evaluate(
+            `[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='변경 영향 불러오기' && !b.disabled)`,
+          ),
+        'review creation ready',
+      )
+      await click('변경 영향 불러오기')
+      await until(
+        async () =>
+          !(await evaluate(
+            `document.querySelector('[data-testid=impact-review]').textContent.includes('검토 기준이 변경되었습니다')`,
+          )),
+        'fresh review',
+      )
+      const state = await documentState()
+      const latest = await evaluate(
+        `fetch('/api/v1/sessions/${sessionId}/preflights/${state.latest_preflight_id}').then(r=>r.json())`,
+      )
+      const rid = await evaluate(
+        `JSON.parse(sessionStorage.getItem('ddalgi.sources.v1.publication')).impactReviewId`,
+      )
+      const review = await evaluate(
+        `fetch(${JSON.stringify(route)}+'/impact-reviews/'+${JSON.stringify(rid)}).then(r=>r.json())`,
+      )
+      assert.ok(review.items.some((i) => i.code === 'FACT_REVIEW_REQUIRED'))
+      const selectedFacts = {}
+      for (const id of new Set(
+        review.items
+          .filter((i) => i.requires_change && i.block_id)
+          .map((i) => i.block_id),
+      )) {
+        const block = beforeImpact.document.pages
+          .flatMap((p) => p.blocks)
+          .find((b) => b.block_id === id)
+        const facts = block.fact_ids
+          .map((fid) => oldPf.facts.find((f) => f.fact_id === fid))
+          .map((old) =>
+            latest.facts.find(
+              (f) =>
+                f.field_key === old.field_key &&
+                f.value === old.value &&
+                f.status === 'supported',
+            ),
+          )
+        assert.ok(
+          facts.length && facts.every(Boolean),
+          'current evidence choices available',
+        )
+        selectedFacts[id] = facts
+        for (const fact of facts)
+          await evaluate(
+            `document.querySelector('[data-impact-block="${id}"] input[data-impact-fact="${fact.fact_id}"]').click()`,
+          )
+      }
+      const amendedText = preservedText + ' 변경 자료를 검토했습니다.'
+      await setText(paragraph.block_id, amendedText)
+      const reason =
+        '원문 근거를 새 자료에서 확인하고 선택한 문구만 수정했습니다.'
+      await evaluate(
+        `(()=>{const t=document.querySelector('textarea[aria-label="변경 유지 사유"]');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(t,${JSON.stringify(reason)});t.dispatchEvent(new Event('input',{bubbles:true}))})()`,
+      )
+      await until(
+        () =>
+          evaluate(
+            `[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='선택한 변경 적용·전체 재검증' && !b.disabled)`,
+          ),
+        'explicit changes ready',
+      )
+      await evaluate(
+        `document.querySelector('[data-testid=impact-review]').scrollIntoView()`,
+      )
+      await screenshot('impact-review.png')
+      dropImpactApply = true
+      dropped = false
+      await click('선택한 변경 적용·전체 재검증')
+      await until(() => dropped, 'impact apply response lost')
+      const savedImpact = await evaluate(
+        `sessionStorage.getItem('ddalgi.sources.v1.publication')`,
+      )
+      assert.ok(
+        !savedImpact.includes(reason) && !savedImpact.includes(amendedText),
+      )
+      await reload()
+      await screen(2)
+      await until(
+        async () =>
+          !(await evaluate(
+            `JSON.parse(sessionStorage.getItem('ddalgi.sources.v1.publication')).impactRecovery`,
+          )),
+        'applied review restored by GET',
+      )
+      const afterImpact = await documentState()
+      assert.equal(
+        afterImpact.document.document_revision,
+        beforeImpact.document.document_revision + 1,
+      )
+      assert.equal(afterImpact.input_review_required, false)
+      assert.equal(afterImpact.approval, null)
+      const expected = structuredClone(beforeImpact.document.pages)
+      for (const page of expected)
+        for (const block of page.blocks) {
+          if (selectedFacts[block.block_id]) {
+            block.fact_ids = selectedFacts[block.block_id].map((f) => f.fact_id)
+            block.evidence_refs = [
+              ...new Map(
+                selectedFacts[block.block_id]
+                  .flatMap((f) => f.evidence_refs)
+                  .map((ref) => [JSON.stringify(ref), ref]),
+              ).values(),
+            ]
+          }
+          if (block.block_id === paragraph.block_id)
+            block.content.text = amendedText
+        }
+      assert.deepEqual(afterImpact.document.pages, expected)
+      assert.equal(
+        calls.filter(
+          (c) =>
+            c.method === 'POST' && /impact-reviews\/[^/]+\/apply$/.test(c.path),
+        ).length,
+        1,
+      )
+      assert.equal(posts('drafts').length, beforeDrafts)
+      checks.push(
+        'C-05: source replacement preserves edits/photos; explicit confirmation resets; lost create reuses key; same-input reanalysis stales review; selected text/references applied once; lost apply restores by GET; reason/body absent from storage; full validation without regeneration',
+      )
+      prepared = afterImpact
+      await until(async () => {
+        const checked = (await documentState()).validation
+        return checked && ['passed', 'needs_review'].includes(checked.status)
+      }, 'impact full validation')
+      const impactValidation = (await documentState()).validation
+      assert.equal(
+        impactValidation.document_revision,
+        afterImpact.document.document_revision,
+      )
+      assert.equal(
+        impactValidation.input_revision,
+        afterImpact.document.input_revision,
+      )
+      assert.deepEqual(
+        new Set(impactValidation.checked_block_ids),
+        new Set(
+          afterImpact.document.pages
+            .flatMap((p) => p.blocks)
+            .map((b) => b.block_id),
+        ),
+      )
+      await click('문서 상태 새로고침')
+      // Normal apply responses must also connect and poll their returned full-validation job.
+      const lastValidation = impactValidation.validation_id
+      const jobsBefore = calls.length
+      const latestPfId = latest.preflight_id
+      await screen(1)
+      await until(
+        () =>
+          evaluate(
+            `[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='자료 변경 시작' && !b.disabled)`,
+          ),
+        'normal review source gate',
+      )
+      await click('자료 변경 시작')
+      await click('변경 자료 AI 점검')
+      await until(
+        async () =>
+          (await saved()).preflightId &&
+          (await saved()).preflightId !== latestPfId,
+        'normal review new preflight',
+      )
+      await screen(2)
+      await until(
+        () => has('input[aria-label="최신 점검 확인"]:not(:disabled)'),
+        'normal confirmation ready',
+      )
+      await evaluate(
+        `document.querySelector('input[aria-label="최신 점검 확인"]').click()`,
+      )
+      await click('변경 영향 불러오기')
+      await until(
+        () => has('textarea[aria-label="변경 유지 사유"]:not(:disabled)'),
+        'normal review loaded',
+      )
+      const normalRid = await evaluate(
+        `JSON.parse(sessionStorage.getItem('ddalgi.sources.v1.publication')).impactReviewId`,
+      )
+      const normalReview = await evaluate(
+        `fetch(${JSON.stringify(route)}+'/impact-reviews/'+${JSON.stringify(normalRid)}).then(r=>r.json())`,
+      )
+      assert.equal(normalReview.status, 'pending')
+      await evaluate(
+        `(()=>{const t=document.querySelector('textarea[aria-label="변경 유지 사유"]');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(t,'같은 입력의 최신 점검을 확인하고 기존 내용을 유지합니다.');t.dispatchEvent(new Event('input',{bubbles:true}))})()`,
+      )
+      await click('선택한 변경 적용·전체 재검증')
+      await until(async () => {
+        const out = await documentState()
+        return (
+          out.document.document_revision ===
+            afterImpact.document.document_revision + 1 &&
+          out.validation &&
+          out.validation.validation_id !== lastValidation &&
+          out.validation.status !== 'pending'
+        )
+      }, 'normal apply full validation')
+      await until(
+        () =>
+          evaluate(
+            `!JSON.parse(sessionStorage.getItem('ddalgi.sources.v1.publication')).job`,
+          ),
+        'normal validation job polled',
+      )
+      prepared = await documentState()
+      const observedJobs = await Promise.all(
+        calls
+          .slice(jobsBefore)
+          .filter((c) => c.method === 'GET' && /\/jobs\//.test(c.path))
+          .map((c) =>
+            evaluate(`fetch(${JSON.stringify(c.path)}).then(r=>r.json())`),
+          ),
+      )
+      assert.ok(
+        observedJobs.some(
+          (job) =>
+            job.status === 'succeeded' &&
+            job.result_ref?.validation_id === prepared.validation.validation_id,
+        ),
+        'returned full-validation job was queried',
+      )
+      assert.equal(prepared.input_review_required, false)
+      const rebound = structuredClone(afterImpact.document.pages)
+      for (const page of rebound)
+        for (const block of page.blocks)
+          block.fact_ids = block.fact_ids.map(
+            (fid) => normalReview.fact_rebindings[fid] || fid,
+          )
+      assert.deepEqual(prepared.document.pages, rebound)
+      assert.equal(posts('drafts').length, beforeDrafts)
+      checks.push(
+        'normal C-05 apply polls full-validation job; same-input reanalysis rebounds facts without changing text/photos; no regeneration',
+      )
+    }
     const blocks = prepared.document.pages.flatMap((p) => p.blocks)
     let editable = blocks.find(
       (b) => b.type === 'paragraph' && b.fact_ids.length,

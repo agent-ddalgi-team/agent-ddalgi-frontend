@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { publicationApi } from '../api/publication'
 import type {
   Action,
+  ImpactReview,
+  ImpactReferences,
   Issue,
   Operation,
   PublicationDocument,
@@ -24,6 +26,14 @@ type ProposalRecovery = {
 type Saved = {
   sid: string
   did: string
+  impactReviewId?: string
+  impactCreate?: {
+    key: string
+    revision: number
+    inputRevision: number
+    preflightId: string
+  }
+  impactRecovery?: { key: string; hash: string; reviewId: string }
   format?: 'pdf' | 'docx'
   pending?: Action
   job?: JobRef
@@ -37,6 +47,29 @@ function read(sid: string, did: string): Saved {
   try {
     const value = JSON.parse(sessionStorage.getItem(STORAGE) || 'null')
     if (!value || value.sid !== sid || value.did !== did) return blank
+    if (
+      value.impactReviewId !== undefined &&
+      typeof value.impactReviewId !== 'string'
+    )
+      return blank
+    const create = value.impactCreate
+    if (
+      create &&
+      (typeof create.key !== 'string' ||
+        !Number.isInteger(create.revision) ||
+        !Number.isInteger(create.inputRevision) ||
+        typeof create.preflightId !== 'string')
+    )
+      return blank
+    const impact = value.impactRecovery
+    if (
+      impact &&
+      (typeof impact.key !== 'string' ||
+        typeof impact.reviewId !== 'string' ||
+        typeof impact.hash !== 'string' ||
+        !/^[a-f0-9]{64}$/.test(impact.hash))
+    )
+      return blank
     if (value.format !== undefined && !['pdf', 'docx'].includes(value.format))
       return blank
     if (
@@ -111,7 +144,12 @@ async function snapshot(sid: string, did: string) {
 const failure = (e: unknown) =>
   e instanceof Error ? e.message : '요청을 처리하지 못했습니다.'
 
-export function usePublication(initial: DraftResult) {
+export function usePublication(
+  initial: DraftResult,
+  inputRevision = initial.document.input_revision,
+  preflightId?: string,
+  inputBusy = false,
+) {
   const { session_id: sid, document_id: did } = initial.document
   const [result, setResult] = useState<PublicationDocument | null>(null)
   const [proposal, setProposal] = useState<Proposal | null>(null)
@@ -126,6 +164,7 @@ export function usePublication(initial: DraftResult) {
   const [confirmed, setConfirmed] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [impactReview, setImpactReview] = useState<ImpactReview | null>(null)
   const active = useRef(true)
   const lock = useRef(false)
   const savedRef = useRef(saved)
@@ -186,14 +225,70 @@ export function usePublication(initial: DraftResult) {
   }, [sid, did])
 
   useEffect(() => {
-    if (!dirty && !saved.pending && !saved.proposalRecovery) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const value = await snapshot(sid, did)
+        const rid =
+          savedRef.current.impactReviewId ||
+          savedRef.current.impactRecovery?.reviewId
+        const review = rid
+          ? await publicationApi.impactReview(sid, did, rid)
+          : null
+        if (cancelled) return
+        setResult((old) =>
+          old &&
+          old.document.document_revision >
+            value.result.document.document_revision
+            ? old
+            : value.result,
+        )
+        setIssues(value.issues)
+        setConfirmed(false)
+        setImpactReview(review)
+        if (review?.status === 'applied' && savedRef.current.impactRecovery) {
+          remember({
+            ...savedRef.current,
+            impactRecovery: undefined,
+            impactCreate: undefined,
+          })
+          setEdits({})
+          setRemoved([])
+          setNotice(
+            '자료 변경이 이미 적용되어 저장된 결과를 불러왔습니다. 검증 상태를 확인해 주세요.',
+          )
+        }
+      } catch (cause) {
+        if (!cancelled) setError(failure(cause))
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [sid, did, inputRevision, preflightId])
+
+  useEffect(() => {
+    if (
+      !dirty &&
+      !saved.pending &&
+      !saved.proposalRecovery &&
+      !saved.impactCreate &&
+      !saved.impactRecovery
+    )
+      return
     const warn = (event: BeforeUnloadEvent) => {
       event.preventDefault()
       event.returnValue = ''
     }
     window.addEventListener('beforeunload', warn)
     return () => window.removeEventListener('beforeunload', warn)
-  }, [dirty, saved.pending, saved.proposalRecovery])
+  }, [
+    dirty,
+    saved.pending,
+    saved.proposalRecovery,
+    saved.impactCreate,
+    saved.impactRecovery,
+  ])
 
   useEffect(() => {
     const ref = saved.job
@@ -399,8 +494,17 @@ export function usePublication(initial: DraftResult) {
     !!saved.pending ||
     !!saved.job ||
     !!saved.proposalRecovery ||
-    !!conflict
-  const actionBlocked = blocked || dirty || !result
+    !!conflict ||
+    inputBusy
+  const impactRequired =
+    !!result?.input_review_required || document.input_revision !== inputRevision
+  const actionBlocked =
+    blocked ||
+    dirty ||
+    !result ||
+    impactRequired ||
+    !!saved.impactRecovery ||
+    !!saved.impactCreate
   // 사용자 클릭으로만 정리한다. 내용이 있는 페이지와 마지막 한 페이지는 보존한다.
   const emptyPageIds = document.pages
     .filter((page) => page.blocks.length === 0)
@@ -548,6 +652,224 @@ export function usePublication(initial: DraftResult) {
       if (active.current) setBusy(false)
     }
   }
+  function editOperations(): Operation[] {
+    return document.pages
+      .flatMap((page) => page.blocks)
+      .flatMap((block): Operation[] => {
+        if (removed.includes(block.block_id))
+          return [{ op: 'delete_block', block_id: block.block_id }]
+        if (!(block.block_id in edits)) return []
+        return [
+          {
+            op: 'replace_block_content',
+            block_id: block.block_id,
+            content: {
+              ...block.content,
+              ...(block.type === 'list'
+                ? { items: edits[block.block_id].split('\n') }
+                : block.type === 'image'
+                  ? {
+                      caption: edits[block.block_id],
+                      alt: edits[block.block_id],
+                    }
+                  : { text: edits[block.block_id] }),
+            },
+          },
+        ]
+      })
+  }
+  async function createImpact(confirmed: boolean) {
+    const pfid = preflightId || result?.latest_preflight_id
+    if (
+      !confirmed ||
+      !pfid ||
+      blocked ||
+      dirty ||
+      !result ||
+      saved.impactRecovery
+    )
+      return
+    lock.current = true
+    setBusy(true)
+    setError('')
+    setConfirmed(false)
+    const attempt = savedRef.current.impactCreate || {
+      key: crypto.randomUUID(),
+      revision: document.document_revision,
+      inputRevision,
+      preflightId: pfid,
+    }
+    remember({ ...savedRef.current, impactCreate: attempt })
+    try {
+      const review = await publicationApi.createImpact(
+        sid,
+        did,
+        {
+          expected_revision: attempt.revision,
+          input_revision: attempt.inputRevision,
+          preflight_id: attempt.preflightId,
+          confirmed: true,
+        },
+        attempt.key,
+      )
+      if (!active.current) return
+      // Replayed creation responses can be stale; always query current applicability.
+      const currentReview = await publicationApi.impactReview(
+        sid,
+        did,
+        review.review_id,
+      )
+      const value = await snapshot(sid, did)
+      if (!active.current) return
+      remember({
+        ...savedRef.current,
+        impactCreate: undefined,
+        impactReviewId: review.review_id,
+        exportId: undefined,
+        approvalId: undefined,
+      })
+      setImpactReview(currentReview)
+      install(value)
+      setNotice(
+        '변경 영향을 확인한 뒤 선택한 수정과 유지 사유를 적용해 주세요.',
+      )
+    } catch (cause) {
+      if (active.current) {
+        setError(failure(cause))
+        if (
+          cause instanceof SourceApiError &&
+          cause.status >= 400 &&
+          cause.status < 500 &&
+          ![408, 429].includes(cause.status)
+        )
+          remember({ ...savedRef.current, impactCreate: undefined })
+      }
+    } finally {
+      lock.current = false
+      if (active.current) setBusy(false)
+    }
+  }
+  async function applyImpact(reason: string, references: ImpactReferences[]) {
+    if (
+      !reason.trim() ||
+      blocked ||
+      !impactReview ||
+      !result ||
+      saved.pending ||
+      saved.job
+    )
+      return false
+    lock.current = true
+    setBusy(true)
+    setError('')
+    setConfirmed(false)
+    try {
+      const currentReview = await publicationApi.impactReview(
+        sid,
+        did,
+        impactReview.review_id,
+      )
+      if (!active.current) return false
+      if (
+        currentReview.status === 'applied' &&
+        savedRef.current.impactRecovery
+      ) {
+        install(await snapshot(sid, did))
+        setEdits({})
+        setRemoved([])
+        remember({ ...savedRef.current, impactRecovery: undefined })
+        setImpactReview(currentReview)
+        setNotice(
+          '이미 적용된 변경을 불러왔습니다. 검증 상태를 다시 확인해 주세요.',
+        )
+        return true
+      }
+      if (
+        currentReview.status !== 'pending' ||
+        currentReview.to_input_revision !== inputRevision ||
+        currentReview.preflight_id !==
+          (preflightId || result.latest_preflight_id)
+      ) {
+        setImpactReview(currentReview)
+        throw new Error(
+          '자료·문서·점검이 바뀌었습니다. 최신 점검을 확인하고 영향 목록을 다시 불러와 주세요.',
+        )
+      }
+      const body = {
+        expected_revision: currentReview.document_revision,
+        input_revision: currentReview.to_input_revision,
+        keep_reason: reason.trim(),
+        operations: editOperations(),
+        reference_updates: references,
+      }
+      const digest = await crypto.subtle.digest(
+        'SHA-256',
+        new TextEncoder().encode(JSON.stringify(body)),
+      )
+      const hash = Array.from(new Uint8Array(digest), (b) =>
+        b.toString(16).padStart(2, '0'),
+      ).join('')
+      const attempt = savedRef.current.impactRecovery || {
+        key: crypto.randomUUID(),
+        hash,
+        reviewId: currentReview.review_id,
+      }
+      if (attempt.hash !== hash || attempt.reviewId !== currentReview.review_id)
+        throw new Error(
+          '접수 여부가 불확실한 요청은 동일한 문구·선택·유지 사유로 다시 확인해 주세요.',
+        )
+      remember({ ...savedRef.current, impactRecovery: attempt })
+      const accepted = await publicationApi.applyImpact(
+        sid,
+        did,
+        currentReview.review_id,
+        body,
+        attempt.key,
+      )
+      if (!active.current) return false
+      // The validation runs concurrently; install the document/issues together after its job finishes.
+      setEdits({})
+      setRemoved([])
+      setConflict(null)
+      setProposal(null)
+      setImpactReview({ ...currentReview, status: 'applied' })
+      remember({
+        ...savedRef.current,
+        impactRecovery: undefined,
+        impactCreate: undefined,
+        proposalId: undefined,
+        proposalRecovery: undefined,
+        exportId: undefined,
+        approvalId: undefined,
+        job: {
+          id: accepted.validation_job_id,
+          kind: 'validate',
+          revision: accepted.document_revision,
+        },
+      })
+      setWatch(true)
+      setJob(null)
+      setNotice(
+        '선택한 변경을 저장했습니다. 전체 내용 검증을 확인한 뒤 배치 검사와 최종 승인을 다시 진행해 주세요.',
+      )
+      return true
+    } catch (cause) {
+      if (active.current) {
+        setError(failure(cause))
+        if (
+          cause instanceof SourceApiError &&
+          cause.status >= 400 &&
+          cause.status < 500 &&
+          ![408, 429].includes(cause.status)
+        )
+          remember({ ...savedRef.current, impactRecovery: undefined })
+      }
+      return false
+    } finally {
+      lock.current = false
+      if (active.current) setBusy(false)
+    }
+  }
   async function requestProposal(
     blockId: string,
     instruction: string,
@@ -561,6 +883,7 @@ export function usePublication(initial: DraftResult) {
       dirty ||
       conflict ||
       !result ||
+      impactRequired ||
       !instruction.trim()
     )
       return
@@ -676,6 +999,10 @@ export function usePublication(initial: DraftResult) {
         proposalId: proposal.proposal_id,
         body: {},
       }),
+    impactRequired,
+    impactReview,
+    createImpact,
+    applyImpact,
     result,
     document,
     issues,
@@ -718,7 +1045,7 @@ export function usePublication(initial: DraftResult) {
     approved,
     refresh,
     edit: (id: string, value: string) => {
-      if (blocked) return
+      if (blocked || saved.impactCreate) return
       const block = document.pages
         .flatMap((p) => p.blocks)
         .find((b) => b.block_id === id)
@@ -739,14 +1066,14 @@ export function usePublication(initial: DraftResult) {
       setConfirmed(false)
     },
     toggleRemove: (id: string) => {
-      if (blocked) return
+      if (blocked || saved.impactCreate) return
       setRemoved((old) =>
         old.includes(id) ? old.filter((i) => i !== id) : [...old, id],
       )
       setConfirmed(false)
     },
     save: () => {
-      if (blocked || !dirty) return
+      if (blocked || impactRequired || !dirty || saved.impactRecovery) return
       const operations: Operation[] = document.pages
         .flatMap((p) => p.blocks)
         .flatMap((b): Operation[] => {

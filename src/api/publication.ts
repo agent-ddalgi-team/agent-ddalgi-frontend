@@ -1,6 +1,6 @@
 import { apiClient } from './client'
 import { request, SourceApiError } from './sources'
-import type { DraftBlock, DraftResult } from './aiWorkflow'
+import type { DraftBlock, DraftResult, EvidenceRef } from './aiWorkflow'
 
 export interface Validation {
   validation_id: string
@@ -48,6 +48,27 @@ export interface PublicationDocument extends DraftResult {
   validation: Validation | null
   approval: Approval | null
   layout_checks: { pdf: Layout | null; docx: Layout | null }
+}
+export interface ImpactReview {
+  review_id: string
+  document_id: string
+  document_revision: number
+  from_input_revision: number
+  to_input_revision: number
+  preflight_id: string
+  status: 'pending' | 'applied' | 'stale'
+  items: {
+    block_id: string | null
+    code: string
+    message: string
+    requires_change: boolean
+  }[]
+  fact_rebindings: Record<string, string>
+}
+export interface ImpactReferences {
+  block_id: string
+  fact_ids: string[]
+  evidence_refs: EvidenceRef[]
 }
 export interface Proposal {
   proposal_id: string
@@ -112,6 +133,39 @@ const root = (sid: string) => `/api/v1/sessions/${encodeURIComponent(sid)}`
 const path = (sid: string, did: string) =>
   `${root(sid)}/documents/${encodeURIComponent(did)}`
 export const publicationApi = {
+  impactReview: (sid: string, did: string, rid: string) =>
+    request<ImpactReview>(() =>
+      apiClient.get(
+        `${path(sid, did)}/impact-reviews/${encodeURIComponent(rid)}`,
+        { timeout: 30000 },
+      ),
+    ),
+  createImpact: (
+    sid: string,
+    did: string,
+    body: Record<string, unknown>,
+    key: string,
+  ) =>
+    request<ImpactReview>(() =>
+      apiClient.post(`${path(sid, did)}/impact-reviews`, body, {
+        timeout: 30000,
+        headers: { 'Idempotency-Key': key },
+      }),
+    ),
+  applyImpact: (
+    sid: string,
+    did: string,
+    rid: string,
+    body: Record<string, unknown>,
+    key: string,
+  ) =>
+    request<{ document_revision: number; validation_job_id: string }>(() =>
+      apiClient.post(
+        `${path(sid, did)}/impact-reviews/${encodeURIComponent(rid)}/apply`,
+        body,
+        { timeout: 30000, headers: { 'Idempotency-Key': key } },
+      ),
+    ),
   proposal: (sid: string, pid: string) =>
     request<Proposal>(() =>
       apiClient.get(`${root(sid)}/proposals/${encodeURIComponent(pid)}`, {
