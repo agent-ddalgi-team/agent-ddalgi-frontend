@@ -54,3 +54,35 @@ export function readableIssueMessage(message: string): string {
   )
   return result
 }
+
+// Older saved issues combine explanation, source excerpts and action in one string.
+// Split only the known line markers; preserve all other messages as the reason.
+export function issueMessageParts(message: string) {
+  const readable = readableIssueMessage(message)
+  const evidenceAt = readable.indexOf('\n원문:')
+  const actionAt = readable.lastIndexOf('\n권장 조치:')
+  const starts = [evidenceAt, actionAt].filter((index) => index >= 0)
+  return {
+    reason: readable
+      .slice(0, starts.length ? Math.min(...starts) : undefined)
+      .trim(),
+    evidence:
+      evidenceAt >= 0
+        ? readable
+            .slice(
+              evidenceAt + '\n원문:'.length,
+              actionAt > evidenceAt ? actionAt : undefined,
+            )
+            .trim()
+        : '',
+    action:
+      actionAt >= 0
+        ? readable
+            .slice(
+              actionAt + '\n권장 조치:'.length,
+              evidenceAt > actionAt ? evidenceAt : undefined,
+            )
+            .trim()
+        : '',
+  }
+}
