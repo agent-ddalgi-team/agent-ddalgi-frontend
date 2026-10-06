@@ -349,16 +349,43 @@ export function useSources() {
   async function upload(files: File[]) {
     if (!session || !files.length) return
     await run('파일 업로드 중', async () => {
-      if (
-        files.some(
-          (file) => !/\.(txt|md|pdf|docx|pptx|jpe?g|png)$/i.test(file.name),
-        )
-      )
-        throw new Error(
-          'TXT, MD, PDF, DOCX, PPTX, JPG, PNG 파일을 선택해 주세요.',
-        )
-      if (files.some((file) => file.size > 10 * 1024 * 1024))
-        throw new Error('파일당 최대 10MB까지 첨부할 수 있습니다.')
+      // [Security Hardening] 파일 확장자, 파일 크기, 파일명 유효성 종합 검증
+      const DANGEROUS_EXT_REGEX =
+        /\.(exe|bat|cmd|sh|vbs|scr|jar|js|msi|dll|com|pif|reg|ps1)\b/i
+
+      for (const file of files) {
+        // 1. 파일명 길이 검증
+        if (!file.name || file.name.length > 150) {
+          throw new Error('파일명은 최대 150자 이내여야 합니다.')
+        }
+
+        // 2. Path Traversal 시도 차단
+        if (file.name.includes('..') || /[/\\]/.test(file.name)) {
+          throw new Error('파일명에 유효하지 않은 디렉터리 경로 문자가 포함되어 있습니다.')
+        }
+
+        // 3. 허용된 문서/이미지 확장자 검증
+        if (!/\.(txt|md|pdf|docx|pptx|jpe?g|png)$/i.test(file.name)) {
+          throw new Error(
+            '지원되지 않는 파일 형식입니다. (TXT, MD, PDF, DOCX, PPTX, JPG, PNG 지원)',
+          )
+        }
+
+        // 4. 위험한 실행 파일 위장 및 이중 확장자 차단 (예: exploit.exe.txt)
+        if (DANGEROUS_EXT_REGEX.test(file.name)) {
+          throw new Error(
+            '보안상 실행 파일 또는 스크립트 확장자가 포함된 파일은 첨부할 수 없습니다.',
+          )
+        }
+
+        // 5. 빈 파일(0 Byte) 및 크기 초과(10MB) 차단
+        if (file.size <= 0) {
+          throw new Error(`빈 파일(${file.name}, 0 byte)은 업로드할 수 없습니다.`)
+        }
+        if (file.size > 10 * 1024 * 1024) {
+          throw new Error('파일당 최대 10MB까지 첨부할 수 있습니다.')
+        }
+      }
 
       try {
         const signature = await fingerprint(files)
@@ -447,6 +474,39 @@ export function useSources() {
     setNotice(`✓ 웹 사이트에서 ${photos.length}건의 사진을 가져와 첨부 자료에 자동 등록했습니다.`)
   }
 
+  function addPublicSources(customSources: WorkSource[], replace = false) {
+    if (!session || !customSources.length) return
+    setSources((prev) => {
+      const base = replace
+        ? prev.filter(
+            (s) =>
+              !s.source_id.startsWith('src-pub-') &&
+              !s.warnings?.some((w) => w.message.includes('공개 데이터')),
+          )
+        : prev
+      const existingIds = new Set(base.map((s) => s.source_id))
+      const toAdd = customSources.filter((s) => !existingIds.has(s.source_id))
+      return [...base, ...toAdd]
+    })
+    setSession((prev) => {
+      if (!prev) return prev
+      const prevIds = replace
+        ? prev.selected_source_ids.filter((id) => !id.startsWith('src-pub-'))
+        : prev.selected_source_ids
+      return {
+        ...prev,
+        selected_source_ids: [
+          ...new Set([...prevIds, ...customSources.map((n) => n.source_id)]),
+        ],
+      }
+    })
+    setNotice(
+      replace
+        ? `✓ 관리자 소속 변경에 따라 공개 데이터 ${customSources.length}건을 새로 갱신했습니다.`
+        : `✓ 관리자 소속 공개 데이터 ${customSources.length}건을 자동으로 연동했습니다.`,
+    )
+  }
+
   async function select(source: WorkSource) {
     if (!session) return
     const nextSelected = session.selected_source_ids.includes(source.source_id)
@@ -514,6 +574,7 @@ export function useSources() {
     refresh,
     upload,
     addWebPhotos,
+    addPublicSources,
     select,
     saveBrief,
     remove,

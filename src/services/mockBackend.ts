@@ -487,3 +487,97 @@ export function getFallbackDraft(
     },
   }
 }
+
+/**
+ * 관리자가 속한 조직/기업의 공개 데이터(DART 전자공시, 특허청, 조달청, 공공데이터포털) 자동 수집 목록
+ */
+export function getPublicOrgSources(companyName = '거산케미칼'): WorkSource[] {
+  const org = companyName.trim() || '거산케미칼'
+  return [
+    {
+      source_id: 'src-pub-dart-01',
+      source_version: 1,
+      name: `[DART공시] ${org}_2024년도_정기공시_사업보고서.pdf`,
+      scope: 'registered',
+      origin_kind: 'demo',
+      kind: 'company',
+      role: 'evidence',
+      use_as_company_evidence: true,
+      parse_status: 'complete',
+      text_available: true,
+      image_available: false,
+      asset_ids: [],
+      warnings: [
+        {
+          code: 'PUBLIC_OPEN_DATA',
+          message: '금융감독원 전자공시시스템(DART) 공개 데이터 연동',
+        },
+      ],
+      size_bytes: 840000,
+    },
+    {
+      source_id: 'src-pub-kipris-02',
+      source_version: 1,
+      name: `[특허청] ${org}_초고순도_화학공정_특허등록공보.pdf`,
+      scope: 'registered',
+      origin_kind: 'demo',
+      kind: 'certificate',
+      role: 'evidence',
+      use_as_company_evidence: true,
+      parse_status: 'complete',
+      text_available: true,
+      image_available: true,
+      asset_ids: [],
+      warnings: [
+        {
+          code: 'PUBLIC_OPEN_DATA',
+          message: '특허청 특허정보넷 KIPRIS 공공데이터 연동',
+        },
+      ],
+      size_bytes: 520000,
+    },
+    {
+      source_id: 'src-pub-g2b-03',
+      source_version: 1,
+      name: `[조달청] ${org}_나라장터_공공조달_공급실적증명서.pdf`,
+      scope: 'registered',
+      origin_kind: 'demo',
+      kind: 'company',
+      role: 'evidence',
+      use_as_company_evidence: true,
+      parse_status: 'complete',
+      text_available: true,
+      image_available: false,
+      asset_ids: [],
+      warnings: [
+        {
+          code: 'PUBLIC_OPEN_DATA',
+          message: '조달청 나라장터 공공 조달 계약 이력 연동',
+        },
+      ],
+      size_bytes: 460000,
+    },
+    {
+      source_id: 'src-pub-iso-04',
+      source_version: 1,
+      name: `[공공포털] ${org}_ISO14001_환경경영_인증등록대장.pdf`,
+      scope: 'registered',
+      origin_kind: 'demo',
+      kind: 'certificate',
+      role: 'evidence',
+      use_as_company_evidence: true,
+      parse_status: 'complete',
+      text_available: true,
+      image_available: true,
+      asset_ids: [],
+      warnings: [
+        {
+          code: 'PUBLIC_OPEN_DATA',
+          message: '공공데이터포털 품질·환경 공인 인증 사실 확인 연동',
+        },
+      ],
+      size_bytes: 310000,
+    },
+  ]
+}
+
