@@ -2304,7 +2304,7 @@ export function DocumentWorkspace({
                           문서 전체 검사 · 특정 문장 위치가 지정되지 않았습니다.
                         </p>
                       )}
-                      {issue.code === 'REQUIRED_MISSING' && (
+                      {['REQUIRED_MISSING', 'EVIDENCE_INVALID'].includes(issue.code) && (
                         <button
                           type="button"
                           className={button}

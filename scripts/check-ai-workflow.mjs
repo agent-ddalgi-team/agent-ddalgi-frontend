@@ -730,7 +730,7 @@ finally:
         dropPost &&
         p.request.method === 'POST' &&
         new URL(p.request.url).pathname.endsWith('/' + dropPost) &&
-        p.responseStatusCode === 202
+        p.responseStatusCode === (dropPost === 'reviews' ? 200 : 202)
       ) {
         dropPost = ''
         dropped = true
@@ -950,7 +950,7 @@ finally:
     const beforePublic = await sessionState()
     await click('공개 데이터 자동으로 가져오기')
     await idle()
-    assert.ok(await evaluate('document.body.innerText.includes("외부 API 키와 수집 연결을 아직 설정하지 않았습니다.")'))
+    assert.ok(await evaluate('document.body.innerText.includes("DART API 키 미설정")'))
     assert.deepEqual(await sessionState(), beforePublic)
     await evaluate("document.querySelector('input[aria-label=\"ai-connection-demo.txt 선택\"]').click()")
     await idle()
@@ -972,17 +972,10 @@ finally:
         'photo parsed ' + name,
       )
     }
-    for (const name of ['red.png', 'blue.png']) {
-      await evaluate(
-        `document.querySelector('input[aria-label="${name} 선택"]').click()`,
-      )
-      await until(
-        () =>
-          evaluate(
-            `!!document.querySelector('input[aria-label="${name} 선택"]:checked:not(:disabled)')`,
-          ),
-        'photo selection saved ' + name,
-      )
+    for (const name of ['red.png', 'blue.png', 'unselected.png']) {
+      const wanted = name !== 'unselected.png'
+      await evaluate(`(()=>{const e=document.querySelector('input[aria-label="${name} 선택"]');if(e.checked!==${wanted})e.click()})()`)
+      await until(() => evaluate(`document.querySelector('input[aria-label="${name} 선택"]').checked===${wanted} && !document.querySelector('input[aria-label="${name} 선택"]').disabled`), 'explicit photo selection saved '+name)
     }
     if (draftEntry) {
       const before = posts('preflights').length
@@ -1051,6 +1044,37 @@ finally:
   await until(() => has('[data-testid=preflight-result]'), 'preflight restored')
   assert.equal(await draftDisabled(), true)
   checks.push('facts and evidence; explicit confirmation resets on reload')
+  if (!live) {
+    const preflightState = () => saved().then(state => evaluate(`fetch('/api/v1/sessions/${state.sessionId}/preflights/${state.preflightId}').then(r=>r.json())`))
+    const original = await preflightState()
+    const optional = original.facts.find(f => original.reviewable_fact_ids.includes(f.fact_id))
+    assert.ok(optional, 'optional fact available for review')
+    const company = original.facts.find(f => f.field_key === 'company_name')
+    assert.equal(await has(`[data-review-exclude="${company.fact_id}"]`), false)
+    const analyses = posts('preflights').length
+    await evaluate(`document.querySelectorAll('[data-testid=preflight-result] details').forEach(d=>d.open=true)`)
+    dropped = false
+    dropPost = 'reviews'
+    await evaluate(`document.querySelector('[data-review-exclude="${optional.fact_id}"]').click()`)
+    await until(() => dropped, 'review response lost')
+    await idle()
+    await reload()
+    await until(() => evaluate(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='같은 AI 요청 다시 확인'&&!b.disabled)`), 'review replay action restored')
+    await click('같은 AI 요청 다시 확인')
+    await until(async () => !(await saved()).attempt, 'review replay completed')
+    assert.equal(posts('reviews').at(-1).key, posts('reviews').at(-2).key)
+    const excluded = await preflightState()
+    assert.ok(excluded.excluded_facts.some(f=>f.fact_id===optional.fact_id))
+    assert.ok(!excluded.facts.some(f=>f.fact_id===optional.fact_id))
+    await reload()
+    await until(() => has(`[data-review-restore="${optional.fact_id}"]`), 'exclusion persists')
+    await evaluate(`document.querySelector('[data-review-restore="${optional.fact_id}"]').click()`)
+    await until(async () => (await preflightState()).facts.some(f=>f.fact_id===optional.fact_id), 'fact restored')
+    assert.deepEqual((await preflightState()).facts.find(f=>f.fact_id===optional.fact_id), optional)
+    assert.equal(posts('preflights').length, analyses)
+    assert.equal(await draftDisabled(), true)
+    checks.push('optional fact exclusion/restoration persists; lost response reuses key; required company protected; no new analysis and confirmation resets')
+  }
   if (!live) {
     assert.ok(await evaluate('document.querySelector(\'[aria-label="자료 충족도"]\').textContent.includes("%")'))
     checks.push('server evidence coverage displayed after preflight')
@@ -1308,7 +1332,7 @@ finally:
           'source selection ready ' + name,
         )
         await evaluate(
-          `document.querySelector('input[aria-label="${name} 선택"]').click()`,
+          `(()=>{const e=document.querySelector('input[aria-label="${name} 선택"]');if(e.checked!==${name === 'impact-replacement.txt'})e.click()})()`,
         )
         await until(
           () =>

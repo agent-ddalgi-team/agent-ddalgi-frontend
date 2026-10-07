@@ -7,10 +7,13 @@ import type { SourceSession } from '../api/sources'
 
 const STORAGE = previewStorage + '.ai'
 type Attempt = {
-  kind: 'preflight' | 'draft'
+  kind: 'preflight' | 'draft' | 'review'
   key: string
   jobId?: string
   preflightId?: string
+  action?: 'exclude' | 'restore'
+  factIds?: string[]
+  reason?: string
 }
 type Saved = {
   sessionId: string
@@ -62,12 +65,20 @@ function read(): Saved | null {
       return null
     if (
       value.attempt &&
-      (!['preflight', 'draft'].includes(value.attempt.kind) ||
+      (!['preflight', 'draft', 'review'].includes(value.attempt.kind) ||
         typeof value.attempt.key !== 'string' ||
         (value.attempt.jobId !== undefined &&
           typeof value.attempt.jobId !== 'string') ||
-        (value.attempt.kind === 'draft' &&
-          typeof value.attempt.preflightId !== 'string'))
+        (['draft', 'review'].includes(value.attempt.kind) &&
+          typeof value.attempt.preflightId !== 'string') ||
+        (value.attempt.kind === 'review' &&
+          (!['exclude', 'restore'].includes(value.attempt.action) ||
+            !Array.isArray(value.attempt.factIds) ||
+            !value.attempt.factIds.length ||
+            value.attempt.factIds.some(
+              (id: unknown) => typeof id !== 'string',
+            ) ||
+            typeof value.attempt.reason !== 'string')))
     )
       return null
     return value
@@ -309,6 +320,38 @@ export function useAiWorkflow(session: SourceSession | null) {
         confirmed: false,
         preflight: attempt.kind === 'preflight' ? null : s.preflight,
       }))
+      if (attempt.kind === 'review') {
+        const preflight = await aiApi.review(
+          saved.sessionId,
+          saved.revision,
+          attempt.preflightId!,
+          attempt.action!,
+          attempt.factIds!,
+          attempt.reason!,
+          attempt.key,
+        )
+        if (epoch.current !== version) return
+        const completed = {
+          ...saved,
+          attempt: undefined,
+          preflightId: preflight.preflight_id,
+        }
+        persist(completed)
+        setState((s) => ({
+          ...s,
+          saved: completed,
+          preflight,
+          busy: false,
+          watch: false,
+          confirmed: false,
+          error: '',
+          notice:
+            attempt.action === 'exclude'
+              ? '선택 항목을 제외했습니다. 남은 점검 내용을 다시 확인해 주세요.'
+              : '제외 항목을 복원했습니다. 원래 근거 상태로 돌아왔습니다.',
+        }))
+        return
+      }
       const accepted =
         attempt.kind === 'preflight'
           ? await aiApi.analyze(saved.sessionId, saved.revision, attempt.key)
@@ -406,10 +449,7 @@ export function useAiWorkflow(session: SourceSession | null) {
     current.job &&
     ['queued', 'running'].includes(current.job.status)
   const locked =
-    !!session &&
-    (state.sessionId !== sid ||
-      current.busy ||
-      !!activeJob)
+    !!session && (state.sessionId !== sid || current.busy || !!activeJob)
   const draftFailed = terminalFailure && attempt?.kind === 'draft'
   const canRetryDraft =
     draftFailed &&
@@ -428,10 +468,12 @@ export function useAiWorkflow(session: SourceSession | null) {
   return {
     ...current,
     locked,
-    pendingResponse: !!attempt && !attempt.jobId && current.busy,
+    canRetryDraft,
+    pendingResponse: !!attempt && !attempt.jobId,
     canConfirm:
       !!current.preflight?.can_generate &&
       !locked &&
+      !(attempt && !attempt.jobId) &&
       !(draftFailed && !canRetryDraft) &&
       !current.document &&
       !documentId,
@@ -460,6 +502,34 @@ export function useAiWorkflow(session: SourceSession | null) {
           kind: 'draft',
           key: crypto.randomUUID(),
           preflightId: current.preflight.preflight_id,
+        },
+        {
+          sessionId: sid,
+          revision,
+          preflightId: current.preflight.preflight_id,
+        },
+      )
+    },
+    reviewFact: (factId: string, action: 'exclude' | 'restore') => {
+      if (
+        !session ||
+        locked ||
+        (attempt && !attempt.jobId) ||
+        !current.preflight ||
+        current.preflight.input_revision !== revision
+      )
+        return
+      return submit(
+        {
+          kind: 'review',
+          key: crypto.randomUUID(),
+          preflightId: current.preflight.preflight_id,
+          action,
+          factIds: [factId],
+          reason:
+            action === 'exclude'
+              ? '사용자가 이번 문서에서 해당 선택 항목을 제외했습니다.'
+              : '사용자가 제외 항목을 복원했습니다.',
         },
         {
           sessionId: sid,

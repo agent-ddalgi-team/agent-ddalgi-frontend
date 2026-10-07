@@ -174,6 +174,8 @@ export function AiWorkflowPanel({
   blocked,
   canAnalyze,
   onAnalyze,
+  onSupplement,
+  supplementBlocked = false,
 }: {
   ai: Workflow
   sources: WorkSource[]
@@ -183,11 +185,16 @@ export function AiWorkflowPanel({
   blocked: boolean
   canAnalyze: boolean
   onAnalyze: () => void
+  onSupplement: () => void
+  supplementBlocked?: boolean
 }) {
   const { preflight, document: result, job } = ai
   const document = result?.document
   const working = ai.busy || ai.watch
   const facts = preflight?.facts ?? []
+  const reviewBlocked = blocked || ai.locked || ai.pendingResponse
+  const canExclude = (factId: string) =>
+    !!preflight?.reviewable_fact_ids?.includes(factId)
   const supported = facts.filter((f) => f.status === 'supported').length
   const count = (status: Preflight['facts'][number]['status']) =>
     facts.filter((f) => f.status === status).length
@@ -321,6 +328,7 @@ export function AiWorkflowPanel({
 
       {preflight && (
         <div data-testid="preflight-result" className="flex flex-col gap-3">
+          {supplementBlocked && <p className="text-xs text-amber-800">근거 자료를 보완하려면 먼저 초안 편집 화면의 수정 내용을 저장하거나 버려 주세요.</p>}
           <div
             className={`flex flex-col gap-1 rounded-xl border p-3.5 ${
               ready
@@ -411,6 +419,9 @@ export function AiWorkflowPanel({
               {preflight.recommendations.reason ||
                 '추천은 안내일 뿐이며 목표 페이지 설정을 자동으로 바꾸지 않습니다.'}
             </p>
+            {!!preflight.excluded_facts?.length && (
+              <p className="text-[11px] text-slate-500">구성 추천은 최초 AI 점검 기준입니다. 제외한 항목은 이번 초안의 사실에서 빠집니다.</p>
+            )}
           </div>
 
           {!!preflight.recommendations.needed.length && (
@@ -453,6 +464,11 @@ export function AiWorkflowPanel({
                       {issue.severity === 'blocker' ? '검토 필요' : '주의'}
                     </span>
                     {readableIssueMessage(issue.message)}
+                    {!facts.some(f => issue.fact_ids?.includes(f.fact_id)) && (
+                      <button type="button" className={`${button} mt-2`} disabled={reviewBlocked || supplementBlocked} onClick={onSupplement}>
+                        근거 자료 보완
+                      </button>
+                    )}
                     {facts
                       .filter((fact) => issue.fact_ids?.includes(fact.fact_id))
                       .map((fact) => (
@@ -468,6 +484,35 @@ export function AiWorkflowPanel({
                             refs={fact.evidence_refs}
                             sources={sources}
                           />
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              className={button}
+                              disabled={reviewBlocked || supplementBlocked}
+                              onClick={onSupplement}
+                            >
+                              근거 자료 보완
+                            </button>
+                            {canExclude(fact.fact_id) && (
+                              <button
+                                type="button"
+                                className={button}
+                                data-review-exclude={fact.fact_id}
+                                disabled={reviewBlocked}
+                                onClick={() =>
+                                  void ai.reviewFact(fact.fact_id, 'exclude')
+                                }
+                              >
+                                이 항목 제외
+                              </button>
+                            )}
+                          </div>
+                          {!canExclude(fact.fact_id) &&
+                            fact.status === 'missing' && (
+                              <p className="mt-2 text-[11px]">
+                                필수 내용은 근거를 보완한 뒤 다시 점검해 주세요.
+                              </p>
+                            )}
                         </div>
                       ))}
                   </li>
@@ -530,10 +575,65 @@ export function AiWorkflowPanel({
                     </p>
                   ))}
                   <Evidence refs={fact.evidence_refs} sources={sources} />
+                  {fact.status !== 'supported' && (
+                    <button type="button" className={`${button} mt-2`} disabled={reviewBlocked || supplementBlocked} onClick={onSupplement}>
+                      근거 자료 보완
+                    </button>
+                  )}
+                  {canExclude(fact.fact_id) && (
+                    <button
+                      type="button"
+                      className={`${button} mt-2`}
+                      data-review-exclude={fact.fact_id}
+                      disabled={reviewBlocked}
+                      onClick={() =>
+                        void ai.reviewFact(fact.fact_id, 'exclude')
+                      }
+                    >
+                      이 항목 제외
+                    </button>
+                  )}
                 </article>
               ))}
             </div>
           </details>
+
+          {!!preflight?.excluded_facts?.length && (
+            <section
+              className="rounded-xl border border-slate-200 p-3"
+              data-excluded-facts
+            >
+              <h4 className="text-xs font-bold">
+                이번 문서에서 제외한 항목 {preflight.excluded_facts.length}건
+              </h4>
+              <p className="mt-1 text-[11px] text-slate-500">
+                원문은 보존됩니다. 복원하면 원래 근거 상태와 확인할 사항이
+                돌아옵니다.
+              </p>
+              {preflight.excluded_facts.map((fact) => (
+                <article
+                  key={fact.fact_id}
+                  className="mt-3 rounded-lg bg-slate-50 p-2"
+                >
+                  <p className="text-xs font-semibold">
+                    {labels[fact.field_key] || fact.field_key}
+                  </p>
+                  <p className="mt-1 whitespace-pre-wrap text-xs">
+                    {fact.value || '자료 간 상충 항목'}
+                  </p>
+                  <button
+                    type="button"
+                    className={`${button} mt-2`}
+                    data-review-restore={fact.fact_id}
+                    disabled={reviewBlocked}
+                    onClick={() => void ai.reviewFact(fact.fact_id, 'restore')}
+                  >
+                    항목 복원
+                  </button>
+                </article>
+              ))}
+            </section>
+          )}
 
           {!document && (
             <>
