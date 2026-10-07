@@ -134,6 +134,18 @@ export function useAiWorkflow(session: SourceSession | null) {
             '이전 입력의 점검입니다. AI 점검을 다시 실행해 주세요.',
           )
         if (
+          preflight?.latest_preflight_id &&
+          preflight.latest_preflight_id !== preflight.preflight_id &&
+          !saved.attempt
+        ) {
+          preflight = await aiApi.preflight(sid, preflight.latest_preflight_id)
+          if (cancelled || epoch.current !== version) return
+          if (preflight.input_revision !== revision)
+            throw new Error(
+              '이전 입력의 점검입니다. 자료 상태를 새로고침해 주세요.',
+            )
+        }
+        if (
           document?.latest_preflight_id &&
           document.latest_preflight_id !== preflight?.preflight_id &&
           !saved.attempt
@@ -335,6 +347,32 @@ export function useAiWorkflow(session: SourceSession | null) {
         watch: false,
         error: message(cause),
       }))
+      if (
+        definitive &&
+        cause instanceof SourceApiError &&
+        cause.code === 'INPUT_REVISION_CONFLICT'
+      ) {
+        try {
+          const latestSession = await sourceApi.session(saved.sessionId)
+          if (epoch.current !== version) return
+          if (latestSession.input_revision === saved.revision) {
+            setRestoreTick((n) => n + 1) // Same input: restore the latest preflight with GET only.
+          } else {
+            const stale = { ...retained, preflightId: undefined }
+            persist(stale)
+            setState((s) => ({
+              ...s,
+              saved: stale,
+              preflight: null,
+              confirmed: false,
+              error: message(cause),
+              notice: '자료 상태를 새로고침한 뒤 다시 점검해 주세요.',
+            }))
+          }
+        } catch {
+          /* Keep the original conflict when a status lookup also fails. */
+        }
+      }
       if (cause instanceof SourceApiError && cause.code === 'DOCUMENT_EXISTS') {
         try {
           const latest = await sourceApi.session(saved.sessionId)
@@ -373,6 +411,20 @@ export function useAiWorkflow(session: SourceSession | null) {
       current.busy ||
       !!activeJob)
   const draftFailed = terminalFailure && attempt?.kind === 'draft'
+  const canRetryDraft =
+    draftFailed &&
+    current.job?.status === 'failed' &&
+    !!current.preflight?.can_generate &&
+    !current.document &&
+    !documentId &&
+    current.preflight.input_revision === revision &&
+    (current.job.error?.details?.recovery_action === 'retry_draft' ||
+      [
+        'AGENT_OUTPUT_INVALID',
+        'SERVICE_TEMPORARY_FAILURE',
+        'AI_RATE_LIMIT',
+        'INTERNAL_ERROR',
+      ].includes(current.job.error?.code || ''))
   return {
     ...current,
     locked,
@@ -380,7 +432,7 @@ export function useAiWorkflow(session: SourceSession | null) {
     canConfirm:
       !!current.preflight?.can_generate &&
       !locked &&
-      !draftFailed &&
+      !(draftFailed && !canRetryDraft) &&
       !current.document &&
       !documentId,
     setConfirmed: (confirmed: boolean) =>
@@ -398,7 +450,7 @@ export function useAiWorkflow(session: SourceSession | null) {
         locked ||
         !current.confirmed ||
         !current.preflight?.can_generate ||
-        draftFailed ||
+        (draftFailed && !canRetryDraft) ||
         current.document ||
         documentId
       )

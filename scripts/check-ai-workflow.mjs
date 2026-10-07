@@ -247,6 +247,13 @@ let sequence = 0,
   dropped = false,
   failPoll = false,
   failedPoll = false
+const draftEntry = process.argv.includes('--draft-entry')
+assert(!draftEntry || !live, 'Draft entry uses isolated mock responses only')
+let preflightBlockMessage = ''
+const draftRecovery = process.argv.includes('--draft-recovery')
+assert(!draftRecovery || !live, 'Draft recovery uses mock responses only')
+let simulateDraftFailure = false
+const simulatedJob = 'job_simulated_draft_failure'
 let dropSave = false,
   dropApply = false,
   dropImpactCreate = false,
@@ -608,6 +615,71 @@ finally:
     } else if (data.method === 'Fetch.requestPaused') {
       const p = data.params
       if (
+        preflightBlockMessage &&
+        p.request.method === 'GET' &&
+        /\/preflights\/[^/]+$/.test(new URL(p.request.url).pathname) &&
+        p.responseStatusCode === 200
+      ) {
+        const blockedMessage = preflightBlockMessage
+        void command('Fetch.getResponseBody', { requestId: p.requestId })
+          .then(({ body, base64Encoded }) => {
+            const result = JSON.parse(
+              base64Encoded
+                ? Buffer.from(body, 'base64').toString('utf8')
+                : body,
+            )
+            result.can_generate = false
+            result.recommendations.needed = [blockedMessage]
+            intercept('Fetch.fulfillRequest', {
+              requestId: p.requestId,
+              responseCode: 200,
+              responseHeaders: [
+                { name: 'Content-Type', value: 'application/json' },
+              ],
+              body: Buffer.from(JSON.stringify(result)).toString('base64'),
+            })
+          })
+          .catch((cause) =>
+            errors.push('preflight readiness interception: ' + cause.message),
+          )
+        return
+      }
+      if (
+        !p.responseStatusCode &&
+        ((simulateDraftFailure &&
+          p.request.method === 'POST' &&
+          new URL(p.request.url).pathname.endsWith('/drafts')) ||
+          (p.request.method === 'GET' &&
+            p.request.url.endsWith('/jobs/' + simulatedJob)))
+      ) {
+        const post = p.request.method === 'POST'
+        if (post) simulateDraftFailure = false
+        const body = post
+          ? { job_id: simulatedJob }
+          : {
+              job_id: simulatedJob,
+              kind: 'draft',
+              status: 'failed',
+              progress: { stage: 'drafting', message: null },
+              result_ref: null,
+              error: {
+                code: 'AGENT_OUTPUT_INVALID',
+                message: '초안의 날짜가 빠졌습니다.',
+                retryable: true,
+                details: { recovery_action: 'retry_draft' },
+              },
+            }
+        intercept('Fetch.fulfillRequest', {
+          requestId: p.requestId,
+          responseCode: post ? 202 : 200,
+          responseHeaders: [
+            { name: 'Content-Type', value: 'application/json' },
+          ],
+          body: Buffer.from(JSON.stringify(body)).toString('base64'),
+        })
+        return
+      }
+      if (
         dropApply &&
         p.request.method === 'POST' &&
         new URL(p.request.url).pathname.endsWith('/apply') &&
@@ -912,6 +984,17 @@ finally:
         'photo selection saved ' + name,
       )
     }
+    if (draftEntry) {
+      const before = posts('preflights').length
+      const toggleText = () => evaluate(`document.querySelector('input[aria-label="ai-connection-demo.txt 선택"]').click()`)
+      await toggleText()
+      await until(() => evaluate(`!document.querySelector('input[aria-label="ai-connection-demo.txt 선택"]').checked && !document.querySelector('input[aria-label="red.png 선택"]').disabled`), 'photo-only selection saved')
+      await until(() => evaluate(`[...document.querySelectorAll('button')].filter(b=>b.textContent.trim()==='AI 자료 점검').every(b=>b.disabled)`), 'photo-only AI disabled')
+      assert.equal(posts('preflights').length,before)
+      await toggleText()
+      await until(() => evaluate(`document.querySelector('input[aria-label="ai-connection-demo.txt 선택"]').checked && !document.querySelector('input[aria-label="red.png 선택"]').disabled`), 'text selection restored')
+      checks.push('photo-only selection disables analysis without an AI request; adding text restores the action')
+    }
     checks.push('two photo sources selected; third photo remains unselected')
   }
   await screenshot('s01-sources.png')
@@ -996,12 +1079,125 @@ finally:
     assert.equal(posts('preflights').length, before)
     checks.push('input invalidation and failed polling resumes with GET only')
     dropped = false
-    dropPost = 'drafts'
+    dropPost = draftRecovery ? '' : 'drafts'
   }
+    if (draftEntry) {
+      const counts = [posts('preflights').length, posts('drafts').length]
+      for (const message of [
+        '대상 회사명과 확인된 회사명 근거가 일치하지 않습니다. 자료를 보완해 주세요.',
+        '필수 내용과 제외 요청이 겹칩니다. 작성 조건을 정리해 주세요.',
+        '초안 본문에 사용할 확정 근거가 없습니다. 자료나 제외 조건을 보완해 주세요.',
+        '새로운 점검 결과가 있습니다. 상태를 새로고침하고 최신 점검을 확인해 주세요.',
+      ]) {
+        preflightBlockMessage = message
+        await reload()
+        await until(
+          () =>
+            evaluate(
+              `document.querySelector('[data-testid=preflight-result]')?.innerText.includes(${JSON.stringify(message)})`,
+            ),
+          'draft entry reason',
+        )
+        assert.equal(await draftDisabled(), true)
+        assert.equal(
+          await evaluate(
+            "document.querySelector('[data-testid=preflight-result] input[type=checkbox]').disabled",
+          ),
+          true,
+        )
+        assert.deepEqual(
+          [posts('preflights').length, posts('drafts').length],
+          counts,
+        )
+      }
+      preflightBlockMessage = ''
+      await reload()
+      await until(
+        () =>
+          has(
+            '[data-testid=preflight-result] input[type=checkbox]:not(:disabled)',
+          ),
+        'ready preflight restored',
+      )
+      assert.deepEqual(
+        [posts('preflights').length, posts('drafts').length],
+        counts,
+      )
+      checks.push(
+        'four draft-entry blockers display the actual reason, disable confirmation, survive reload and create no AI jobs',
+      )
+    const previous = await saved()
+    const pendingCheck = await evaluate(`fetch('/api/v1/sessions/'+${JSON.stringify(previous.sessionId)}+'/preflights',{
+      method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':'another-tab-preflight'},
+      body:JSON.stringify({expected_input_revision:${previous.revision}})}).then(r=>r.json())`)
+    let latest
+    await until(async () => {
+      latest = await evaluate(`fetch('/api/v1/sessions/'+${JSON.stringify(previous.sessionId)}+'/jobs/'+${JSON.stringify(pendingCheck.job_id)}).then(r=>r.json())`)
+      return latest.status === 'succeeded'
+    },'another tab preflight finished')
+    const postCount = posts('preflights').length
+    await confirm()
+    await click('확인한 자료로 초안 생성') // Server rejects the old preflight before creating an AI job.
+    await until(async () => (await saved())?.preflightId === latest.result_ref.preflight_id,'latest preflight restored by GET after 409')
+    assert.equal(posts('preflights').length,postCount)
+    assert.equal(posts('drafts').length,counts[1]+1)
+    assert.equal(await evaluate("document.querySelector('[data-testid=preflight-result] input[type=checkbox]').checked"),false)
+    checks.push('stale preflight 409 restores another tab latest preflight by GET without reextraction or inherited confirmation')
+
+    }
+  const draftPostsBefore = posts('drafts').length
   await screenshot('s01-preflight.png')
   await confirm()
-  await click('확인한 자료로 초안 생성')
-  if (!live) {
+  if (draftRecovery) {
+      await command('Fetch.enable', {
+        patterns: [
+          { urlPattern: '*api/v1/*', requestStage: 'Response' },
+          { urlPattern: '*api/v1/*/drafts', requestStage: 'Request' },
+          {
+            urlPattern: '*api/v1/*/jobs/' + simulatedJob,
+            requestStage: 'Request',
+          },
+        ],
+      })
+      const before = posts('preflights').length
+      const sessionState = () => evaluate(
+      'fetch("/api/v1/sessions/' + sessionId + '").then(r=>r.json())',
+    )
+    const beforeSession = await sessionState()
+      simulateDraftFailure = true
+      await click('확인한 자료로 초안 생성')
+      await until(
+        () => evaluate("document.body.innerText.includes('초안 생성 실패')"),
+        'draft failure shown',
+      )
+      assert.equal(
+        await evaluate(
+          "document.querySelector('[data-testid=preflight-result] input[type=checkbox]').checked",
+        ),
+        false,
+      )
+      await reload()
+      await until(
+        () => evaluate("document.body.innerText.includes('초안 생성 실패')"),
+        'draft failure restored',
+      )
+      assert.equal(posts('preflights').length, before)
+      assert.deepEqual(await sessionState(), beforeSession)
+      await confirm()
+      await click('확인한 자료로 초안 다시 생성')
+      await until(
+        () => has('[data-testid=draft-result]'),
+        'draft-only retry saved',
+      )
+      assert.equal(posts('preflights').length, before)
+      const drafts = posts('drafts')
+      assert.equal(drafts.length, draftPostsBefore+2)
+      assert.notEqual(drafts.at(-2).key, drafts.at(-1).key)
+      checks.push(
+        'failed draft survives reload; confirmation resets; explicit draft-only retry uses new key without reanalysis or input changes',
+      )
+    } else await click('확인한 자료로 초안 생성')
+    if (!live && !draftRecovery) {
     await until(() => dropped, 'draft response lost')
     await idle()
     await reload()
@@ -1010,7 +1206,7 @@ finally:
       () => has('[data-testid=draft-result]'),
       'draft restored from summary',
     )
-    assert.equal(posts('drafts').length, 1)
+    assert.equal(posts('drafts').length, draftPostsBefore+1)
     checks.push(
       'lost draft response restores saved document without another generation',
     )

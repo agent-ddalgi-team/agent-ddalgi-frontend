@@ -44,7 +44,12 @@ export interface ReadingJob {
   status:
     'queued' | 'running' | 'waiting_user' | 'succeeded' | 'failed' | 'cancelled'
   progress: { stage: string; message: string | null }
-  error: { code: string; message: string; retryable: boolean } | null
+  error: {
+    code: string
+    message: string
+    retryable: boolean
+    details?: { recovery_action?: string }
+  } | null
 }
 
 export class SourceApiError extends Error {
