@@ -1437,7 +1437,8 @@ export function SourceSelectionView({
               {!!work.session && !readable && (
                 <p className="mt-3 flex items-start gap-1.5 rounded-xl bg-amber-50 p-3 leading-relaxed text-amber-900">
                   <AlertTriangle size={14} className="mt-0.5 shrink-0" />
-                  초안을 만들려면 텍스트를 읽을 수 있는 문서를 선택해야 합니다.
+                  등록 자료 없이도 공개 연동 자료나 이번 작업 첨부의 읽기 완료된
+                  텍스트를 선택하면 AI 자료 점검을 실행할 수 있습니다.
                   사진만으로는 회사 내용을 작성할 수 없습니다.
                 </p>
               )}

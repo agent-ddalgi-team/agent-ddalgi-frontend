@@ -244,6 +244,7 @@ let sequence = 0,
   browserLog = '',
   backendLog = '',
   dropPost = '',
+  sourceSelectionFixture = '',
   dropped = false,
   failPoll = false,
   failedPoll = false
@@ -743,6 +744,38 @@ finally:
         })
         return
       }
+      const sourcePath = new URL(p.request.url).pathname
+      if (
+        sourceSelectionFixture &&
+        p.request.method === 'GET' &&
+        p.responseStatusCode === 200 &&
+        (sourcePath === '/api/v1/sources' || /\/sessions\/[^/]+\/sources$/.test(sourcePath))
+      ) {
+        command('Fetch.getResponseBody', { requestId: p.requestId })
+          .then(({ body, base64Encoded }) => {
+            const result = JSON.parse(base64Encoded ? Buffer.from(body, 'base64').toString('utf8') : body)
+            if (sourcePath === '/api/v1/sources') {
+              result.items.push({
+                source_id: 'UI_UNUSED_PENDING_SOURCE', source_version: 1,
+                scope: 'registered', name: '선택하지 않은 등록 자료 읽기 중',
+                kind: 'company', role: 'evidence', size_bytes: 1,
+                parse_status: 'reading', text_available: false, image_available: false,
+                asset_ids: [], use_as_company_evidence: true, origin_kind: 'real', warnings: [],
+              })
+            } else if (sourceSelectionFixture === 'public') {
+              result.items = result.items.map((item) => item.name === 'ai-connection-demo.txt'
+                ? { ...item, warnings: [...item.warnings, { code: 'PUBLIC_OPEN_DATA', message: '공개 연동 자료 검사' }] }
+                : item)
+            }
+            intercept('Fetch.fulfillRequest', {
+              requestId: p.requestId, responseCode: 200,
+              responseHeaders: [{ name: 'Content-Type', value: 'application/json' }],
+              body: Buffer.from(JSON.stringify(result)).toString('base64'),
+            })
+          })
+          .catch((cause) => errors.push('source selection interception: ' + cause.message))
+        return
+      }
       if (
         preflightBlockMessage &&
         p.request.method === 'GET' &&
@@ -1085,6 +1118,26 @@ finally:
     await evaluate("document.querySelector('input[aria-label=\"ai-connection-demo.txt 선택\"]').click()")
     await idle()
     checks.push('company saved/reloaded; changed company clears selection and retains uploads; public import without keys reports error without mutation')
+    await command('Fetch.enable', { patterns: [{ urlPattern: '*api/v1/*', requestStage: 'Response' }] })
+    for (const mode of ['attached', 'public']) {
+      sourceSelectionFixture = mode
+      await click('상태 새로고침')
+      await idle()
+      const tabLabel = mode === 'public' ? '공개 연동 데이터' : '이번 작업 첨부'
+      await evaluate('[...document.querySelectorAll("[role=tab]")].find(b=>b.textContent.includes('+JSON.stringify(tabLabel)+')).click()')
+      await until(() => has('input[aria-label="ai-connection-demo.txt 선택"]:checked:not(:disabled)'), mode + ' selected source')
+      await until(() => evaluate('[...document.querySelectorAll("button")].some(b=>b.textContent.trim()==="AI 자료 점검"&&!b.disabled)'), mode + ' only permits analysis despite unrelated pending registered source')
+      const state = await sessionState()
+      assert.equal(state.selected_source_ids.length, 1)
+      assert.ok(state.selected_source_ids[0].startsWith('src_'))
+      assert.ok(!state.selected_source_ids.includes('UI_UNUSED_PENDING_SOURCE'))
+    }
+    sourceSelectionFixture = ''
+    await click('상태 새로고침')
+    await idle()
+    await evaluate('[...document.querySelectorAll("[role=tab]")].find(b=>b.textContent.includes("이번 작업 첨부")).click()')
+    checks.push('session attachment only and public source only enable AI without registered selection; unselected reading registered source does not block')
+
   }
   if (photoTrial) {
     // DOCX limits enlargement to native pixels / 150ppi. Use enough pixels

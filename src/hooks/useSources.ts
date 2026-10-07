@@ -127,10 +127,6 @@ export function useSources(allowDocumentChanges = false) {
   )
   const [polling, setPolling] = useState(true)
   const [pendingUpload, setPendingUpload] = useState(false)
-  const [publicStatus, setPublicStatus] = useState<{
-    message: string
-    status: string
-  } | null>(null)
   const statusSessionId = session?.session_id
   useEffect(() => {
     let cancelled = false
@@ -155,21 +151,6 @@ export function useSources(allowDocumentChanges = false) {
   const attempts = useRef(0)
   const generation = useRef(0)
 
-  useEffect(() => {
-    let cancelled = false
-    if (!session?.session_id) return
-    void sourceApi.publicStatus(session.session_id).then(
-      (value) => {
-        if (!cancelled) setPublicStatus(value)
-      },
-      () => {
-        if (!cancelled) setPublicStatus(null)
-      },
-    )
-    return () => {
-      cancelled = true
-    }
-  }, [session?.session_id])
 
   function clear() {
     forget()
@@ -758,7 +739,6 @@ export function useSources(allowDocumentChanges = false) {
     saveBrief,
     changeCompany,
     importPublic,
-    publicStatus,
     remove,
     close,
     retryUpload: () => upload(pendingFiles.current),
