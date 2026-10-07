@@ -296,6 +296,7 @@ export function useSources(allowDocumentChanges = false) {
         )
         if (publicJob && !running(publicJob)) {
           sessionStorage.removeItem(PUBLIC_IMPORT)
+          if (publicJob.status !== 'succeeded') setNotice('')
           if (publicJob.status === 'succeeded')
             setNotice(
               'DART 공개 자료를 가져왔습니다. 사용할 자료를 선택해 주세요.',
@@ -682,6 +683,7 @@ export function useSources(allowDocumentChanges = false) {
         const job = value.jobs.find((item) => item.job_id === accepted.job_id)
         if (job && !running(job)) sessionStorage.removeItem(PUBLIC_IMPORT)
         if (job?.status === 'failed' || job?.status === 'cancelled') {
+          setNotice('')
           setError(
             job.error?.message || 'DART 공개 자료를 가져오지 못했습니다.',
           )
