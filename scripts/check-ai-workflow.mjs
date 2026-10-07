@@ -374,6 +374,112 @@ const changePurpose = (value) =>
   evaluate(
     `(()=>{const i=document.querySelector('input[aria-label="사용 목적"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(i,${JSON.stringify(value)});i.dispatchEvent(new Event('input',{bubbles:true}));})()`,
   )
+async function purposeDropdownCheck() {
+  await until(
+    () => has('input[aria-label="사용 목적"]:not(:disabled)'),
+    'purpose editable',
+  )
+  const original = await evaluate(
+    `document.querySelector('input[aria-label="사용 목적"]').value`,
+  )
+  await changePurpose('신규 고객 소개 (표준 제안용)')
+  await until(
+    () =>
+      evaluate(
+        `document.querySelector('input[aria-label="사용 목적"]').value === '신규 고객 소개 (표준 제안용)'`,
+      ),
+    'purpose set',
+  )
+  await evaluate(
+    `document.querySelector('button[aria-label="사용 목적 목록 열기"]').click()`,
+  )
+  await until(
+    () =>
+      evaluate(
+        `document.querySelectorAll('#purpose-options [role="option"]').length === 4`,
+      ),
+    'all purpose options with existing text',
+  )
+  assert.equal(
+    await evaluate(
+      `document.querySelector('input[aria-label="사용 목적"]').value`,
+    ),
+    '신규 고객 소개 (표준 제안용)',
+  )
+  await screenshot('purpose-dropdown.png')
+  await evaluate(`document.querySelector('#purpose-option-1').click()`)
+  await until(
+    () =>
+      evaluate(
+        `document.querySelector('input[aria-label="사용 목적"]').value === '협력사 등록 및 제휴 제안' && !document.querySelector('#purpose-options')`,
+      ),
+    'purpose selected without clearing',
+  )
+  await changePurpose('직접 입력한 맞춤 목적')
+  await until(
+    () =>
+      evaluate(
+        `document.querySelector('input[aria-label="사용 목적"]').value === '직접 입력한 맞춤 목적'`,
+      ),
+    'custom purpose',
+  )
+  await evaluate(
+    `document.querySelector('button[aria-label="사용 목적 목록 열기"]').click()`,
+  )
+  await until(
+    () =>
+      evaluate(
+        `document.querySelectorAll('#purpose-options [role="option"]').length === 4`,
+      ),
+    'all purpose options with custom text',
+  )
+  await evaluate(
+    `document.querySelector('input[aria-label="사용 목적"]').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`,
+  )
+  await until(
+    () => evaluate(`!document.querySelector('#purpose-options')`),
+    'escape closes purpose options',
+  )
+  assert.equal(
+    await evaluate(
+      `document.querySelector('input[aria-label="사용 목적"]').value`,
+    ),
+    '직접 입력한 맞춤 목적',
+  )
+  await evaluate(
+    `document.querySelector('input[aria-label="사용 목적"]').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true}))`,
+  )
+  await until(() => has('#purpose-option-0'), 'keyboard opens purpose options')
+  await evaluate(
+    `document.querySelector('input[aria-label="사용 목적"]').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))`,
+  )
+  await until(
+    () =>
+      evaluate(
+        `document.querySelector('input[aria-label="사용 목적"]').value === '신규 고객 소개 (표준 제안용)' && !document.querySelector('#purpose-options')`,
+      ),
+    'keyboard selects purpose',
+  )
+  await evaluate(
+    `document.querySelector('button[aria-label="사용 목적 목록 열기"]').click()`,
+  )
+  await until(() => has('#purpose-options'), 'purpose options reopened')
+  await evaluate(
+    `document.body.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}))`,
+  )
+  await until(
+    () => evaluate(`!document.querySelector('#purpose-options')`),
+    'outside closes purpose options',
+  )
+  await changePurpose(original)
+  await until(
+    () =>
+      evaluate(
+        `document.querySelector('input[aria-label="사용 목적"]').value === ${JSON.stringify(original)}`,
+      ),
+    'original purpose restored',
+  )
+}
 const confirm = () =>
   evaluate(
     `document.querySelector('[data-testid=preflight-result] input[type=checkbox]').click()`,
@@ -919,6 +1025,7 @@ finally:
       ),
     'start screen',
   )
+  await purposeDropdownCheck()
   if (!live) {
     await evaluate("document.querySelector('button[title=\"소속 기업/기관 변경\"]').click()")
     await until(() => has('input[aria-label="대상 회사명"]'), 'company dialog before session')

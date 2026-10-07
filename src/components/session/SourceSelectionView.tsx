@@ -9,6 +9,7 @@ import {
   Pencil,
   Check,
   CheckCircle2,
+  ChevronDown,
   FileSpreadsheet,
   FileText,
   FolderOpen,
@@ -58,6 +59,7 @@ const purposeHint: Record<string, string> = {
     '공정·설비·인증 근거를 중심으로 회사 역량을 설명합니다.',
   '투자·사업 설명': '사업 분야와 성장 근거, 연혁을 균형 있게 정리합니다.',
 }
+const purposeOptions = Object.keys(purposeHint)
 const directionHint: Record<SourceBrief['direction'], string> = {
   balanced: '개요·기술·연혁을 고르게 배치합니다.',
   quality_process: '품질 체계와 공정·설비 근거를 앞세웁니다.',
@@ -197,6 +199,19 @@ export function SourceSelectionView({
   const work = useSources(sourceEditing && !sourceChangeBlocked)
   const ai = useAiWorkflow(work.session)
   const fileInput = useRef<HTMLInputElement>(null)
+  const purposeControl = useRef<HTMLDivElement>(null)
+  const purposeInput = useRef<HTMLInputElement>(null)
+  const [purposeOpen, setPurposeOpen] = useState(false)
+  const [purposeIndex, setPurposeIndex] = useState(0)
+  useEffect(() => {
+    if (!purposeOpen) return
+    const closeOutside = (event: PointerEvent) => {
+      if (!purposeControl.current?.contains(event.target as Node))
+        setPurposeOpen(false)
+    }
+    document.addEventListener('pointerdown', closeOutside)
+    return () => document.removeEventListener('pointerdown', closeOutside)
+  }, [purposeOpen])
   const [tab, setTab] = useState<'registered' | 'public' | 'session'>(
     'registered',
   )
@@ -726,19 +741,106 @@ export function SourceSelectionView({
                     필수 입력
                   </span>
                 </label>
-                <input
-                  id="brief-purpose"
-                  aria-label="사용 목적"
-                  list="purpose-options"
-                  className={input}
-                  value={work.brief.purpose}
-                  onChange={(e) => setBrief({ purpose: e.target.value })}
-                />
-                <datalist id="purpose-options">
-                  {Object.keys(purposeHint).map((item) => (
-                    <option key={item} value={item} />
-                  ))}
-                </datalist>
+                <div
+                  ref={purposeControl}
+                  className="relative"
+                  onBlur={(event) => {
+                    if (!event.currentTarget.contains(event.relatedTarget))
+                      setPurposeOpen(false)
+                  }}
+                >
+                  <input
+                    ref={purposeInput}
+                    id="brief-purpose"
+                    aria-label="사용 목적"
+                    role="combobox"
+                    aria-expanded={purposeOpen && !locked}
+                    aria-controls="purpose-options"
+                    aria-autocomplete="none"
+                    aria-activedescendant={
+                      purposeOpen && !locked
+                        ? `purpose-option-${purposeIndex}`
+                        : undefined
+                    }
+                    autoComplete="off"
+                    className={`${input} pr-10`}
+                    value={work.brief.purpose}
+                    onChange={(event) => {
+                      setBrief({ purpose: event.target.value })
+                      setPurposeOpen(false)
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.nativeEvent.isComposing) return
+                      if (
+                        event.key === 'ArrowDown' ||
+                        event.key === 'ArrowUp'
+                      ) {
+                        event.preventDefault()
+                        setPurposeIndex(
+                          purposeOpen
+                            ? (purposeIndex +
+                                (event.key === 'ArrowDown' ? 1 : -1) +
+                                purposeOptions.length) %
+                                purposeOptions.length
+                            : Math.max(
+                                0,
+                                purposeOptions.indexOf(work.brief.purpose),
+                              ),
+                        )
+                        setPurposeOpen(true)
+                      } else if (event.key === 'Enter' && purposeOpen) {
+                        event.preventDefault()
+                        setBrief({ purpose: purposeOptions[purposeIndex] })
+                        setPurposeOpen(false)
+                      } else if (event.key === 'Escape') {
+                        setPurposeOpen(false)
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    aria-label="사용 목적 목록 열기"
+                    aria-controls="purpose-options"
+                    aria-expanded={purposeOpen && !locked}
+                    className="absolute inset-y-0 right-0 flex w-9 cursor-pointer items-center justify-center rounded-r-xl text-slate-600 hover:text-[#007A78] disabled:cursor-not-allowed"
+                    onClick={() => {
+                      setPurposeIndex(
+                        Math.max(0, purposeOptions.indexOf(work.brief.purpose)),
+                      )
+                      setPurposeOpen(!purposeOpen)
+                      purposeInput.current?.focus()
+                    }}
+                  >
+                    <ChevronDown className="h-4 w-4" />
+                  </button>
+                  {purposeOpen && !locked && (
+                    <div
+                      id="purpose-options"
+                      role="listbox"
+                      aria-label="사용 목적 선택"
+                      className="absolute top-full z-40 mt-1 w-full rounded-xl border border-slate-200 bg-white p-1 shadow-lg"
+                    >
+                      {purposeOptions.map((item, index) => (
+                        <button
+                          key={item}
+                          id={`purpose-option-${index}`}
+                          type="button"
+                          role="option"
+                          aria-selected={work.brief.purpose === item}
+                          className={`block w-full cursor-pointer rounded-lg px-2 py-2 text-left text-xs leading-relaxed hover:bg-teal-50 ${purposeIndex === index ? 'bg-teal-50 text-[#007A78]' : 'text-slate-700'}`}
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => {
+                            setBrief({ purpose: item })
+                            setPurposeOpen(false)
+                            purposeInput.current?.focus()
+                          }}
+                        >
+                          {item}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <p className="text-[11px] text-slate-500">
                   {purposeHint[work.brief.purpose] ||
                     (work.brief.purpose.trim()
