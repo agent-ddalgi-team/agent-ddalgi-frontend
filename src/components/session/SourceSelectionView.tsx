@@ -1136,8 +1136,10 @@ export function SourceSelectionView({
                 </button>
               </div>
               <p className="mt-2 text-slate-600">
-                {work.publicStatus?.message || '공개 연동 설정 확인 중'} 실제로
-                등록된 공개 자료 {counts.public}건
+                {work.session
+                  ? work.publicStatus?.message || '공개 자료 연결 상태 확인 중'
+                  : '작업을 시작하면 DART 연결 상태를 확인합니다.'}
+                {' · '}실제로 등록된 공개 자료 {counts.public}건
               </p>
             </div>
             <div
@@ -1275,12 +1277,8 @@ export function SourceSelectionView({
             ) : (
               <ul className="flex flex-col gap-2.5">
                 {(tab === 'public'
-                  ? work.sources.filter(
-                      (s) =>
-                        s.source_id.startsWith('src-pub-') ||
-                        s.warnings?.some((w) =>
-                          w.message.includes('공개 데이터'),
-                        ),
+                  ? work.sources.filter((s) =>
+                      s.warnings?.some((w) => w.code === 'PUBLIC_OPEN_DATA'),
                     )
                   : tab === 'registered'
                     ? work.sources.filter((s) => s.scope === 'registered')
@@ -1566,6 +1564,7 @@ export function SourceSelectionView({
         key={currentCompany + String(companyModalOpen)}
         isOpen={companyModalOpen}
         currentCompany={currentCompany}
+        currentCorpCode={work.brief.dart_corp_code || undefined}
         onClose={onCompanyModalClose}
         onConfirm={work.changeCompany}
         disabled={locked}
