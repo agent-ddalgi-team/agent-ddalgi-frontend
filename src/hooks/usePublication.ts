@@ -137,19 +137,19 @@ function persist(saved: Saved) {
   sessionStorage.setItem(STORAGE, JSON.stringify({ ...saved, pending }))
 }
 async function snapshot(sid: string, did: string) {
-  const result = await publicationApi.document(sid, did)
-  if (result.approvals_by_format)
-    result.approval = result.approvals_by_format[read(sid, did).format || 'pdf']
-  const issues = await publicationApi.issues(sid, did)
-  if (
-    issues.document_revision !== result.document.document_revision ||
-    issues.validation_id !== (result.validation?.validation_id || null)
-  )
-    throw new Error(
-      '조회 중 문서나 검증이 변경되었습니다. 상태를 다시 확인해 주세요.',
-    )
-  return { result, issues: issues.issues }
+  // Completion between these GETs is a transient read race, not a new AI request.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const result = await publicationApi.document(sid, did)
+    if (result.approvals_by_format)
+      result.approval = result.approvals_by_format[read(sid, did).format || 'pdf']
+    const issues = await publicationApi.issues(sid, did)
+    if (issues.document_revision === result.document.document_revision &&
+        issues.validation_id === (result.validation?.validation_id || null))
+      return { result, issues: issues.issues }
+  }
+  throw new Error('조회 중 문서나 검증이 변경되었습니다. 상태를 다시 확인해 주세요.')
 }
+
 const failure = (e: unknown) =>
   e instanceof Error ? e.message : '요청을 처리하지 못했습니다.'
 

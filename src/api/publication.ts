@@ -20,8 +20,30 @@ export interface Issue {
   origin: 'server' | 'agent' | 'preflight' | 'layout'
   layout_format: 'pdf' | 'docx' | null
   block_ids: string[]
+  fact_ids?: string[]
+  source_ids?: string[]
   resolution: { reason?: string } | null
 }
+// A linked block is a place to inspect; it is not an AI finding against that sentence.
+export function issueEditLocations(issue: Issue, pages: DraftResult['document']['pages']) {
+  const directIds = new Set(issue.block_ids)
+  const factIds = new Set(issue.fact_ids || [])
+  const sourceIds = new Set(issue.source_ids || [])
+  const blocks = pages.flatMap((page, pageIndex) => page.blocks.map((block, blockIndex) => ({ page, pageIndex, block, blockIndex })))
+  const direct = blocks.filter(({ block }) => directIds.has(block.block_id))
+  if (direct.length) return direct.map(location => ({ ...location, direct: true }))
+  return blocks
+    .filter(({ block }) => block.fact_ids.some(id => factIds.has(id)) || block.evidence_refs.some(ref => sourceIds.has(ref.source_id)))
+    .map(location => ({ ...location, direct: false }))
+}
+
+export function canReviewIssueEvidence(issue: Issue) {
+  return issue.status === 'open' && issue.scope !== 'layout' &&
+    (issue.origin === 'preflight' || ['REQUIRED_MISSING', 'EVIDENCE_INVALID', 'VALUE_CONFLICT',
+      'VALUE_MISMATCH', 'CONDITION_LOSS', 'CERTIFICATION_MISMATCH', 'UNSUPPORTED_CLAIM',
+      'UNVERIFIED_SUPERLATIVE', 'MOCK_VALUE', 'IMAGE_MISMATCH', 'IMAGE_UNVERIFIABLE'].includes(issue.code))
+}
+
 export interface Layout {
   layout_check_id: string
   document_revision: number

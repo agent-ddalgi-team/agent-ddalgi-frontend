@@ -250,6 +250,8 @@ let sequence = 0,
 const draftEntry = process.argv.includes('--draft-entry')
 assert(!draftEntry || !live, 'Draft entry uses isolated mock responses only')
 let preflightBlockMessage = ''
+let issueActionFixture = null
+let mismatchedIssueReads = 0, injectedIssueReads = 0
 const draftRecovery = process.argv.includes('--draft-recovery')
 assert(!draftRecovery || !live, 'Draft recovery uses mock responses only')
 let simulateDraftFailure = false
@@ -372,6 +374,112 @@ const changePurpose = (value) =>
   evaluate(
     `(()=>{const i=document.querySelector('input[aria-label="사용 목적"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(i,${JSON.stringify(value)});i.dispatchEvent(new Event('input',{bubbles:true}));})()`,
   )
+async function purposeDropdownCheck() {
+  await until(
+    () => has('input[aria-label="사용 목적"]:not(:disabled)'),
+    'purpose editable',
+  )
+  const original = await evaluate(
+    `document.querySelector('input[aria-label="사용 목적"]').value`,
+  )
+  await changePurpose('신규 고객 소개 (표준 제안용)')
+  await until(
+    () =>
+      evaluate(
+        `document.querySelector('input[aria-label="사용 목적"]').value === '신규 고객 소개 (표준 제안용)'`,
+      ),
+    'purpose set',
+  )
+  await evaluate(
+    `document.querySelector('button[aria-label="사용 목적 목록 열기"]').click()`,
+  )
+  await until(
+    () =>
+      evaluate(
+        `document.querySelectorAll('#purpose-options [role="option"]').length === 4`,
+      ),
+    'all purpose options with existing text',
+  )
+  assert.equal(
+    await evaluate(
+      `document.querySelector('input[aria-label="사용 목적"]').value`,
+    ),
+    '신규 고객 소개 (표준 제안용)',
+  )
+  await screenshot('purpose-dropdown.png')
+  await evaluate(`document.querySelector('#purpose-option-1').click()`)
+  await until(
+    () =>
+      evaluate(
+        `document.querySelector('input[aria-label="사용 목적"]').value === '협력사 등록 및 제휴 제안' && !document.querySelector('#purpose-options')`,
+      ),
+    'purpose selected without clearing',
+  )
+  await changePurpose('직접 입력한 맞춤 목적')
+  await until(
+    () =>
+      evaluate(
+        `document.querySelector('input[aria-label="사용 목적"]').value === '직접 입력한 맞춤 목적'`,
+      ),
+    'custom purpose',
+  )
+  await evaluate(
+    `document.querySelector('button[aria-label="사용 목적 목록 열기"]').click()`,
+  )
+  await until(
+    () =>
+      evaluate(
+        `document.querySelectorAll('#purpose-options [role="option"]').length === 4`,
+      ),
+    'all purpose options with custom text',
+  )
+  await evaluate(
+    `document.querySelector('input[aria-label="사용 목적"]').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`,
+  )
+  await until(
+    () => evaluate(`!document.querySelector('#purpose-options')`),
+    'escape closes purpose options',
+  )
+  assert.equal(
+    await evaluate(
+      `document.querySelector('input[aria-label="사용 목적"]').value`,
+    ),
+    '직접 입력한 맞춤 목적',
+  )
+  await evaluate(
+    `document.querySelector('input[aria-label="사용 목적"]').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true}))`,
+  )
+  await until(() => has('#purpose-option-0'), 'keyboard opens purpose options')
+  await evaluate(
+    `document.querySelector('input[aria-label="사용 목적"]').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))`,
+  )
+  await until(
+    () =>
+      evaluate(
+        `document.querySelector('input[aria-label="사용 목적"]').value === '신규 고객 소개 (표준 제안용)' && !document.querySelector('#purpose-options')`,
+      ),
+    'keyboard selects purpose',
+  )
+  await evaluate(
+    `document.querySelector('button[aria-label="사용 목적 목록 열기"]').click()`,
+  )
+  await until(() => has('#purpose-options'), 'purpose options reopened')
+  await evaluate(
+    `document.body.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}))`,
+  )
+  await until(
+    () => evaluate(`!document.querySelector('#purpose-options')`),
+    'outside closes purpose options',
+  )
+  await changePurpose(original)
+  await until(
+    () =>
+      evaluate(
+        `document.querySelector('input[aria-label="사용 목적"]').value === ${JSON.stringify(original)}`,
+      ),
+    'original purpose restored',
+  )
+}
 const confirm = () =>
   evaluate(
     `document.querySelector('[data-testid=preflight-result] input[type=checkbox]').click()`,
@@ -614,6 +722,27 @@ finally:
       })
     } else if (data.method === 'Fetch.requestPaused') {
       const p = data.params
+      if (mismatchedIssueReads > 0 && p.request.method === 'GET' &&
+          /\/documents\/[^/]+\/issues$/.test(new URL(p.request.url).pathname) && p.responseStatusCode === 200) {
+        mismatchedIssueReads--
+        injectedIssueReads++
+        void command('Fetch.getResponseBody', {requestId:p.requestId}).then(({body,base64Encoded})=>{
+          const result = JSON.parse(base64Encoded ? Buffer.from(body,'base64').toString('utf8') : body)
+          result.document_revision++
+          intercept('Fetch.fulfillRequest',{requestId:p.requestId,responseCode:200,
+            responseHeaders:[{name:'Content-Type',value:'application/json'}],body:Buffer.from(JSON.stringify(result)).toString('base64')})
+        }).catch(cause=>errors.push('issue snapshot interception: '+cause.message))
+        return
+      }
+      if (issueActionFixture && p.request.method === 'GET' &&
+          /\/documents\/[^/]+\/issues$/.test(new URL(p.request.url).pathname) && p.responseStatusCode === 200) {
+        intercept('Fetch.fulfillRequest', {
+          requestId: p.requestId, responseCode: 200,
+          responseHeaders: [{name: 'Content-Type', value: 'application/json'}],
+          body: Buffer.from(JSON.stringify(issueActionFixture)).toString('base64'),
+        })
+        return
+      }
       if (
         preflightBlockMessage &&
         p.request.method === 'GET' &&
@@ -730,7 +859,7 @@ finally:
         dropPost &&
         p.request.method === 'POST' &&
         new URL(p.request.url).pathname.endsWith('/' + dropPost) &&
-        p.responseStatusCode === 202
+        p.responseStatusCode === (dropPost === 'reviews' ? 200 : 202)
       ) {
         dropPost = ''
         dropped = true
@@ -896,6 +1025,7 @@ finally:
       ),
     'start screen',
   )
+  await purposeDropdownCheck()
   if (!live) {
     await evaluate("document.querySelector('button[title=\"소속 기업/기관 변경\"]').click()")
     await until(() => has('input[aria-label="대상 회사명"]'), 'company dialog before session')
@@ -950,7 +1080,7 @@ finally:
     const beforePublic = await sessionState()
     await click('공개 데이터 자동으로 가져오기')
     await idle()
-    assert.ok(await evaluate('document.body.innerText.includes("외부 API 키와 수집 연결을 아직 설정하지 않았습니다.")'))
+    assert.ok(await evaluate('document.body.innerText.includes("DART API 키 미설정")'))
     assert.deepEqual(await sessionState(), beforePublic)
     await evaluate("document.querySelector('input[aria-label=\"ai-connection-demo.txt 선택\"]').click()")
     await idle()
@@ -972,17 +1102,10 @@ finally:
         'photo parsed ' + name,
       )
     }
-    for (const name of ['red.png', 'blue.png']) {
-      await evaluate(
-        `document.querySelector('input[aria-label="${name} 선택"]').click()`,
-      )
-      await until(
-        () =>
-          evaluate(
-            `!!document.querySelector('input[aria-label="${name} 선택"]:checked:not(:disabled)')`,
-          ),
-        'photo selection saved ' + name,
-      )
+    for (const name of ['red.png', 'blue.png', 'unselected.png']) {
+      const wanted = name !== 'unselected.png'
+      await evaluate(`(()=>{const e=document.querySelector('input[aria-label="${name} 선택"]');if(e.checked!==${wanted})e.click()})()`)
+      await until(() => evaluate(`document.querySelector('input[aria-label="${name} 선택"]').checked===${wanted} && !document.querySelector('input[aria-label="${name} 선택"]').disabled`), 'explicit photo selection saved '+name)
     }
     if (draftEntry) {
       const before = posts('preflights').length
@@ -1051,6 +1174,37 @@ finally:
   await until(() => has('[data-testid=preflight-result]'), 'preflight restored')
   assert.equal(await draftDisabled(), true)
   checks.push('facts and evidence; explicit confirmation resets on reload')
+  if (!live) {
+    const preflightState = () => saved().then(state => evaluate(`fetch('/api/v1/sessions/${state.sessionId}/preflights/${state.preflightId}').then(r=>r.json())`))
+    const original = await preflightState()
+    const optional = original.facts.find(f => original.reviewable_fact_ids.includes(f.fact_id))
+    assert.ok(optional, 'optional fact available for review')
+    const company = original.facts.find(f => f.field_key === 'company_name')
+    assert.equal(await has(`[data-review-exclude="${company.fact_id}"]`), false)
+    const analyses = posts('preflights').length
+    await evaluate(`document.querySelectorAll('[data-testid=preflight-result] details').forEach(d=>d.open=true)`)
+    dropped = false
+    dropPost = 'reviews'
+    await evaluate(`document.querySelector('[data-review-exclude="${optional.fact_id}"]').click()`)
+    await until(() => dropped, 'review response lost')
+    await idle()
+    await reload()
+    await until(() => evaluate(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='같은 AI 요청 다시 확인'&&!b.disabled)`), 'review replay action restored')
+    await click('같은 AI 요청 다시 확인')
+    await until(async () => !(await saved()).attempt, 'review replay completed')
+    assert.equal(posts('reviews').at(-1).key, posts('reviews').at(-2).key)
+    const excluded = await preflightState()
+    assert.ok(excluded.excluded_facts.some(f=>f.fact_id===optional.fact_id))
+    assert.ok(!excluded.facts.some(f=>f.fact_id===optional.fact_id))
+    await reload()
+    await until(() => has(`[data-review-restore="${optional.fact_id}"]`), 'exclusion persists')
+    await evaluate(`document.querySelector('[data-review-restore="${optional.fact_id}"]').click()`)
+    await until(async () => (await preflightState()).facts.some(f=>f.fact_id===optional.fact_id), 'fact restored')
+    assert.deepEqual((await preflightState()).facts.find(f=>f.fact_id===optional.fact_id), optional)
+    assert.equal(posts('preflights').length, analyses)
+    assert.equal(await draftDisabled(), true)
+    checks.push('optional fact exclusion/restoration persists; lost response reuses key; required company protected; no new analysis and confirmation resets')
+  }
   if (!live) {
     assert.ok(await evaluate('document.querySelector(\'[aria-label="자료 충족도"]\').textContent.includes("%")'))
     checks.push('server evidence coverage displayed after preflight')
@@ -1308,7 +1462,7 @@ finally:
           'source selection ready ' + name,
         )
         await evaluate(
-          `document.querySelector('input[aria-label="${name} 선택"]').click()`,
+          `(()=>{const e=document.querySelector('input[aria-label="${name} 선택"]');if(e.checked!==${name === 'impact-replacement.txt'})e.click()})()`,
         )
         await until(
           () =>
@@ -1617,6 +1771,7 @@ finally:
         'normal review new preflight',
       )
       await screen(2)
+      await until(() => evaluate(`!JSON.parse(sessionStorage.getItem('ddalgi.sources.v1.publication')).impactReviewId`), 'previous applied review cleared for new preflight')
       await until(
         () => has('input[aria-label="최신 점검 확인"]:not(:disabled)'),
         'normal confirmation ready',
@@ -2409,6 +2564,70 @@ finally:
     )
     await screenshot('s03-cards-before-check.png')
     if (!live) {
+      const refreshReady = () => until(() => evaluate(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='문서 상태 새로고침'&&!b.disabled)`),'snapshot refresh settled')
+      await refreshReady()
+      const beforeAudit = await documentState()
+      const originalSnapshotPosts = calls.filter(c=>c.method==='POST').length
+      const issueGetCount = () => calls.filter(c=>c.method==='GET' && c.path.endsWith('/issues')).length
+      const readsBefore = issueGetCount()
+      mismatchedIssueReads = 1
+      injectedIssueReads = 0
+      await refreshReady()
+      await click('문서 상태 새로고침')
+      await until(()=>injectedIssueReads===1 && issueGetCount()===readsBefore+2,'one inconsistent snapshot automatically reread')
+      await refreshReady()
+      assert.equal(await has('[data-testid=draft-result] [role=alert]'),false)
+      const readsBeforeFailure = issueGetCount()
+      mismatchedIssueReads = 2
+      injectedIssueReads = 0
+      await refreshReady()
+      await click('문서 상태 새로고침')
+      await until(()=>injectedIssueReads===2 && issueGetCount()===readsBeforeFailure+2,'persistent mismatch stops after two reads')
+      await until(()=>has('[data-testid=draft-result] [role=alert]'),'persistent mismatch shown')
+      assert.deepEqual((await documentState()).document,beforeAudit.document)
+      assert.equal(calls.filter(c=>c.method==='POST').length,originalSnapshotPosts)
+      await refreshReady()
+      await click('문서 상태 새로고침')
+      await until(async()=>!(await has('[data-testid=draft-result] [role=alert]')),'consistent snapshot restored')
+      checks.push('inconsistent document/issues snapshot retries GET once; persistent mismatch stops visibly and preserves document without AI or mutation')
+      const linked = beforeAudit.document.pages.flatMap(p=>p.blocks).find(b=>b.fact_ids.length && b.evidence_refs.length)
+      assert.ok(linked)
+      const originalPosts = calls.filter(c=>c.method==='POST').length
+      const fixture = (code, fields={}) => ({issue_id:'audit_'+code,code,message:'화면 처리 경로 검사',severity:'blocker',scope:'content',status:'open',origin:'agent',layout_format:null,block_ids:[],fact_ids:[],source_ids:[],resolution:null,...fields})
+      issueActionFixture = {document_revision:beforeAudit.document.document_revision,validation_id:null,issues:[
+        fixture('VALUE_CONFLICT',{origin:'preflight',fact_ids:[linked.fact_ids[0]]}),
+        fixture('CONDITION_LOSS',{source_ids:[linked.evidence_refs[0].source_id]}),
+        fixture('VALUE_MISMATCH',{block_ids:['removed_block'],fact_ids:[linked.fact_ids[0]]}),
+        fixture('CERTIFICATION_MISMATCH',{block_ids:[linked.block_id],source_ids:[linked.evidence_refs[0].source_id]}),
+        fixture('REQUIRED_MISSING'),
+        fixture('LAYOUT_OVERFLOW',{scope:'layout',origin:'layout'}),
+        fixture('UNSUPPORTED_CLAIM',{status:'resolved'}),
+      ]}
+      await refreshReady()
+      await click('문서 상태 새로고침')
+      await until(()=>has('[data-issue-code="VALUE_CONFLICT"] [data-issue-evidence-action]'),'conflict evidence action')
+      for (const code of ['VALUE_CONFLICT','CONDITION_LOSS','VALUE_MISMATCH']) {
+        assert.ok(await has(`[data-issue-code="${code}"] [data-issue-location-kind="related"]`))
+        assert.ok(await evaluate(`document.querySelector('[data-issue-code="${code}"]').textContent.includes('관련 사실·자료가 연결된 위치')`))
+      }
+      assert.equal(await evaluate(`document.querySelectorAll('[data-issue-code="CERTIFICATION_MISMATCH"] [data-issue-block]').length`),1)
+      assert.ok(await has('[data-issue-code="CERTIFICATION_MISMATCH"] [data-issue-location-kind="direct"]'))
+      assert.ok(await has('[data-issue-code="REQUIRED_MISSING"] [data-issue-evidence-action]'))
+      for (const code of ['LAYOUT_OVERFLOW','UNSUPPORTED_CLAIM']) assert.equal(await has(`[data-issue-code="${code}"] [data-issue-evidence-action]`),false)
+      for (const issue of issueActionFixture.issues) assert.equal(await has(`[data-issue-code="${issue.code}"] input[aria-label^="경고 확인 사유"]`),false)
+      await evaluate(`document.querySelector('[data-issue-code="VALUE_CONFLICT"] [data-issue-block="${linked.block_id}"]').click()`)
+      await until(()=>evaluate(`!!document.querySelector('[data-screen="S02"]:not([hidden])')`),'related fact opens editor')
+      await screen(3)
+      await evaluate(`document.querySelector('[data-issue-code="REQUIRED_MISSING"] [data-issue-evidence-action]').click()`)
+      await until(()=>evaluate(`!!document.querySelector('[data-screen="S01"]:not([hidden])')`),'whole document issue opens preflight')
+      assert.deepEqual((await documentState()).document,beforeAudit.document)
+      assert.equal(calls.filter(c=>c.method==='POST').length,originalPosts)
+      issueActionFixture = null
+      await screen(3)
+      await refreshReady()
+      await click('문서 상태 새로고침')
+      await until(async()=>!(await has('[data-issue-code="VALUE_CONFLICT"]')),'actual issues restored')
+      checks.push('fact/source/stale block issues expose related edit locations; direct locations take priority; whole-document issue opens evidence; layout/resolved issues and blockers cannot be acknowledged; navigation changes no data or AI calls')
       const beforeLocation = await documentState()
       const patched = await evaluate(
         `fetch(${JSON.stringify(route)},{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(${JSON.stringify({ expected_revision: beforeLocation.document.document_revision, operations: [{ op: 'insert_block', page_id: beforeLocation.document.pages[0].page_id, after_block_id: null, block: { block_id: 'location_warning', type: 'paragraph', content: { text: '추가 확인 필요' }, fact_ids: [], evidence_refs: [] } }] })})}).then(r=>r.status)`,
