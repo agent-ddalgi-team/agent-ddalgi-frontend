@@ -18,7 +18,7 @@ const INITIAL_BRIEF: SourceBrief = {
   target_pages: 4,
   photo_preference: 'balanced',
 }
-type Saved = { sessionId: string; jobs: string[] }
+type Saved = { sessionId: string; jobs: string[]; localSelected?: string[] }
 type UploadAttempt = { sessionId: string; fingerprint: string; key: string }
 
 function readSaved(): Saved | null {
@@ -34,6 +34,9 @@ function readSaved(): Saved | null {
       ? {
           sessionId: saved.sessionId,
           jobs: saved.jobs.filter((id: unknown) => typeof id === 'string'),
+          localSelected: Array.isArray(saved.localSelected)
+            ? saved.localSelected.filter((id: unknown) => typeof id === 'string')
+            : [],
         }
       : null
   } catch {
@@ -41,9 +44,9 @@ function readSaved(): Saved | null {
   }
 }
 
-function persist(sessionId: string, jobs: string[]) {
+function persist(sessionId: string, jobs: string[], localSelected: string[] = []) {
   // 본문·파일·인증 쿠키는 브라우저 저장소에 복사하지 않는다.
-  sessionStorage.setItem(STORAGE, JSON.stringify({ sessionId, jobs }))
+  sessionStorage.setItem(STORAGE, JSON.stringify({ sessionId, jobs, localSelected }))
 }
 
 function forget() {
@@ -129,11 +132,22 @@ export function useSources(allowDocumentChanges = false) {
 
   function apply(value: Awaited<ReturnType<typeof snapshot>>) {
     const active = value.jobs.filter(running)
+    const saved = readSaved()
+    const mergedSelected = Array.from(
+      new Set([
+        ...value.session.selected_source_ids,
+        ...(saved?.localSelected || []),
+      ]),
+    )
     persist(
       value.session.session_id,
       active.map((job) => job.job_id),
+      saved?.localSelected || [],
     )
-    setSession(value.session)
+    setSession({
+      ...value.session,
+      selected_source_ids: mergedSelected,
+    })
     setSources(value.sources)
     setJobs(value.jobs)
   }
@@ -147,11 +161,21 @@ export function useSources(allowDocumentChanges = false) {
         if (saved) {
           const value = await snapshot(saved.sessionId, saved.jobs)
           if (cancelled) return
+          const mergedSelected = Array.from(
+            new Set([
+              ...value.session.selected_source_ids,
+              ...(saved.localSelected || []),
+            ]),
+          )
           persist(
             saved.sessionId,
             value.jobs.filter(running).map((job) => job.job_id),
+            saved.localSelected || [],
           )
-          setSession(value.session)
+          setSession({
+            ...value.session,
+            selected_source_ids: mergedSelected,
+          })
           setSources(value.sources)
           setJobs(value.jobs)
           setBrief(value.session.brief)
@@ -439,15 +463,46 @@ export function useSources(allowDocumentChanges = false) {
     await run('자료 선택 저장 중', async () => {
       const activeSession = session || (await ensureSession())
       if (activeSession.document_summary && !allowDocumentChanges) return
-      const selected = activeSession.selected_source_ids.includes(source.source_id)
+      const nextSelected = activeSession.selected_source_ids.includes(
+        source.source_id,
+      )
         ? activeSession.selected_source_ids.filter((id) => id !== source.source_id)
         : [...activeSession.selected_source_ids, source.source_id]
+
+      // 백엔드는 registered 자료 중 use_as_company_evidence=false 인 자료를 404 RESOURCE_NOT_FOUND로 거부하므로,
+      // 백엔드로 전송할 때는 증거 사용 허용 자료 및 세션 첨부 자료만 전송한다.
+      const backendSelected = nextSelected.filter((id) => {
+        const found = sources.find((s) => s.source_id === id)
+        if (!found) return true
+        if (found.scope === 'registered' && !found.use_as_company_evidence) {
+          return false
+        }
+        return true
+      })
+
+      const refOnlySelected = nextSelected.filter((id) => {
+        const found = sources.find((s) => s.source_id === id)
+        return found?.scope === 'registered' && !found?.use_as_company_evidence
+      })
+
+      // 로컬 스토리지에 refOnlySelected 보존
+      const saved = readSaved()
+      persist(
+        activeSession.session_id,
+        saved?.jobs || [],
+        refOnlySelected,
+      )
+
       const result = await sourceApi.inputs(
         activeSession,
-        { selected_source_ids: selected },
+        { selected_source_ids: backendSelected },
         crypto.randomUUID(),
       )
-      setSession({ ...activeSession, ...result })
+      setSession({
+        ...activeSession,
+        ...result,
+        selected_source_ids: nextSelected,
+      })
       setNotice('자료 선택을 서버에 저장했습니다.')
     })
   }

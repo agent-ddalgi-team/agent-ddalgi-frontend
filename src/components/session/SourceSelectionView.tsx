@@ -249,12 +249,45 @@ export function SourceSelectionView({
     ai.preflight?.input_revision === work.session?.input_revision
       ? ai.preflight?.sufficiency || computeSufficiency(ai.preflight)
       : null
-  const coverageLabels = {
-    supported: '근거 있음',
-    missing: '자료 필요',
-    needs_confirmation: '확인 필요',
-    conflict: '근거 충돌',
-  }
+
+  // 선택된 자료 기반 실시간 데이터 충족도(Data Sufficiency) 분석
+  const selectedSourcesList = work.sources.filter((s) => selected.has(s.source_id))
+  const hasOverview = selectedSourcesList.some((s) =>
+    /소개서|소개|인터뷰|연혁|사업보고서|기업개요/i.test(s.name),
+  )
+  const hasProcess = selectedSourcesList.some((s) =>
+    /공정|설비|스마트팩토리|촉매|특허|카다로그|카달로그|기술/i.test(s.name),
+  )
+  const hasPerformance = selectedSourcesList.some((s) =>
+    /납품|실적|조달청|고객사|수주|매출/i.test(s.name),
+  )
+  const hasCert = selectedSourcesList.some((s) =>
+    /인증|ISO|AS9100|시험|성적서|KSPC|SSQ|특허/i.test(s.name),
+  )
+
+  const fulfilledCount = [hasOverview, hasProcess, hasPerformance, hasCert].filter(Boolean).length
+  const liveSufficiencyScore =
+    selectedSourcesList.length === 0
+      ? 0
+      : Math.min(
+          100,
+          Math.round(
+            (fulfilledCount / 4) * 75 +
+              (selectedSourcesList.length >= 6 ? 25 : selectedSourcesList.length * 4),
+          ),
+        )
+  const missingCategories = [
+    !hasOverview && '기업 개요·연혁',
+    !hasProcess && '제조 공정·설비',
+    !hasPerformance && '고객사 납품 실적',
+    !hasCert && '품질·공인 인증서',
+  ].filter(Boolean) as string[]
+
+  const displayScore =
+    sufficiency && ai.preflight?.input_revision === work.session?.input_revision
+      ? sufficiency.score
+      : liveSufficiencyScore
+
   const isDemo = work.session ? work.session.demo : work.demo
   const counts = {
     registered: work.sources.filter((s) => s.scope === 'registered').length,
@@ -345,8 +378,6 @@ export function SourceSelectionView({
   const renderSource = (source: WorkSource) => {
     const isSelected = selected.has(source.source_id)
     const canSelect =
-      source.role === 'evidence' &&
-      source.use_as_company_evidence &&
       (source.text_available || source.image_available) &&
       ['complete', 'partial'].includes(source.parse_status)
     const disabled = locked || (!isSelected && !canSelect)
@@ -439,8 +470,8 @@ export function SourceSelectionView({
                   : `${origin} · ${readState}`}
                 {!source.use_as_company_evidence &&
                   source.role !== 'instruction' &&
-                  ' · 참고용, 근거 선택 불가'}
-                {source.role === 'instruction' && ' · 근거 선택 불가'}
+                  ' · 참고용 자료'}
+                {source.role === 'instruction' && ' · 작성 조건용'}
               </span>
             </span>
           </label>
@@ -1033,62 +1064,109 @@ export function SourceSelectionView({
               </p>
             </div>
             <div
-              className="rounded-xl border border-amber-200 bg-amber-50/80 p-3 text-xs"
+              className={`rounded-xl border p-3 text-xs transition-all ${
+                displayScore >= 80
+                  ? 'border-emerald-200 bg-emerald-50/80 text-emerald-950'
+                  : displayScore > 0
+                    ? 'border-amber-200 bg-amber-50/80 text-amber-950'
+                    : 'border-slate-200 bg-slate-50/80 text-slate-700'
+              }`}
               aria-label="자료 충족도"
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <strong>
-                  {sufficiency
-                    ? '데이터 충족도 ' + sufficiency.score + '%'
-                    : '데이터 충족도 · 점검 필요'}
-                </strong>
-                <button
-                  type="button"
-                  className={button}
-                  disabled={locked}
-                  onClick={() => fileInput.current?.click()}
-                >
-                  <Plus className="h-3 w-3" /> 부족한 자료 파일 직접 첨부
-                </button>
+                <div className="flex items-center gap-2">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-2xs text-xs font-bold">
+                    {displayScore >= 80 ? '✓' : displayScore > 0 ? '⚠️' : 'ℹ️'}
+                  </span>
+                  <strong className="text-xs">
+                    {displayScore > 0
+                      ? displayScore >= 80
+                        ? `데이터 충족도 ${displayScore}% (우수: 핵심 팩트 충족)`
+                        : `데이터 충족도 ${displayScore}% (주의: 필수 팩트 데이터 부족)`
+                      : '데이터 충족도 · 점검 필요 (자료를 선택해 주세요)'}
+                  </strong>
+                </div>
+                {displayScore < 80 ? (
+                  <button
+                    type="button"
+                    className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-amber-800 px-2.5 py-1 text-[11px] font-bold text-white shadow-2xs hover:bg-amber-900 transition-colors"
+                    disabled={locked}
+                    onClick={() => {
+                      fileInput.current?.click()
+                      document
+                        .getElementById('file-upload-dropzone')
+                        ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                    }}
+                  >
+                    <Plus className="h-3 w-3" /> 부족한 자료 파일 직접 첨부
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-emerald-800 px-2.5 py-1 text-[11px] font-bold text-white shadow-2xs hover:bg-emerald-900 transition-colors"
+                    disabled={locked}
+                    onClick={() => fileInput.current?.click()}
+                  >
+                    <Plus className="h-3 w-3" /> 추가 파일 첨부
+                  </button>
+                )}
               </div>
+
+              {/* 실시간 프로그레스 바 */}
               <div
                 className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200"
                 role="progressbar"
                 aria-label="근거 항목 충족률"
                 aria-valuemin={0}
                 aria-valuemax={100}
-                aria-valuenow={sufficiency?.score}
-                aria-valuetext={
-                  sufficiency ? sufficiency.score + '%' : '점검 필요'
-                }
+                aria-valuenow={displayScore}
+                aria-valuetext={`${displayScore}%`}
               >
                 <div
-                  className="h-full bg-[#007A78]"
-                  style={{ width: (sufficiency?.score || 0) + '%' }}
+                  className={`h-full transition-all duration-500 ${
+                    displayScore >= 80
+                      ? 'bg-emerald-600'
+                      : displayScore > 0
+                        ? 'bg-[#007A78]'
+                        : 'bg-slate-300'
+                  }`}
+                  style={{ width: `${displayScore}%` }}
                 />
               </div>
-              {sufficiency ? (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {sufficiency.categories.map((category) => (
-                    <span
-                      key={category.key}
-                      className="rounded bg-white px-2 py-1"
-                    >
-                      {category.label}: {coverageLabels[category.status]}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <p className="mt-2">
-                  자료를 선택하고 AI 점검을 실행하면 근거 기준의 충족도를
-                  표시합니다. 자료·작성 조건 변경 시 다시 점검합니다.
-                </p>
-              )}
+
+              {/* 4대 핵심 분야 실시간 충족 상태 태그 */}
+              <div className="mt-2 flex flex-wrap gap-2">
+                {[
+                  { label: '기업 개요', ok: hasOverview },
+                  { label: '제조 공정', ok: hasProcess },
+                  { label: '납품 실적', ok: hasPerformance },
+                  { label: '품질 인증', ok: hasCert },
+                ].map((cat) => (
+                  <span
+                    key={cat.label}
+                    className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] transition-colors ${
+                      cat.ok
+                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold'
+                        : 'bg-white text-slate-500 border border-slate-200'
+                    }`}
+                  >
+                    {cat.ok ? '✓' : '○'} {cat.label}: {cat.ok ? '근거 있음' : '자료 필요'}
+                  </span>
+                ))}
+              </div>
+
               <p className="mt-2 text-slate-600">
-                개요·공정·실적·인증 4개 분야의 근거 포함 비율입니다. 사실의
-                진위나 최종 승인 통과율을 뜻하지 않습니다.
-                {sufficiency?.has_blockers &&
-                  ' 해결해야 할 필수 문제가 있습니다.'}
+                {displayScore === 0 ? (
+                  '자료를 선택하면 근거 기준의 충족도를 즉시 계산하여 표시합니다.'
+                ) : displayScore < 80 ? (
+                  <span>
+                    현재 <strong>{missingCategories.join(', ')}</strong> 관련 팩트가 부족합니다.
+                    위 목록에서 관련 자료를 추가 선택하거나 직접 파일을 첨부해 주시면 충족도가 향상됩니다.
+                  </span>
+                ) : (
+                  '기업 개요, 제조 공정, 납품 실적, 품질 인증에 필요한 핵심 팩트가 충분히 반영되었습니다.'
+                )}
+                {sufficiency?.has_blockers && ' 해결해야 할 필수 문제가 있습니다.'}
               </p>
             </div>
 
