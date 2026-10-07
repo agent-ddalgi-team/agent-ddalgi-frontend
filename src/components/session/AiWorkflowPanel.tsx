@@ -68,7 +68,7 @@ function categoryState(facts: Preflight['facts'], category: string) {
   const total = items.length
   if (!total || !supported)
     return { text: '자료 없음', tone: 'text-amber-600', supported, total }
-  if (supported === total)
+  if (supported >= Math.ceil(total * 0.6))
     return { text: '충분', tone: 'text-slate-900', supported, total }
   return { text: '보완 권장', tone: 'text-amber-600', supported, total }
 }
