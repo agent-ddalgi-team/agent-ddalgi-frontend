@@ -250,6 +250,8 @@ let sequence = 0,
 const draftEntry = process.argv.includes('--draft-entry')
 assert(!draftEntry || !live, 'Draft entry uses isolated mock responses only')
 let preflightBlockMessage = ''
+let issueActionFixture = null
+let mismatchedIssueReads = 0, injectedIssueReads = 0
 const draftRecovery = process.argv.includes('--draft-recovery')
 assert(!draftRecovery || !live, 'Draft recovery uses mock responses only')
 let simulateDraftFailure = false
@@ -614,6 +616,27 @@ finally:
       })
     } else if (data.method === 'Fetch.requestPaused') {
       const p = data.params
+      if (mismatchedIssueReads > 0 && p.request.method === 'GET' &&
+          /\/documents\/[^/]+\/issues$/.test(new URL(p.request.url).pathname) && p.responseStatusCode === 200) {
+        mismatchedIssueReads--
+        injectedIssueReads++
+        void command('Fetch.getResponseBody', {requestId:p.requestId}).then(({body,base64Encoded})=>{
+          const result = JSON.parse(base64Encoded ? Buffer.from(body,'base64').toString('utf8') : body)
+          result.document_revision++
+          intercept('Fetch.fulfillRequest',{requestId:p.requestId,responseCode:200,
+            responseHeaders:[{name:'Content-Type',value:'application/json'}],body:Buffer.from(JSON.stringify(result)).toString('base64')})
+        }).catch(cause=>errors.push('issue snapshot interception: '+cause.message))
+        return
+      }
+      if (issueActionFixture && p.request.method === 'GET' &&
+          /\/documents\/[^/]+\/issues$/.test(new URL(p.request.url).pathname) && p.responseStatusCode === 200) {
+        intercept('Fetch.fulfillRequest', {
+          requestId: p.requestId, responseCode: 200,
+          responseHeaders: [{name: 'Content-Type', value: 'application/json'}],
+          body: Buffer.from(JSON.stringify(issueActionFixture)).toString('base64'),
+        })
+        return
+      }
       if (
         preflightBlockMessage &&
         p.request.method === 'GET' &&
@@ -1641,6 +1664,7 @@ finally:
         'normal review new preflight',
       )
       await screen(2)
+      await until(() => evaluate(`!JSON.parse(sessionStorage.getItem('ddalgi.sources.v1.publication')).impactReviewId`), 'previous applied review cleared for new preflight')
       await until(
         () => has('input[aria-label="최신 점검 확인"]:not(:disabled)'),
         'normal confirmation ready',
@@ -2433,6 +2457,70 @@ finally:
     )
     await screenshot('s03-cards-before-check.png')
     if (!live) {
+      const refreshReady = () => until(() => evaluate(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='문서 상태 새로고침'&&!b.disabled)`),'snapshot refresh settled')
+      await refreshReady()
+      const beforeAudit = await documentState()
+      const originalSnapshotPosts = calls.filter(c=>c.method==='POST').length
+      const issueGetCount = () => calls.filter(c=>c.method==='GET' && c.path.endsWith('/issues')).length
+      const readsBefore = issueGetCount()
+      mismatchedIssueReads = 1
+      injectedIssueReads = 0
+      await refreshReady()
+      await click('문서 상태 새로고침')
+      await until(()=>injectedIssueReads===1 && issueGetCount()===readsBefore+2,'one inconsistent snapshot automatically reread')
+      await refreshReady()
+      assert.equal(await has('[data-testid=draft-result] [role=alert]'),false)
+      const readsBeforeFailure = issueGetCount()
+      mismatchedIssueReads = 2
+      injectedIssueReads = 0
+      await refreshReady()
+      await click('문서 상태 새로고침')
+      await until(()=>injectedIssueReads===2 && issueGetCount()===readsBeforeFailure+2,'persistent mismatch stops after two reads')
+      await until(()=>has('[data-testid=draft-result] [role=alert]'),'persistent mismatch shown')
+      assert.deepEqual((await documentState()).document,beforeAudit.document)
+      assert.equal(calls.filter(c=>c.method==='POST').length,originalSnapshotPosts)
+      await refreshReady()
+      await click('문서 상태 새로고침')
+      await until(async()=>!(await has('[data-testid=draft-result] [role=alert]')),'consistent snapshot restored')
+      checks.push('inconsistent document/issues snapshot retries GET once; persistent mismatch stops visibly and preserves document without AI or mutation')
+      const linked = beforeAudit.document.pages.flatMap(p=>p.blocks).find(b=>b.fact_ids.length && b.evidence_refs.length)
+      assert.ok(linked)
+      const originalPosts = calls.filter(c=>c.method==='POST').length
+      const fixture = (code, fields={}) => ({issue_id:'audit_'+code,code,message:'화면 처리 경로 검사',severity:'blocker',scope:'content',status:'open',origin:'agent',layout_format:null,block_ids:[],fact_ids:[],source_ids:[],resolution:null,...fields})
+      issueActionFixture = {document_revision:beforeAudit.document.document_revision,validation_id:null,issues:[
+        fixture('VALUE_CONFLICT',{origin:'preflight',fact_ids:[linked.fact_ids[0]]}),
+        fixture('CONDITION_LOSS',{source_ids:[linked.evidence_refs[0].source_id]}),
+        fixture('VALUE_MISMATCH',{block_ids:['removed_block'],fact_ids:[linked.fact_ids[0]]}),
+        fixture('CERTIFICATION_MISMATCH',{block_ids:[linked.block_id],source_ids:[linked.evidence_refs[0].source_id]}),
+        fixture('REQUIRED_MISSING'),
+        fixture('LAYOUT_OVERFLOW',{scope:'layout',origin:'layout'}),
+        fixture('UNSUPPORTED_CLAIM',{status:'resolved'}),
+      ]}
+      await refreshReady()
+      await click('문서 상태 새로고침')
+      await until(()=>has('[data-issue-code="VALUE_CONFLICT"] [data-issue-evidence-action]'),'conflict evidence action')
+      for (const code of ['VALUE_CONFLICT','CONDITION_LOSS','VALUE_MISMATCH']) {
+        assert.ok(await has(`[data-issue-code="${code}"] [data-issue-location-kind="related"]`))
+        assert.ok(await evaluate(`document.querySelector('[data-issue-code="${code}"]').textContent.includes('관련 사실·자료가 연결된 위치')`))
+      }
+      assert.equal(await evaluate(`document.querySelectorAll('[data-issue-code="CERTIFICATION_MISMATCH"] [data-issue-block]').length`),1)
+      assert.ok(await has('[data-issue-code="CERTIFICATION_MISMATCH"] [data-issue-location-kind="direct"]'))
+      assert.ok(await has('[data-issue-code="REQUIRED_MISSING"] [data-issue-evidence-action]'))
+      for (const code of ['LAYOUT_OVERFLOW','UNSUPPORTED_CLAIM']) assert.equal(await has(`[data-issue-code="${code}"] [data-issue-evidence-action]`),false)
+      for (const issue of issueActionFixture.issues) assert.equal(await has(`[data-issue-code="${issue.code}"] input[aria-label^="경고 확인 사유"]`),false)
+      await evaluate(`document.querySelector('[data-issue-code="VALUE_CONFLICT"] [data-issue-block="${linked.block_id}"]').click()`)
+      await until(()=>evaluate(`!!document.querySelector('[data-screen="S02"]:not([hidden])')`),'related fact opens editor')
+      await screen(3)
+      await evaluate(`document.querySelector('[data-issue-code="REQUIRED_MISSING"] [data-issue-evidence-action]').click()`)
+      await until(()=>evaluate(`!!document.querySelector('[data-screen="S01"]:not([hidden])')`),'whole document issue opens preflight')
+      assert.deepEqual((await documentState()).document,beforeAudit.document)
+      assert.equal(calls.filter(c=>c.method==='POST').length,originalPosts)
+      issueActionFixture = null
+      await screen(3)
+      await refreshReady()
+      await click('문서 상태 새로고침')
+      await until(async()=>!(await has('[data-issue-code="VALUE_CONFLICT"]')),'actual issues restored')
+      checks.push('fact/source/stale block issues expose related edit locations; direct locations take priority; whole-document issue opens evidence; layout/resolved issues and blockers cannot be acknowledged; navigation changes no data or AI calls')
       const beforeLocation = await documentState()
       const patched = await evaluate(
         `fetch(${JSON.stringify(route)},{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(${JSON.stringify({ expected_revision: beforeLocation.document.document_revision, operations: [{ op: 'insert_block', page_id: beforeLocation.document.pages[0].page_id, after_block_id: null, block: { block_id: 'location_warning', type: 'paragraph', content: { text: '추가 확인 필요' }, fact_ids: [], evidence_refs: [] } }] })})}).then(r=>r.status)`,
