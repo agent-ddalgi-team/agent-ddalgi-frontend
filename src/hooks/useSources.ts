@@ -486,6 +486,16 @@ export function useSources(allowDocumentChanges = false) {
     })
   }
 
+  const isClientOnlySource = (id: string) => {
+    if (id.startsWith('src-pub-')) return true
+    const found = sources.find((s) => s.source_id === id)
+    if (!found) return true
+    if (found.scope === 'registered' && !found.use_as_company_evidence) {
+      return true
+    }
+    return false
+  }
+
   async function select(source: WorkSource) {
     await run('자료 선택 저장 중', async () => {
       const activeSession = session || (await ensureSession())
@@ -496,35 +506,44 @@ export function useSources(allowDocumentChanges = false) {
         ? activeSession.selected_source_ids.filter((id) => id !== source.source_id)
         : [...activeSession.selected_source_ids, source.source_id]
 
-      // 백엔드는 registered 자료 중 use_as_company_evidence=false 인 자료를 404 RESOURCE_NOT_FOUND로 거부하므로,
-      // 백엔드로 전송할 때는 증거 사용 허용 자료 및 세션 첨부 자료만 전송한다.
-      const backendSelected = nextSelected.filter((id) => {
-        const found = sources.find((s) => s.source_id === id)
-        if (!found) return true
-        if (found.scope === 'registered' && !found.use_as_company_evidence) {
-          return false
-        }
-        return true
-      })
+      // 백엔드는 registered 자료 중 use_as_company_evidence=false 인 자료 및 mock 공개 자료(src-pub-*)를
+      // 404 RESOURCE_NOT_FOUND로 거부하므로, 백엔드로는 실제 존재하는 유효 근거 자료만 전송한다.
+      const backendSelected = nextSelected.filter((id) => !isClientOnlySource(id))
+      const clientOnlySelected = nextSelected.filter(isClientOnlySource)
 
-      const refOnlySelected = nextSelected.filter((id) => {
-        const found = sources.find((s) => s.source_id === id)
-        return found?.scope === 'registered' && !found?.use_as_company_evidence
-      })
-
-      // 로컬 스토리지에 refOnlySelected 보존
+      // 로컬 스토리지에 클라이언트 전용 선택 자료 보존
       const saved = readSaved()
       persist(
         activeSession.session_id,
         saved?.jobs || [],
-        refOnlySelected,
+        clientOnlySelected,
       )
 
-      const result = await sourceApi.inputs(
-        activeSession,
-        { selected_source_ids: backendSelected },
-        crypto.randomUUID(),
-      )
+      let result: Partial<SourceSession> = {}
+      try {
+        result = await sourceApi.inputs(
+          activeSession,
+          { selected_source_ids: backendSelected },
+          crypto.randomUUID(),
+        )
+      } catch (cause) {
+        if (
+          cause instanceof SourceApiError &&
+          cause.code === 'RESOURCE_NOT_FOUND' &&
+          cause.status === 404
+        ) {
+          const missing = (cause.details?.missing_source_ids as string[]) || []
+          const safeBackend = backendSelected.filter((id) => !missing.includes(id))
+          result = await sourceApi.inputs(
+            activeSession,
+            { selected_source_ids: safeBackend },
+            crypto.randomUUID(),
+          )
+        } else {
+          throw cause
+        }
+      }
+
       setSession({
         ...activeSession,
         ...result,
@@ -608,14 +627,23 @@ export function useSources(allowDocumentChanges = false) {
         const allSelected = Array.from(
           new Set([...activeSession.selected_source_ids, ...newPublicIds]),
         )
-        try {
-          const res = await sourceApi.inputs(
-            snap.session,
-            { selected_source_ids: allSelected },
-            crypto.randomUUID(),
-          )
-          snap.session = { ...snap.session, ...res, selected_source_ids: allSelected }
-        } catch {
+        const backendSelected = allSelected.filter((id) => !isClientOnlySource(id))
+        const clientOnlySelected = allSelected.filter(isClientOnlySource)
+        const saved = readSaved()
+        persist(activeSession.session_id, saved?.jobs || [], clientOnlySelected)
+
+        if (backendSelected.length > 0) {
+          try {
+            const res = await sourceApi.inputs(
+              snap.session,
+              { selected_source_ids: backendSelected },
+              crypto.randomUUID(),
+            )
+            snap.session = { ...snap.session, ...res, selected_source_ids: allSelected }
+          } catch {
+            snap.session.selected_source_ids = allSelected
+          }
+        } else {
           snap.session.selected_source_ids = allSelected
         }
         apply(snap)
@@ -640,8 +668,9 @@ export function useSources(allowDocumentChanges = false) {
           const allSelected = Array.from(
             new Set([...activeSession.selected_source_ids, ...newPublicIds]),
           )
+          const clientOnlySelected = allSelected.filter(isClientOnlySource)
           const saved = readSaved()
-          persist(activeSession.session_id, saved?.jobs || [], allSelected)
+          persist(activeSession.session_id, saved?.jobs || [], clientOnlySelected)
           setSources(updatedSources)
           setSession({
             ...activeSession,

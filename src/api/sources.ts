@@ -50,10 +50,17 @@ export interface ReadingJob {
 export class SourceApiError extends Error {
   status: number
   code: string
-  constructor(message: string, status = 0, code = 'NETWORK_ERROR') {
+  details?: Record<string, unknown>
+  constructor(
+    message: string,
+    status = 0,
+    code = 'NETWORK_ERROR',
+    details?: Record<string, unknown>,
+  ) {
     super(message)
     this.status = status
     this.code = code
+    this.details = details
   }
 }
 
@@ -70,6 +77,7 @@ export async function request<T>(
           '서버 응답을 받지 못했습니다. 연결 상태를 확인하고 다시 시도해 주세요.',
         error.response?.status || 0,
         detail?.code || 'NETWORK_ERROR',
+        detail?.details,
       )
     }
     throw error
