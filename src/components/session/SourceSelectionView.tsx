@@ -282,7 +282,8 @@ export function SourceSelectionView({
     !aiBlocked &&
     !ai.locked &&
     (!hasDocument || sourceEditing) &&
-    selected.size > 0
+    selected.size > 0 &&
+    readable > 0
   const openInspector = (target = 'ai-workflow') => {
     setInspectorOpen(true)
     document

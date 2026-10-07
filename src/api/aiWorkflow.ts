@@ -12,6 +12,7 @@ export interface EvidenceRef {
 
 export interface Preflight {
   preflight_id: string
+  latest_preflight_id?: string | null
   session_id: string
   input_revision: number
   usable_source_ids: string[]
