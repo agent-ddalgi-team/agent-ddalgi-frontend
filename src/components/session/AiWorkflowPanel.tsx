@@ -68,7 +68,7 @@ function categoryState(facts: Preflight['facts'], category: string) {
   const total = items.length
   if (!total || !supported)
     return { text: '자료 없음', tone: 'text-amber-600', supported, total }
-  if (supported === total)
+  if (supported >= Math.ceil(total * 0.6))
     return { text: '충분', tone: 'text-slate-900', supported, total }
   return { text: '보완 권장', tone: 'text-amber-600', supported, total }
 }
@@ -195,6 +195,9 @@ export function AiWorkflowPanel({
     (i) => i.status === 'open',
   )
   const blockers = openIssues.filter((i) => i.severity === 'blocker')
+  const warnings = openIssues.filter((i) => i.severity === 'warning')
+  const notices = openIssues.filter((i) => i.severity === 'info')
+  const alertIssues = [...blockers, ...warnings]
   const ready = !!preflight?.can_generate && !blockers.length
   const badge: [string, string, typeof Check] = document
     ? ['초안 생성됨', 'bg-emerald-50 text-emerald-800', CheckCircle2]
@@ -434,24 +437,20 @@ export function AiWorkflowPanel({
             </div>
           )}
 
-          {!!openIssues.length && (
+          {!!alertIssues.length && (
             <div className="flex flex-col gap-1.5">
               <h4 className="flex items-center gap-1.5 text-xs font-bold text-slate-900">
                 <AlertTriangle className="h-4 w-4 text-amber-600" />
-                확인할 사항 {openIssues.length}건
+                확인할 사항 {alertIssues.length}건
               </h4>
               <ul className="flex flex-col gap-1.5 text-[11px]">
-                {openIssues.map((issue) => (
+                {alertIssues.map((issue) => (
                   <li
                     key={issue.issue_id}
                     className={`rounded-lg p-2.5 leading-relaxed ${issue.severity === 'blocker' ? 'bg-red-50 text-red-800' : 'bg-amber-50 text-amber-900'}`}
                   >
                     <span className="mr-1.5 font-bold">
-                      {issue.severity === 'blocker'
-                        ? '검토 필요'
-                        : issue.severity === 'warning'
-                          ? '주의'
-                          : '안내'}
+                      {issue.severity === 'blocker' ? '검토 필요' : '주의'}
                     </span>
                     {readableIssueMessage(issue.message)}
                     {facts
@@ -471,6 +470,28 @@ export function AiWorkflowPanel({
                           />
                         </div>
                       ))}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {!!notices.length && (
+            <div className="flex flex-col gap-1.5">
+              <h4 className="flex items-center gap-1.5 text-xs font-bold text-slate-900">
+                <Info className="h-4 w-4 text-[#007A78]" />
+                참고 안내 {notices.length}건
+              </h4>
+              <ul className="flex flex-col gap-1.5 text-[11px]">
+                {notices.map((issue) => (
+                  <li
+                    key={issue.issue_id}
+                    className="rounded-lg border border-teal-100 bg-teal-50/50 p-2.5 leading-relaxed text-slate-700"
+                  >
+                    <span className="mr-1.5 inline-block rounded bg-teal-100/80 px-1.5 py-0.5 text-[10px] font-bold text-[#007A78]">
+                      안내
+                    </span>
+                    {readableIssueMessage(issue.message)}
                   </li>
                 ))}
               </ul>

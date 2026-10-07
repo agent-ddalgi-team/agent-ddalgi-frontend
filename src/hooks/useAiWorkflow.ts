@@ -401,12 +401,15 @@ export function useAiWorkflow(session: SourceSession | null) {
   const attempt = current.saved?.attempt
   const terminalFailure =
     current.job?.status === 'failed' || current.job?.status === 'cancelled'
+  const activeJob =
+    current.watch &&
+    current.job &&
+    ['queued', 'running'].includes(current.job.status)
   const locked =
     !!session &&
     (state.sessionId !== sid ||
-      state.revision !== revision ||
       current.busy ||
-      (!!attempt && !terminalFailure))
+      !!activeJob)
   const draftFailed = terminalFailure && attempt?.kind === 'draft'
   const canRetryDraft =
     draftFailed &&
@@ -425,8 +428,7 @@ export function useAiWorkflow(session: SourceSession | null) {
   return {
     ...current,
     locked,
-    canRetryDraft,
-    pendingResponse: !!attempt && !attempt.jobId,
+    pendingResponse: !!attempt && !attempt.jobId && current.busy,
     canConfirm:
       !!current.preflight?.can_generate &&
       !locked &&
@@ -436,7 +438,7 @@ export function useAiWorkflow(session: SourceSession | null) {
     setConfirmed: (confirmed: boolean) =>
       setState((s) => ({ ...s, confirmed })),
     analyze: () => {
-      if (!session || locked) return
+      if (!session || current.busy || activeJob) return
       return submit(
         { kind: 'preflight', key: crypto.randomUUID() },
         { sessionId: sid, revision },

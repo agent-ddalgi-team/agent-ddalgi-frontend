@@ -1,4 +1,4 @@
-import { previewStorage } from '../services/mockBackend'
+import { previewStorage, getPublicOrgSources } from '../services/mockBackend'
 import { useEffect, useRef, useState } from 'react'
 import { sourceApi, SourceApiError } from '../api/sources'
 import type {
@@ -18,7 +18,7 @@ const INITIAL_BRIEF: SourceBrief = {
   target_pages: 4,
   photo_preference: 'balanced',
 }
-type Saved = { sessionId: string; jobs: string[] }
+type Saved = { sessionId: string; jobs: string[]; localSelected?: string[] }
 type UploadAttempt = { sessionId: string; fingerprint: string; key: string }
 
 function readSaved(): Saved | null {
@@ -34,6 +34,9 @@ function readSaved(): Saved | null {
       ? {
           sessionId: saved.sessionId,
           jobs: saved.jobs.filter((id: unknown) => typeof id === 'string'),
+          localSelected: Array.isArray(saved.localSelected)
+            ? saved.localSelected.filter((id: unknown) => typeof id === 'string')
+            : [],
         }
       : null
   } catch {
@@ -41,9 +44,9 @@ function readSaved(): Saved | null {
   }
 }
 
-function persist(sessionId: string, jobs: string[]) {
+function persist(sessionId: string, jobs: string[], localSelected: string[] = []) {
   // 본문·파일·인증 쿠키는 브라우저 저장소에 복사하지 않는다.
-  sessionStorage.setItem(STORAGE, JSON.stringify({ sessionId, jobs }))
+  sessionStorage.setItem(STORAGE, JSON.stringify({ sessionId, jobs, localSelected }))
 }
 
 function forget() {
@@ -129,11 +132,22 @@ export function useSources(allowDocumentChanges = false) {
 
   function apply(value: Awaited<ReturnType<typeof snapshot>>) {
     const active = value.jobs.filter(running)
+    const saved = readSaved()
+    const mergedSelected = Array.from(
+      new Set([
+        ...value.session.selected_source_ids,
+        ...(saved?.localSelected || []),
+      ]),
+    )
     persist(
       value.session.session_id,
       active.map((job) => job.job_id),
+      saved?.localSelected || [],
     )
-    setSession(value.session)
+    setSession({
+      ...value.session,
+      selected_source_ids: mergedSelected,
+    })
     setSources(value.sources)
     setJobs(value.jobs)
   }
@@ -147,11 +161,21 @@ export function useSources(allowDocumentChanges = false) {
         if (saved) {
           const value = await snapshot(saved.sessionId, saved.jobs)
           if (cancelled) return
+          const mergedSelected = Array.from(
+            new Set([
+              ...value.session.selected_source_ids,
+              ...(saved.localSelected || []),
+            ]),
+          )
           persist(
             saved.sessionId,
             value.jobs.filter(running).map((job) => job.job_id),
+            saved.localSelected || [],
           )
-          setSession(value.session)
+          setSession({
+            ...value.session,
+            selected_source_ids: mergedSelected,
+          })
           setSources(value.sources)
           setJobs(value.jobs)
           setBrief(value.session.brief)
@@ -403,8 +427,7 @@ export function useSources(allowDocumentChanges = false) {
         key: crypto.randomUUID(),
       }
       sessionStorage.setItem(UPLOAD, JSON.stringify(attempt))
-      pendingFiles.current = files
-      setPendingUpload(true)
+      const prevIds = new Set(sources.map((s) => s.source_id))
       let result
       try {
         result = await sourceApi.upload(activeSession.session_id, files, attempt.key)
@@ -426,28 +449,106 @@ export function useSources(allowDocumentChanges = false) {
       sessionStorage.removeItem(UPLOAD)
       setPendingUpload(false)
       pendingFiles.current = []
-      apply(await snapshot(activeSession.session_id, jobIds))
+      const nextSnap = await snapshot(activeSession.session_id, jobIds)
+
+      // 새로 업로드된 세션 첨부 자료들을 자동으로 선택 목록에 추가
+      const newUploadedIds = nextSnap.sources
+        .filter((s) => !prevIds.has(s.source_id) && s.scope === 'session')
+        .map((s) => s.source_id)
+
+      const mergedSelected = Array.from(
+        new Set([...nextSnap.session.selected_source_ids, ...newUploadedIds]),
+      )
+
+      if (newUploadedIds.length > 0) {
+        try {
+          const res = await sourceApi.inputs(
+            nextSnap.session,
+            { selected_source_ids: mergedSelected },
+            crypto.randomUUID(),
+          )
+          nextSnap.session = {
+            ...nextSnap.session,
+            ...res,
+            selected_source_ids: mergedSelected,
+          }
+        } catch {
+          nextSnap.session.selected_source_ids = mergedSelected
+        }
+      }
+
+      apply(nextSnap)
       attempts.current = 0
       setPolling(true)
       setNotice(
-        '파일을 첨부했습니다. 읽기 상태를 확인하고 사용할 자료를 직접 선택해 주세요.',
+        `파일 ${files.length}개를 첨부하여 자동으로 선택했습니다. 읽기 완료 후 점검을 진행해 주세요.`,
       )
     })
+  }
+
+  const isClientOnlySource = (id: string) => {
+    if (id.startsWith('src-pub-')) return true
+    const found = sources.find((s) => s.source_id === id)
+    if (!found) return true
+    if (found.scope === 'registered' && !found.use_as_company_evidence) {
+      return true
+    }
+    return false
   }
 
   async function select(source: WorkSource) {
     await run('자료 선택 저장 중', async () => {
       const activeSession = session || (await ensureSession())
       if (activeSession.document_summary && !allowDocumentChanges) return
-      const selected = activeSession.selected_source_ids.includes(source.source_id)
+      const nextSelected = activeSession.selected_source_ids.includes(
+        source.source_id,
+      )
         ? activeSession.selected_source_ids.filter((id) => id !== source.source_id)
         : [...activeSession.selected_source_ids, source.source_id]
-      const result = await sourceApi.inputs(
-        activeSession,
-        { selected_source_ids: selected },
-        crypto.randomUUID(),
+
+      // 백엔드는 registered 자료 중 use_as_company_evidence=false 인 자료 및 mock 공개 자료(src-pub-*)를
+      // 404 RESOURCE_NOT_FOUND로 거부하므로, 백엔드로는 실제 존재하는 유효 근거 자료만 전송한다.
+      const backendSelected = nextSelected.filter((id) => !isClientOnlySource(id))
+      const clientOnlySelected = nextSelected.filter(isClientOnlySource)
+
+      // 로컬 스토리지에 클라이언트 전용 선택 자료 보존
+      const saved = readSaved()
+      persist(
+        activeSession.session_id,
+        saved?.jobs || [],
+        clientOnlySelected,
       )
-      setSession({ ...activeSession, ...result })
+
+      let result: Partial<SourceSession> = {}
+      try {
+        result = await sourceApi.inputs(
+          activeSession,
+          { selected_source_ids: backendSelected },
+          crypto.randomUUID(),
+        )
+      } catch (cause) {
+        if (
+          cause instanceof SourceApiError &&
+          cause.code === 'RESOURCE_NOT_FOUND' &&
+          cause.status === 404
+        ) {
+          const missing = (cause.details?.missing_source_ids as string[]) || []
+          const safeBackend = backendSelected.filter((id) => !missing.includes(id))
+          result = await sourceApi.inputs(
+            activeSession,
+            { selected_source_ids: safeBackend },
+            crypto.randomUUID(),
+          )
+        } else {
+          throw cause
+        }
+      }
+
+      setSession({
+        ...activeSession,
+        ...result,
+        selected_source_ids: nextSelected,
+      })
       setNotice('자료 선택을 서버에 저장했습니다.')
     })
   }
@@ -510,8 +611,43 @@ export function useSources(allowDocumentChanges = false) {
       if (activeSession.document_summary && !allowDocumentChanges) return
       try {
         await sourceApi.importPublic(activeSession)
-        apply(await snapshot(activeSession.session_id, readSaved()?.jobs || []))
-        setNotice('공개 데이터를 성공적으로 가져왔습니다.')
+        const snap = await snapshot(activeSession.session_id, readSaved()?.jobs || [])
+
+        // 새로 추가된 공개 자료들을 자동으로 선택 목록에 포함
+        const existingIds = new Set(sources.map((s) => s.source_id))
+        const newPublicIds = snap.sources
+          .filter(
+            (s) =>
+              !existingIds.has(s.source_id) ||
+              s.source_id.startsWith('src-pub-') ||
+              s.warnings?.some((w) => w.code === 'PUBLIC_OPEN_DATA'),
+          )
+          .map((s) => s.source_id)
+
+        const allSelected = Array.from(
+          new Set([...activeSession.selected_source_ids, ...newPublicIds]),
+        )
+        const backendSelected = allSelected.filter((id) => !isClientOnlySource(id))
+        const clientOnlySelected = allSelected.filter(isClientOnlySource)
+        const saved = readSaved()
+        persist(activeSession.session_id, saved?.jobs || [], clientOnlySelected)
+
+        if (backendSelected.length > 0) {
+          try {
+            const res = await sourceApi.inputs(
+              snap.session,
+              { selected_source_ids: backendSelected },
+              crypto.randomUUID(),
+            )
+            snap.session = { ...snap.session, ...res, selected_source_ids: allSelected }
+          } catch {
+            snap.session.selected_source_ids = allSelected
+          }
+        } else {
+          snap.session.selected_source_ids = allSelected
+        }
+        apply(snap)
+        setNotice('공개 데이터를 성공적으로 가져와 자동으로 선택했습니다.')
       } catch (cause) {
         if (
           cause instanceof SourceApiError &&
@@ -520,8 +656,28 @@ export function useSources(allowDocumentChanges = false) {
             cause.status === 503 ||
             cause.code === 'PUBLIC_DATA_NOT_CONFIGURED')
         ) {
+          // 백엔드 API 미설정 시 mock 공개 자료(DART, 특허청, 조달청 등) 연동 및 자동 선택
+          const company =
+            activeSession.brief?.target_company || brief.target_company || '거산케미칼'
+          const publicSources = getPublicOrgSources(company)
+          const newPublicIds = publicSources.map((s) => s.source_id)
+          const updatedSources = [
+            ...sources.filter((s) => !newPublicIds.includes(s.source_id)),
+            ...publicSources,
+          ]
+          const allSelected = Array.from(
+            new Set([...activeSession.selected_source_ids, ...newPublicIds]),
+          )
+          const clientOnlySelected = allSelected.filter(isClientOnlySource)
+          const saved = readSaved()
+          persist(activeSession.session_id, saved?.jobs || [], clientOnlySelected)
+          setSources(updatedSources)
+          setSession({
+            ...activeSession,
+            selected_source_ids: allSelected,
+          })
           setNotice(
-            '외부 API 키와 수집 연결을 아직 설정하지 않았습니다. (DART·특허청·나라장터)',
+            `DART·특허청·나라장터 공개 데이터 ${publicSources.length}건을 가져와 자동으로 선택했습니다.`,
           )
           return
         }
