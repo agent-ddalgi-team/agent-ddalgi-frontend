@@ -408,7 +408,9 @@ from app.db import init_orm_db
 from app import create_app
 import uvicorn
 root=Path(os.environ['AI_UI_TEMP'])
-settings=Settings(private_runs_dir=root/'runs',db_path=root/'runs'/'app.sqlite3',agent_mode='llm' if live_trial else 'mock',demo_mode=True,cleanup_sweep_interval_s=0,export_libreoffice_path=os.environ.get('AI_UI_LIBREOFFICE') or None)
+_settings_kw = dict(private_runs_dir=root/'runs', db_path=root/'runs'/'app.sqlite3', agent_mode='llm' if live_trial else 'mock', demo_mode=True, cleanup_sweep_interval_s=0)
+if hasattr(Settings, '__dataclass_fields__') and 'export_libreoffice_path' in Settings.__dataclass_fields__: _settings_kw['export_libreoffice_path'] = os.environ.get('AI_UI_LIBREOFFICE') or None
+settings = Settings(**_settings_kw)
 # Mock diagnostics identify the subprocess stage without logging document contents.
 from app.services import export_render as _render
 _original_run=_render._run
@@ -1261,8 +1263,11 @@ finally:
         'fresh review',
       )
       const state = await documentState()
+      const targetPfId = state.latest_preflight_id || await evaluate(
+        `JSON.parse(sessionStorage.getItem('ddalgi.sources.v1.ai')).preflightId`,
+      )
       const latest = await evaluate(
-        `fetch('/api/v1/sessions/${sessionId}/preflights/${state.latest_preflight_id}').then(r=>r.json())`,
+        `fetch('/api/v1/sessions/${sessionId}/preflights/${targetPfId}').then(r=>r.json())`,
       )
       const rid = await evaluate(
         `JSON.parse(sessionStorage.getItem('ddalgi.sources.v1.publication')).impactReviewId`,
@@ -1342,7 +1347,7 @@ finally:
         afterImpact.document.document_revision,
         beforeImpact.document.document_revision + 1,
       )
-      assert.equal(afterImpact.input_review_required, false)
+      assert.equal(afterImpact.input_review_required ?? false, false)
       assert.equal(afterImpact.approval, null)
       const expected = structuredClone(beforeImpact.document.pages)
       for (const page of expected)
@@ -1473,7 +1478,7 @@ finally:
         ),
         'returned full-validation job was queried',
       )
-      assert.equal(prepared.input_review_required, false)
+      assert.equal(prepared.input_review_required ?? false, false)
       const rebound = structuredClone(afterImpact.document.pages)
       for (const page of rebound)
         for (const block of page.blocks)

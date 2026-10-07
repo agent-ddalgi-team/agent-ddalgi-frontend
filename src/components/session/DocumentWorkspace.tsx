@@ -311,6 +311,7 @@ export function DocumentWorkspace({
 
   const impactPanel = (work.impactRequired ||
     work.impactReview?.status === 'pending' ||
+    work.impactReview?.status === 'stale' ||
     work.saved.impactCreate ||
     work.saved.impactRecovery) && (
     <section
@@ -375,7 +376,10 @@ export function DocumentWorkspace({
           </button>
         </>
       )}
-      {work.impactReview && (
+      {work.impactReview &&
+        (!preflight ||
+          work.impactReview.preflight_id === preflight.preflight_id ||
+          work.impactReview.status === 'stale') && (
         <>
           <p className="mt-3 font-semibold">
             {work.impactReview.status === 'stale'
