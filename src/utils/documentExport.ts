@@ -44,11 +44,12 @@ export function sanitizeDownloadFileName(
   if (!rawName || typeof rawName !== 'string') return fallback
 
   // 앞뒤 공백 및 경로 탐색 패턴 제거
-  let clean = rawName
+  const clean = rawName
     .trim()
     .replace(/\.\.+[/\\]/g, '')
     .replace(/[/\\]/g, '_')
     // OS 예약 문자 및 제어문자 제거
+    // eslint-disable-next-line no-control-regex
     .replace(/[\\/:*?"<>|\x00-\x1f]/g, '_')
     .replace(/_{2,}/g, '_')
 

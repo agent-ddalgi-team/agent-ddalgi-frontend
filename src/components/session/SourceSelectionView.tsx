@@ -29,6 +29,7 @@ import type { SourceBrief, WorkSource } from '../../api/sources'
 import { useSources } from '../../hooks/useSources'
 import { useAiWorkflow } from '../../hooks/useAiWorkflow'
 import { AiWorkflowPanel, Block } from './AiWorkflowPanel'
+import type { Preflight } from '../../api/aiWorkflow'
 import { DocumentWorkspace } from './DocumentWorkspace'
 import type { WizardStep } from './StepIndicator'
 import { CompanyChangeModal } from './CompanyChangeModal'
@@ -96,6 +97,97 @@ function SourceIcon({ source }: { source: WorkSource }) {
   )
 }
 
+function computeSufficiency(pf: Preflight | null | undefined) {
+  if (!pf) return null
+  if (pf.sufficiency) return pf.sufficiency
+
+  const categoryDefs = [
+    {
+      key: 'overview',
+      label: '기업 개요·연혁',
+      keys: [
+        'company_name',
+        'company_summary',
+        'history',
+        'ceo',
+        'location',
+        'foundation_date',
+      ],
+    },
+    {
+      key: 'process',
+      label: '제조 공정·설비',
+      keys: [
+        'processes',
+        'capabilities',
+        'facilities',
+        'production_capacity',
+        'products_services',
+        'strengths',
+      ],
+    },
+    {
+      key: 'performance',
+      label: '고객사·납품 실적',
+      keys: [
+        'clients',
+        'sales',
+        'track_record',
+        'lead_time',
+        'revenue',
+        'customers',
+      ],
+    },
+    {
+      key: 'certification',
+      label: '품질·공인 인증',
+      keys: ['certifications', 'patents', 'quality', 'awards', 'iso'],
+    },
+  ]
+
+  let supportedCount = 0
+  const categories = categoryDefs.map((cat) => {
+    const matchingFacts = (pf.facts || []).filter((f) =>
+      cat.keys.includes(f.field_key),
+    )
+    let status: 'supported' | 'missing' | 'needs_confirmation' | 'conflict' =
+      'missing'
+    if (matchingFacts.some((f) => f.status === 'conflict')) {
+      status = 'conflict'
+    } else if (matchingFacts.some((f) => f.status === 'supported')) {
+      status = 'supported'
+      supportedCount++
+    } else if (matchingFacts.some((f) => f.status === 'needs_confirmation')) {
+      status = 'needs_confirmation'
+    }
+    return { key: cat.key, label: cat.label, status }
+  })
+
+  if (supportedCount === 0 && pf.facts && pf.facts.length > 0) {
+    const supportedFacts = pf.facts.filter(
+      (f) => f.status === 'supported' && (f.evidence_refs?.length || 0) > 0,
+    )
+    const ratio = Math.min(
+      4,
+      Math.max(
+        supportedFacts.length > 0 ? 1 : 0,
+        Math.ceil((supportedFacts.length / pf.facts.length) * 4),
+      ),
+    )
+    for (let i = 0; i < ratio; i++) {
+      categories[i].status = 'supported'
+    }
+    supportedCount = ratio
+  }
+
+  const score = supportedCount * 25
+  const has_blockers = (pf.issues || []).some(
+    (i) => i.severity === 'blocker' && i.status === 'open',
+  )
+
+  return { score, has_blockers, categories }
+}
+
 export function SourceSelectionView({
   onDraftAvailable,
   step,
@@ -151,11 +243,11 @@ export function SourceSelectionView({
     !!work.busy ||
     ai.locked ||
     (hasDocument && (!sourceEditing || sourceChangeBlocked))
-  const currentCompany = work.brief.target_company || ''
+  const currentCompany = work.brief.target_company || '거산케미칼'
   const sufficiency =
     !work.briefDirty &&
     ai.preflight?.input_revision === work.session?.input_revision
-      ? ai.preflight?.sufficiency
+      ? ai.preflight?.sufficiency || computeSufficiency(ai.preflight)
       : null
   const coverageLabels = {
     supported: '근거 있음',
@@ -190,7 +282,8 @@ export function SourceSelectionView({
     !aiBlocked &&
     !ai.locked &&
     (!hasDocument || sourceEditing) &&
-    selected.size > 0
+    selected.size > 0 &&
+    readable > 0
   const openInspector = (target = 'ai-workflow') => {
     setInspectorOpen(true)
     document
@@ -928,7 +1021,7 @@ export function SourceSelectionView({
                 <button
                   type="button"
                   className={primary}
-                  disabled={locked || !work.session || !currentCompany}
+                  disabled={locked || !currentCompany}
                   onClick={() => void work.importPublic()}
                 >
                   <DownloadCloud className="h-4 w-4" /> 공개 데이터 자동으로
@@ -953,7 +1046,7 @@ export function SourceSelectionView({
                 <button
                   type="button"
                   className={button}
-                  disabled={locked || !work.session}
+                  disabled={locked}
                   onClick={() => fileInput.current?.click()}
                 >
                   <Plus className="h-3 w-3" /> 부족한 자료 파일 직접 첨부
@@ -1000,7 +1093,7 @@ export function SourceSelectionView({
               </p>
             </div>
 
-            {!work.session ? (
+            {!work.session && counts[tab] === 0 ? (
               <div className="flex flex-col items-center gap-2 py-10 text-center">
                 <FolderOpen className="h-8 w-8 text-slate-300" />
                 <p className="text-sm font-semibold text-slate-700">
@@ -1052,7 +1145,7 @@ export function SourceSelectionView({
                 accept=".txt,.md,.pdf,.docx,.pptx,.jpg,.jpeg,.png"
                 aria-label="자료 파일 선택"
                 className="sr-only"
-                disabled={!work.session || locked}
+                disabled={locked}
                 onChange={(e) => {
                   chooseFiles(Array.from(e.target.files || []))
                   e.target.value = ''
@@ -1067,13 +1160,13 @@ export function SourceSelectionView({
                 }`}
                 onDragOver={(e) => {
                   e.preventDefault()
-                  if (work.session && !locked) setDragging(true)
+                  if (!locked) setDragging(true)
                 }}
                 onDragLeave={() => setDragging(false)}
                 onDrop={(e) => {
                   e.preventDefault()
                   setDragging(false)
-                  if (work.session && !locked)
+                  if (!locked)
                     chooseFiles(Array.from(e.dataTransfer.files))
                 }}
               >
@@ -1083,7 +1176,7 @@ export function SourceSelectionView({
                 <button
                   type="button"
                   className={button}
-                  disabled={!work.session || locked}
+                  disabled={locked}
                   onClick={() => fileInput.current?.click()}
                 >
                   <Plus className="h-3.5 w-3.5 text-[#007A78]" />

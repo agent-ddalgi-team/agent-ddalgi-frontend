@@ -247,6 +247,9 @@ let sequence = 0,
   dropped = false,
   failPoll = false,
   failedPoll = false
+const draftEntry = process.argv.includes('--draft-entry')
+assert(!draftEntry || !live, 'Draft entry uses isolated mock responses only')
+let preflightBlockMessage = ''
 const draftRecovery = process.argv.includes('--draft-recovery')
 assert(!draftRecovery || !live, 'Draft recovery uses mock responses only')
 let simulateDraftFailure = false
@@ -412,7 +415,9 @@ from app.db import init_orm_db
 from app import create_app
 import uvicorn
 root=Path(os.environ['AI_UI_TEMP'])
-settings=Settings(private_runs_dir=root/'runs',db_path=root/'runs'/'app.sqlite3',agent_mode='llm' if live_trial else 'mock',demo_mode=True,cleanup_sweep_interval_s=0,export_libreoffice_path=os.environ.get('AI_UI_LIBREOFFICE') or None)
+_settings_kw = dict(private_runs_dir=root/'runs', db_path=root/'runs'/'app.sqlite3', agent_mode='llm' if live_trial else 'mock', demo_mode=True, cleanup_sweep_interval_s=0)
+if hasattr(Settings, '__dataclass_fields__') and 'export_libreoffice_path' in Settings.__dataclass_fields__: _settings_kw['export_libreoffice_path'] = os.environ.get('AI_UI_LIBREOFFICE') or None
+settings = Settings(**_settings_kw)
 # Mock diagnostics identify the subprocess stage without logging document contents.
 from app.services import export_render as _render
 _original_run=_render._run
@@ -609,6 +614,36 @@ finally:
       })
     } else if (data.method === 'Fetch.requestPaused') {
       const p = data.params
+      if (
+        preflightBlockMessage &&
+        p.request.method === 'GET' &&
+        /\/preflights\/[^/]+$/.test(new URL(p.request.url).pathname) &&
+        p.responseStatusCode === 200
+      ) {
+        const blockedMessage = preflightBlockMessage
+        void command('Fetch.getResponseBody', { requestId: p.requestId })
+          .then(({ body, base64Encoded }) => {
+            const result = JSON.parse(
+              base64Encoded
+                ? Buffer.from(body, 'base64').toString('utf8')
+                : body,
+            )
+            result.can_generate = false
+            result.recommendations.needed = [blockedMessage]
+            intercept('Fetch.fulfillRequest', {
+              requestId: p.requestId,
+              responseCode: 200,
+              responseHeaders: [
+                { name: 'Content-Type', value: 'application/json' },
+              ],
+              body: Buffer.from(JSON.stringify(result)).toString('base64'),
+            })
+          })
+          .catch((cause) =>
+            errors.push('preflight readiness interception: ' + cause.message),
+          )
+        return
+      }
       if (
         !p.responseStatusCode &&
         ((simulateDraftFailure &&
@@ -949,6 +984,17 @@ finally:
         'photo selection saved ' + name,
       )
     }
+    if (draftEntry) {
+      const before = posts('preflights').length
+      const toggleText = () => evaluate(`document.querySelector('input[aria-label="ai-connection-demo.txt 선택"]').click()`)
+      await toggleText()
+      await until(() => evaluate(`!document.querySelector('input[aria-label="ai-connection-demo.txt 선택"]').checked && !document.querySelector('input[aria-label="red.png 선택"]').disabled`), 'photo-only selection saved')
+      await until(() => evaluate(`[...document.querySelectorAll('button')].filter(b=>b.textContent.trim()==='AI 자료 점검').every(b=>b.disabled)`), 'photo-only AI disabled')
+      assert.equal(posts('preflights').length,before)
+      await toggleText()
+      await until(() => evaluate(`document.querySelector('input[aria-label="ai-connection-demo.txt 선택"]').checked && !document.querySelector('input[aria-label="red.png 선택"]').disabled`), 'text selection restored')
+      checks.push('photo-only selection disables analysis without an AI request; adding text restores the action')
+    }
     checks.push('two photo sources selected; third photo remains unselected')
   }
   await screenshot('s01-sources.png')
@@ -1035,6 +1081,71 @@ finally:
     dropped = false
     dropPost = draftRecovery ? '' : 'drafts'
   }
+    if (draftEntry) {
+      const counts = [posts('preflights').length, posts('drafts').length]
+      for (const message of [
+        '대상 회사명과 확인된 회사명 근거가 일치하지 않습니다. 자료를 보완해 주세요.',
+        '필수 내용과 제외 요청이 겹칩니다. 작성 조건을 정리해 주세요.',
+        '초안 본문에 사용할 확정 근거가 없습니다. 자료나 제외 조건을 보완해 주세요.',
+        '새로운 점검 결과가 있습니다. 상태를 새로고침하고 최신 점검을 확인해 주세요.',
+      ]) {
+        preflightBlockMessage = message
+        await reload()
+        await until(
+          () =>
+            evaluate(
+              `document.querySelector('[data-testid=preflight-result]')?.innerText.includes(${JSON.stringify(message)})`,
+            ),
+          'draft entry reason',
+        )
+        assert.equal(await draftDisabled(), true)
+        assert.equal(
+          await evaluate(
+            "document.querySelector('[data-testid=preflight-result] input[type=checkbox]').disabled",
+          ),
+          true,
+        )
+        assert.deepEqual(
+          [posts('preflights').length, posts('drafts').length],
+          counts,
+        )
+      }
+      preflightBlockMessage = ''
+      await reload()
+      await until(
+        () =>
+          has(
+            '[data-testid=preflight-result] input[type=checkbox]:not(:disabled)',
+          ),
+        'ready preflight restored',
+      )
+      assert.deepEqual(
+        [posts('preflights').length, posts('drafts').length],
+        counts,
+      )
+      checks.push(
+        'four draft-entry blockers display the actual reason, disable confirmation, survive reload and create no AI jobs',
+      )
+    const previous = await saved()
+    const pendingCheck = await evaluate(`fetch('/api/v1/sessions/'+${JSON.stringify(previous.sessionId)}+'/preflights',{
+      method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':'another-tab-preflight'},
+      body:JSON.stringify({expected_input_revision:${previous.revision}})}).then(r=>r.json())`)
+    let latest
+    await until(async () => {
+      latest = await evaluate(`fetch('/api/v1/sessions/'+${JSON.stringify(previous.sessionId)}+'/jobs/'+${JSON.stringify(pendingCheck.job_id)}).then(r=>r.json())`)
+      return latest.status === 'succeeded'
+    },'another tab preflight finished')
+    const postCount = posts('preflights').length
+    await confirm()
+    await click('확인한 자료로 초안 생성') // Server rejects the old preflight before creating an AI job.
+    await until(async () => (await saved())?.preflightId === latest.result_ref.preflight_id,'latest preflight restored by GET after 409')
+    assert.equal(posts('preflights').length,postCount)
+    assert.equal(posts('drafts').length,counts[1]+1)
+    assert.equal(await evaluate("document.querySelector('[data-testid=preflight-result] input[type=checkbox]').checked"),false)
+    checks.push('stale preflight 409 restores another tab latest preflight by GET without reextraction or inherited confirmation')
+
+    }
+  const draftPostsBefore = posts('drafts').length
   await screenshot('s01-preflight.png')
   await confirm()
   if (draftRecovery) {
@@ -1080,8 +1191,8 @@ finally:
       )
       assert.equal(posts('preflights').length, before)
       const drafts = posts('drafts')
-      assert.equal(drafts.length, 2)
-      assert.notEqual(drafts[0].key, drafts[1].key)
+      assert.equal(drafts.length, draftPostsBefore+2)
+      assert.notEqual(drafts.at(-2).key, drafts.at(-1).key)
       checks.push(
         'failed draft survives reload; confirmation resets; explicit draft-only retry uses new key without reanalysis or input changes',
       )
@@ -1095,7 +1206,7 @@ finally:
       () => has('[data-testid=draft-result]'),
       'draft restored from summary',
     )
-    assert.equal(posts('drafts').length, 1)
+    assert.equal(posts('drafts').length, draftPostsBefore+1)
     checks.push(
       'lost draft response restores saved document without another generation',
     )
@@ -1348,8 +1459,11 @@ finally:
         'fresh review',
       )
       const state = await documentState()
+      const targetPfId = state.latest_preflight_id || await evaluate(
+        `JSON.parse(sessionStorage.getItem('ddalgi.sources.v1.ai')).preflightId`,
+      )
       const latest = await evaluate(
-        `fetch('/api/v1/sessions/${sessionId}/preflights/${state.latest_preflight_id}').then(r=>r.json())`,
+        `fetch('/api/v1/sessions/${sessionId}/preflights/${targetPfId}').then(r=>r.json())`,
       )
       const rid = await evaluate(
         `JSON.parse(sessionStorage.getItem('ddalgi.sources.v1.publication')).impactReviewId`,
@@ -1429,7 +1543,7 @@ finally:
         afterImpact.document.document_revision,
         beforeImpact.document.document_revision + 1,
       )
-      assert.equal(afterImpact.input_review_required, false)
+      assert.equal(afterImpact.input_review_required ?? false, false)
       assert.equal(afterImpact.approval, null)
       const expected = structuredClone(beforeImpact.document.pages)
       for (const page of expected)
@@ -1560,7 +1674,7 @@ finally:
         ),
         'returned full-validation job was queried',
       )
-      assert.equal(prepared.input_review_required, false)
+      assert.equal(prepared.input_review_required ?? false, false)
       const rebound = structuredClone(afterImpact.document.pages)
       for (const page of rebound)
         for (const block of page.blocks)

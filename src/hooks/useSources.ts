@@ -12,6 +12,7 @@ const STORAGE = previewStorage
 const UPLOAD = `${STORAGE}.upload`
 const INITIAL_BRIEF: SourceBrief = {
   purpose: '신규 고객 소개 (표준 제안용)',
+  target_company: '거산케미칼',
   emphasis: [],
   direction: 'balanced',
   target_pages: 4,
@@ -156,6 +157,15 @@ export function useSources(allowDocumentChanges = false) {
           setBrief(value.session.brief)
           setPendingUpload(!!sessionStorage.getItem(UPLOAD))
           setNotice('서버에 저장된 자료와 선택 상태를 불러왔습니다.')
+        } else {
+          try {
+            const reg = await sourceApi.registered(demo)
+            if (!cancelled && reg?.items?.length) {
+              setSources(reg.items)
+            }
+          } catch {
+            // No cookie or network issue
+          }
         }
       } catch (cause) {
         if (cancelled) return
@@ -178,6 +188,7 @@ export function useSources(allowDocumentChanges = false) {
       cancelled = true
       mounted.current = false
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // 파일 읽기 상태만 조회한다. 점검/초안 생성(LLM)은 여기서 호출하지 않는다.
@@ -290,29 +301,35 @@ export function useSources(allowDocumentChanges = false) {
     }
   }
 
+  async function ensureSession(): Promise<SourceSession> {
+    if (session) return session
+    const saved = readSaved()
+    if (saved) {
+      const value = await snapshot(saved.sessionId, saved.jobs)
+      apply(value)
+      setBrief(value.session.brief)
+      setPendingUpload(!!sessionStorage.getItem(UPLOAD))
+      return value.session
+    }
+    if (!brief.purpose.trim()) throw new Error('사용 목적을 입력해 주세요.')
+    const body = JSON.stringify({ brief, demo })
+    if (createAttempt.current?.body !== body)
+      createAttempt.current = { body, key: crypto.randomUUID() }
+    const value = await sourceApi.create(
+      brief,
+      createAttempt.current.key,
+      demo,
+    )
+    persist(value.session_id, [])
+    setSession(value)
+    setBrief(value.brief)
+    apply(await snapshot(value.session_id, []))
+    return value
+  }
+
   async function start() {
     await run('작업 시작 중', async () => {
-      const saved = readSaved()
-      if (saved) {
-        const value = await snapshot(saved.sessionId, saved.jobs)
-        apply(value)
-        setBrief(value.session.brief)
-        setPendingUpload(!!sessionStorage.getItem(UPLOAD))
-        return
-      }
-      if (!brief.purpose.trim()) throw new Error('사용 목적을 입력해 주세요.')
-      const body = JSON.stringify({ brief, demo })
-      if (createAttempt.current?.body !== body)
-        createAttempt.current = { body, key: crypto.randomUUID() }
-      const value = await sourceApi.create(
-        brief,
-        createAttempt.current.key,
-        demo,
-      )
-      persist(value.session_id, [])
-      setSession(value)
-      setBrief(value.brief)
-      apply(await snapshot(value.session_id, []))
+      await ensureSession()
       setNotice('작업을 시작했습니다. 자료를 첨부해 주세요.')
     })
   }
@@ -330,9 +347,10 @@ export function useSources(allowDocumentChanges = false) {
   }
 
   async function upload(files: File[]) {
-    if (!session || !files.length) return
+    if (!files.length) return
     await run('파일 업로드 중', async () => {
-      if (session.document_summary && !allowDocumentChanges)
+      const activeSession = session || (await ensureSession())
+      if (activeSession.document_summary && !allowDocumentChanges)
         throw new Error('자료 변경 시작을 먼저 선택해 주세요.')
       if (
         files.some(
@@ -366,7 +384,7 @@ export function useSources(allowDocumentChanges = false) {
       ) as UploadAttempt | null
       if (
         previous &&
-        (previous.sessionId !== session.session_id ||
+        (previous.sessionId !== activeSession.session_id ||
           previous.fingerprint !== signature)
       )
         throw new Error(
@@ -380,7 +398,7 @@ export function useSources(allowDocumentChanges = false) {
       )
         throw new Error('이번 작업에는 최대 10개까지 첨부할 수 있습니다.')
       const attempt = previous || {
-        sessionId: session.session_id,
+        sessionId: activeSession.session_id,
         fingerprint: signature,
         key: crypto.randomUUID(),
       }
@@ -389,7 +407,7 @@ export function useSources(allowDocumentChanges = false) {
       setPendingUpload(true)
       let result
       try {
-        result = await sourceApi.upload(session.session_id, files, attempt.key)
+        result = await sourceApi.upload(activeSession.session_id, files, attempt.key)
       } catch (cause) {
         if (
           cause instanceof SourceApiError &&
@@ -404,11 +422,11 @@ export function useSources(allowDocumentChanges = false) {
         throw cause
       }
       const jobIds = [...new Set([...(readSaved()?.jobs || []), result.job_id])]
-      persist(session.session_id, jobIds)
+      persist(activeSession.session_id, jobIds)
       sessionStorage.removeItem(UPLOAD)
       setPendingUpload(false)
       pendingFiles.current = []
-      apply(await snapshot(session.session_id, jobIds))
+      apply(await snapshot(activeSession.session_id, jobIds))
       attempts.current = 0
       setPolling(true)
       setNotice(
@@ -418,31 +436,33 @@ export function useSources(allowDocumentChanges = false) {
   }
 
   async function select(source: WorkSource) {
-    if (!session || (session.document_summary && !allowDocumentChanges)) return
     await run('자료 선택 저장 중', async () => {
-      const selected = session.selected_source_ids.includes(source.source_id)
-        ? session.selected_source_ids.filter((id) => id !== source.source_id)
-        : [...session.selected_source_ids, source.source_id]
+      const activeSession = session || (await ensureSession())
+      if (activeSession.document_summary && !allowDocumentChanges) return
+      const selected = activeSession.selected_source_ids.includes(source.source_id)
+        ? activeSession.selected_source_ids.filter((id) => id !== source.source_id)
+        : [...activeSession.selected_source_ids, source.source_id]
       const result = await sourceApi.inputs(
-        session,
+        activeSession,
         { selected_source_ids: selected },
         crypto.randomUUID(),
       )
-      setSession({ ...session, ...result })
+      setSession({ ...activeSession, ...result })
       setNotice('자료 선택을 서버에 저장했습니다.')
     })
   }
 
   async function saveBrief() {
-    if (!session || (session.document_summary && !allowDocumentChanges)) return
     await run('작성 조건 저장 중', async () => {
+      const activeSession = session || (await ensureSession())
+      if (activeSession.document_summary && !allowDocumentChanges) return
       if (!brief.purpose.trim()) throw new Error('사용 목적을 입력해 주세요.')
       const result = await sourceApi.inputs(
-        session,
+        activeSession,
         { brief },
         crypto.randomUUID(),
       )
-      setSession({ ...session, ...result, brief })
+      setSession({ ...activeSession, ...result, brief })
       setNotice('작성 조건을 서버에 저장했습니다.')
     })
   }
@@ -485,9 +505,28 @@ export function useSources(allowDocumentChanges = false) {
   }
 
   async function importPublic() {
-    if (!session || (session.document_summary && !allowDocumentChanges)) return
     await run('공개 자료 연결 확인 중', async () => {
-      await sourceApi.importPublic(session)
+      const activeSession = session || (await ensureSession())
+      if (activeSession.document_summary && !allowDocumentChanges) return
+      try {
+        await sourceApi.importPublic(activeSession)
+        apply(await snapshot(activeSession.session_id, readSaved()?.jobs || []))
+        setNotice('공개 데이터를 성공적으로 가져왔습니다.')
+      } catch (cause) {
+        if (
+          cause instanceof SourceApiError &&
+          (cause.status === 404 ||
+            cause.code === 'RESOURCE_NOT_FOUND' ||
+            cause.status === 503 ||
+            cause.code === 'PUBLIC_DATA_NOT_CONFIGURED')
+        ) {
+          setNotice(
+            '외부 API 키와 수집 연결을 아직 설정하지 않았습니다. (DART·특허청·나라장터)',
+          )
+          return
+        }
+        throw cause
+      }
     })
   }
 

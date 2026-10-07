@@ -338,13 +338,18 @@ export function AiWorkflowPanel({
                   ? blockers.length
                     ? '확인할 사항을 검토한 뒤 초안을 만들 수 있어요'
                     : '초안을 만들 수 있어요'
-                  : '사용할 텍스트 근거가 없습니다'}
+                  : preflight.usable_source_ids.length
+                    ? '자료와 작성 조건을 보완해 주세요'
+                    : '사용할 텍스트 근거가 없습니다'}
               </span>
             </div>
             <p className="text-[11px] leading-relaxed text-slate-700">
               {preflight.can_generate
                 ? `사실 ${facts.length}개 중 ${supported}개에 원문 근거가 연결되었습니다. 점검 완료는 사용자 확인과 다르므로 아래에서 내용을 확인해 주세요.`
-                : '자료를 보완하고 다시 점검해 주세요. 사진만으로는 회사 내용을 작성할 수 없습니다.'}
+                : preflight.usable_source_ids.length
+                  ? preflight.recommendations.needed.join(' ') ||
+                    '자료와 작성 조건을 확인한 뒤 다시 점검해 주세요.'
+                  : '자료를 보완하고 다시 점검해 주세요. 사진만으로는 회사 내용을 작성할 수 없습니다.'}
             </p>
           </div>
 

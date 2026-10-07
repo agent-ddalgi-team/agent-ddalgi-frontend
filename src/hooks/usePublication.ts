@@ -27,6 +27,7 @@ type ProposalRecovery = {
 type Saved = {
   sid: string
   did: string
+  boundPreflightId?: string
   impactReviewId?: string
   impactCreate?: {
     key: string
@@ -48,6 +49,11 @@ function read(sid: string, did: string): Saved {
   try {
     const value = JSON.parse(sessionStorage.getItem(STORAGE) || 'null')
     if (!value || value.sid !== sid || value.did !== did) return blank
+    if (
+      value.boundPreflightId !== undefined &&
+      typeof value.boundPreflightId !== 'string'
+    )
+      return blank
     if (
       value.impactReviewId !== undefined &&
       typeof value.impactReviewId !== 'string'
@@ -204,6 +210,13 @@ export function usePublication(
         setBusy(false)
         const restored = read(sid, did)
         if (
+          !restored.boundPreflightId &&
+          (preflightId || value.result.latest_preflight_id)
+        ) {
+          restored.boundPreflightId =
+            preflightId || value.result.latest_preflight_id || undefined
+        }
+        if (
           restored.exportId &&
           restored.approvalId !== value.result.approval?.approval_id
         ) {
@@ -225,7 +238,7 @@ export function usePublication(
       cancelled = true
       active.current = false
     }
-  }, [sid, did])
+  }, [sid, did, preflightId])
 
   useEffect(() => {
     let cancelled = false
@@ -235,10 +248,25 @@ export function usePublication(
         const rid =
           savedRef.current.impactReviewId ||
           savedRef.current.impactRecovery?.reviewId
-        const review = rid
+        let review = rid
           ? await publicationApi.impactReview(sid, did, rid)
           : null
         if (cancelled) return
+        if (
+          preflightId &&
+          review &&
+          review.status === 'applied' &&
+          !savedRef.current.impactRecovery &&
+          review.preflight_id !== preflightId
+        ) {
+          review = null
+          if (savedRef.current.impactReviewId) {
+            const next = { ...savedRef.current, impactReviewId: undefined }
+            persist(next)
+            savedRef.current = next
+            setSaved(next)
+          }
+        }
         setResult((old) =>
           old &&
           old.document.document_revision >
@@ -499,8 +527,17 @@ export function usePublication(
     !!saved.proposalRecovery ||
     !!conflict ||
     inputBusy
+  const boundPfId = saved.boundPreflightId
+  const newPreflightDetected =
+    !!preflightId &&
+    (boundPfId
+      ? preflightId !== boundPfId
+      : (impactReview && impactReview.preflight_id !== preflightId) ||
+        (result?.document.status === 'review_required' && !result?.validation))
   const impactRequired =
-    !!result?.input_review_required || document.input_revision !== inputRevision
+    !!result?.input_review_required ||
+    document.input_revision !== inputRevision ||
+    newPreflightDetected
   const actionBlocked =
     blocked ||
     dirty ||
@@ -845,6 +882,7 @@ export function usePublication(
       setImpactReview({ ...currentReview, status: 'applied' })
       remember({
         ...savedRef.current,
+        boundPreflightId: currentReview.preflight_id,
         impactRecovery: undefined,
         impactCreate: undefined,
         proposalId: undefined,
