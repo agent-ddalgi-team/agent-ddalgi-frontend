@@ -710,13 +710,13 @@ export function SourceSelectionView({
   const aiBlocked =
     !work.session ||
     !!work.busy ||
-    work.briefDirty ||
     work.pendingUpload ||
     pending > 0
   const canAnalyze =
-    !aiBlocked &&
-    !ai.locked &&
-    (!hasDocument || sourceEditing) &&
+    !work.busy &&
+    !ai.busy &&
+    !work.pendingUpload &&
+    pending === 0 &&
     selected.size > 0
   const openInspector = (target = 'ai-workflow') => {
     setInspectorOpen(true)
@@ -724,8 +724,13 @@ export function SourceSelectionView({
       .getElementById(target)
       ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
-  const analyze = () => {
+  const analyze = async () => {
     if (!canAnalyze) return
+    if (work.briefDirty) {
+      await work.saveBrief()
+    }
+    setSourceEditing(true)
+    setSourceChangeBlocked(false)
     void ai.analyze()
     openInspector()
   }
@@ -749,33 +754,21 @@ export function SourceSelectionView({
     setTagOpen(false)
   }
   const suggestedPages = enrichedPreflight?.recommendations.suggested_pages
-  const dockLabel = hasDocument
-    ? sourceEditing && !enrichedAi.preflight
-      ? '변경 자료 AI 점검'
-      : '편집 화면으로 돌아가기'
-    : enrichedAi.locked
-      ? 'AI 작업 확인 중'
-      : enrichedAi.preflight
-        ? enrichedAi.confirmed
-          ? '확인하고 초안 만들기'
-          : '점검 결과 확인 · 초안 만들기'
-        : 'AI 자료 점검'
-  const dockAction = hasDocument
-    ? sourceEditing && !enrichedAi.preflight
-      ? analyze
-      : () => onNavigate(2)
-    : enrichedAi.preflight
-      ? enrichedAi.confirmed && enrichedAi.canConfirm && !aiBlocked
-        ? () => void enrichedAi.generate()
-        : () => openInspector()
-      : analyze
-  const dockDisabled = hasDocument
-    ? sourceEditing && !enrichedAi.preflight
-      ? !canAnalyze
-      : !enrichedAi.document
-    : enrichedAi.preflight
-      ? aiBlocked || enrichedAi.locked
-      : !canAnalyze
+  const dockLabel = enrichedAi.preflight
+    ? enrichedAi.confirmed
+      ? '확인하고 초안 만들기'
+      : '점검 결과 확인 · 초안 만들기'
+    : 'AI 자료 점검'
+  const dockAction = enrichedAi.preflight
+    ? enrichedAi.confirmed && enrichedAi.canConfirm
+      ? () => void enrichedAi.generate()
+      : () => openInspector()
+    : analyze
+  const dockDisabled = enrichedAi.preflight
+    ? enrichedAi.confirmed
+      ? !enrichedAi.canConfirm
+      : false
+    : !canAnalyze
 
   const renderSource = (source: WorkSource) => {
     const isSelected = selected.has(source.source_id)

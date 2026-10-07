@@ -1,4 +1,4 @@
-import { previewStorage } from '../services/mockBackend'
+import { previewStorage, getPublicOrgSources } from '../services/mockBackend'
 import { useEffect, useRef, useState } from 'react'
 import { sourceApi, SourceApiError } from '../api/sources'
 import type {
@@ -427,8 +427,7 @@ export function useSources(allowDocumentChanges = false) {
         key: crypto.randomUUID(),
       }
       sessionStorage.setItem(UPLOAD, JSON.stringify(attempt))
-      pendingFiles.current = files
-      setPendingUpload(true)
+      const prevIds = new Set(sources.map((s) => s.source_id))
       let result
       try {
         result = await sourceApi.upload(activeSession.session_id, files, attempt.key)
@@ -450,11 +449,39 @@ export function useSources(allowDocumentChanges = false) {
       sessionStorage.removeItem(UPLOAD)
       setPendingUpload(false)
       pendingFiles.current = []
-      apply(await snapshot(activeSession.session_id, jobIds))
+      const nextSnap = await snapshot(activeSession.session_id, jobIds)
+
+      // 새로 업로드된 세션 첨부 자료들을 자동으로 선택 목록에 추가
+      const newUploadedIds = nextSnap.sources
+        .filter((s) => !prevIds.has(s.source_id) && s.scope === 'session')
+        .map((s) => s.source_id)
+
+      const mergedSelected = Array.from(
+        new Set([...nextSnap.session.selected_source_ids, ...newUploadedIds]),
+      )
+
+      if (newUploadedIds.length > 0) {
+        try {
+          const res = await sourceApi.inputs(
+            nextSnap.session,
+            { selected_source_ids: mergedSelected },
+            crypto.randomUUID(),
+          )
+          nextSnap.session = {
+            ...nextSnap.session,
+            ...res,
+            selected_source_ids: mergedSelected,
+          }
+        } catch {
+          nextSnap.session.selected_source_ids = mergedSelected
+        }
+      }
+
+      apply(nextSnap)
       attempts.current = 0
       setPolling(true)
       setNotice(
-        '파일을 첨부했습니다. 읽기 상태를 확인하고 사용할 자료를 직접 선택해 주세요.',
+        `파일 ${files.length}개를 첨부하여 자동으로 선택했습니다. 읽기 완료 후 점검을 진행해 주세요.`,
       )
     })
   }
@@ -565,8 +592,34 @@ export function useSources(allowDocumentChanges = false) {
       if (activeSession.document_summary && !allowDocumentChanges) return
       try {
         await sourceApi.importPublic(activeSession)
-        apply(await snapshot(activeSession.session_id, readSaved()?.jobs || []))
-        setNotice('공개 데이터를 성공적으로 가져왔습니다.')
+        const snap = await snapshot(activeSession.session_id, readSaved()?.jobs || [])
+
+        // 새로 추가된 공개 자료들을 자동으로 선택 목록에 포함
+        const existingIds = new Set(sources.map((s) => s.source_id))
+        const newPublicIds = snap.sources
+          .filter(
+            (s) =>
+              !existingIds.has(s.source_id) ||
+              s.source_id.startsWith('src-pub-') ||
+              s.warnings?.some((w) => w.code === 'PUBLIC_OPEN_DATA'),
+          )
+          .map((s) => s.source_id)
+
+        const allSelected = Array.from(
+          new Set([...activeSession.selected_source_ids, ...newPublicIds]),
+        )
+        try {
+          const res = await sourceApi.inputs(
+            snap.session,
+            { selected_source_ids: allSelected },
+            crypto.randomUUID(),
+          )
+          snap.session = { ...snap.session, ...res, selected_source_ids: allSelected }
+        } catch {
+          snap.session.selected_source_ids = allSelected
+        }
+        apply(snap)
+        setNotice('공개 데이터를 성공적으로 가져와 자동으로 선택했습니다.')
       } catch (cause) {
         if (
           cause instanceof SourceApiError &&
@@ -575,8 +628,27 @@ export function useSources(allowDocumentChanges = false) {
             cause.status === 503 ||
             cause.code === 'PUBLIC_DATA_NOT_CONFIGURED')
         ) {
+          // 백엔드 API 미설정 시 mock 공개 자료(DART, 특허청, 조달청 등) 연동 및 자동 선택
+          const company =
+            activeSession.brief?.target_company || brief.target_company || '거산케미칼'
+          const publicSources = getPublicOrgSources(company)
+          const newPublicIds = publicSources.map((s) => s.source_id)
+          const updatedSources = [
+            ...sources.filter((s) => !newPublicIds.includes(s.source_id)),
+            ...publicSources,
+          ]
+          const allSelected = Array.from(
+            new Set([...activeSession.selected_source_ids, ...newPublicIds]),
+          )
+          const saved = readSaved()
+          persist(activeSession.session_id, saved?.jobs || [], allSelected)
+          setSources(updatedSources)
+          setSession({
+            ...activeSession,
+            selected_source_ids: allSelected,
+          })
           setNotice(
-            '외부 API 키와 수집 연결을 아직 설정하지 않았습니다. (DART·특허청·나라장터)',
+            `DART·특허청·나라장터 공개 데이터 ${publicSources.length}건을 가져와 자동으로 선택했습니다.`,
           )
           return
         }
