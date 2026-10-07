@@ -204,8 +204,19 @@ try {
   )
   await idle()
   checks.push('reload with owner cookie and selection')
+  await until(
+    () => evaluate(`!!document.querySelector('input[aria-label="사용 목적"]')`),
+    'purpose input ready',
+  )
   await evaluate(
     `(()=>{const i=document.querySelector('input[aria-label="사용 목적"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(i,'연결 확인용 목적');i.dispatchEvent(new Event('input',{bubbles:true}));})()`,
+  )
+  await until(
+    () =>
+      evaluate(
+        `(()=>{const b=[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='작성 조건 저장');return !!b&&!b.disabled})()`,
+      ),
+    'save brief button enabled',
   )
   await click('작성 조건 저장')
   await idle()

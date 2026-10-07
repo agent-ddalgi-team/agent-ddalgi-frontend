@@ -16,7 +16,7 @@ function App() {
   const [hasDraft, setHasDraft] = useState(false)
   const [step, setStep] = useState<WizardStep>(1)
   const [company, setCompany] = useState<string>(() => {
-    return '새 회사소개서'
+    return '거산케미칼'
   })
   const [statusOpen, setStatusOpen] = useState(false)
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false)
