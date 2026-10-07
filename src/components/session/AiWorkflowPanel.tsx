@@ -199,12 +199,18 @@ export function AiWorkflowPanel({
   const badge: [string, string, typeof Check] = document
     ? ['초안 생성됨', 'bg-emerald-50 text-emerald-800', CheckCircle2]
     : working
-      ? ['점검 중', 'bg-teal-50 text-teal-800', Loader2]
-      : preflight
-        ? preflight.can_generate
-          ? ['점검 완료', 'bg-emerald-50 text-emerald-800', Check]
-          : ['보완 필요', 'bg-amber-50 text-amber-800', AlertTriangle]
-        : [session ? '대기' : '작업 전', 'bg-slate-100 text-slate-500', Info]
+      ? [
+          ai.saved?.attempt?.kind === 'draft' ? '초안 작성 중' : '점검 중',
+          'bg-teal-50 text-teal-800',
+          Loader2,
+        ]
+      : ai.saved?.attempt?.kind === 'draft' && job?.status === 'failed'
+        ? ['초안 생성 실패', 'bg-red-50 text-red-800', AlertTriangle]
+        : preflight
+          ? preflight.can_generate
+            ? ['점검 완료', 'bg-emerald-50 text-emerald-800', Check]
+            : ['보완 필요', 'bg-amber-50 text-amber-800', AlertTriangle]
+          : [session ? '대기' : '작업 전', 'bg-slate-100 text-slate-500', Info]
   const BadgeIcon = badge[2]
   return (
     <section
@@ -252,6 +258,11 @@ export function AiWorkflowPanel({
           className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800"
         >
           {ai.error}
+          {ai.canRetryDraft && (
+            <p className="mt-2 font-semibold">
+              점검 내용을 다시 확인하고 아래에서 초안만 재시도할 수 있습니다.
+            </p>
+          )}
         </div>
       )}
       {ai.pendingResponse && !ai.busy && (
@@ -271,7 +282,8 @@ export function AiWorkflowPanel({
         </div>
       )}
       {(ai.saved?.attempt?.jobId || (ai.error && !ai.pendingResponse)) &&
-        !working && (
+        !working &&
+        !['failed', 'cancelled'].includes(job?.status || '') && (
           <button
             type="button"
             className={button}
@@ -290,8 +302,7 @@ export function AiWorkflowPanel({
             </p>
             <p className="mt-1">
               ‘AI 자료 점검’을 누르면 선택 자료의 사실·근거·보완 사항을
-              분석합니다. 범주별 근거 상태와 확인할 사항을 보여
-              줍니다.
+              분석합니다. 범주별 근거 상태와 확인할 사항을 보여 줍니다.
             </p>
           </div>
           <button
@@ -534,7 +545,11 @@ export function AiWorkflowPanel({
                 onClick={() => void ai.generate()}
               >
                 <Sparkles className="h-4 w-4" />
-                <span>확인한 자료로 초안 생성</span>
+                <span>
+                  {ai.canRetryDraft
+                    ? '확인한 자료로 초안 다시 생성'
+                    : '확인한 자료로 초안 생성'}
+                </span>
               </button>
             </>
           )}

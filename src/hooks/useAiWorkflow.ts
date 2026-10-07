@@ -370,14 +370,29 @@ export function useAiWorkflow(session: SourceSession | null) {
       current.busy ||
       (!!attempt && !terminalFailure))
   const draftFailed = terminalFailure && attempt?.kind === 'draft'
+  const canRetryDraft =
+    draftFailed &&
+    current.job?.status === 'failed' &&
+    !!current.preflight &&
+    !current.document &&
+    !documentId &&
+    current.preflight.input_revision === revision &&
+    (current.job.error?.details?.recovery_action === 'retry_draft' ||
+      [
+        'AGENT_OUTPUT_INVALID',
+        'SERVICE_TEMPORARY_FAILURE',
+        'AI_RATE_LIMIT',
+        'INTERNAL_ERROR',
+      ].includes(current.job.error?.code || ''))
   return {
     ...current,
     locked,
+    canRetryDraft,
     pendingResponse: !!attempt && !attempt.jobId,
     canConfirm:
       !!current.preflight?.can_generate &&
       !locked &&
-      !draftFailed &&
+      !(draftFailed && !canRetryDraft) &&
       !current.document &&
       !documentId,
     setConfirmed: (confirmed: boolean) =>
@@ -395,7 +410,7 @@ export function useAiWorkflow(session: SourceSession | null) {
         locked ||
         !current.confirmed ||
         !current.preflight?.can_generate ||
-        draftFailed ||
+        (draftFailed && !canRetryDraft) ||
         current.document ||
         documentId
       )

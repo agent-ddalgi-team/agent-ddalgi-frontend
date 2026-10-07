@@ -247,6 +247,10 @@ let sequence = 0,
   dropped = false,
   failPoll = false,
   failedPoll = false
+const draftRecovery = process.argv.includes('--draft-recovery')
+assert(!draftRecovery || !live, 'Draft recovery uses mock responses only')
+let simulateDraftFailure = false
+const simulatedJob = 'job_simulated_draft_failure'
 let dropSave = false,
   dropApply = false,
   dropImpactCreate = false,
@@ -605,6 +609,41 @@ finally:
       })
     } else if (data.method === 'Fetch.requestPaused') {
       const p = data.params
+      if (
+        !p.responseStatusCode &&
+        ((simulateDraftFailure &&
+          p.request.method === 'POST' &&
+          new URL(p.request.url).pathname.endsWith('/drafts')) ||
+          (p.request.method === 'GET' &&
+            p.request.url.endsWith('/jobs/' + simulatedJob)))
+      ) {
+        const post = p.request.method === 'POST'
+        if (post) simulateDraftFailure = false
+        const body = post
+          ? { job_id: simulatedJob }
+          : {
+              job_id: simulatedJob,
+              kind: 'draft',
+              status: 'failed',
+              progress: { stage: 'drafting', message: null },
+              result_ref: null,
+              error: {
+                code: 'AGENT_OUTPUT_INVALID',
+                message: '초안의 날짜가 빠졌습니다.',
+                retryable: true,
+                details: { recovery_action: 'retry_draft' },
+              },
+            }
+        intercept('Fetch.fulfillRequest', {
+          requestId: p.requestId,
+          responseCode: post ? 202 : 200,
+          responseHeaders: [
+            { name: 'Content-Type', value: 'application/json' },
+          ],
+          body: Buffer.from(JSON.stringify(body)).toString('base64'),
+        })
+        return
+      }
       if (
         dropApply &&
         p.request.method === 'POST' &&
@@ -994,12 +1033,60 @@ finally:
     assert.equal(posts('preflights').length, before)
     checks.push('input invalidation and failed polling resumes with GET only')
     dropped = false
-    dropPost = 'drafts'
+    dropPost = draftRecovery ? '' : 'drafts'
   }
   await screenshot('s01-preflight.png')
   await confirm()
-  await click('확인한 자료로 초안 생성')
-  if (!live) {
+  if (draftRecovery) {
+      await command('Fetch.enable', {
+        patterns: [
+          { urlPattern: '*api/v1/*', requestStage: 'Response' },
+          { urlPattern: '*api/v1/*/drafts', requestStage: 'Request' },
+          {
+            urlPattern: '*api/v1/*/jobs/' + simulatedJob,
+            requestStage: 'Request',
+          },
+        ],
+      })
+      const before = posts('preflights').length
+      const sessionState = () => evaluate(
+      'fetch("/api/v1/sessions/' + sessionId + '").then(r=>r.json())',
+    )
+    const beforeSession = await sessionState()
+      simulateDraftFailure = true
+      await click('확인한 자료로 초안 생성')
+      await until(
+        () => evaluate("document.body.innerText.includes('초안 생성 실패')"),
+        'draft failure shown',
+      )
+      assert.equal(
+        await evaluate(
+          "document.querySelector('[data-testid=preflight-result] input[type=checkbox]').checked",
+        ),
+        false,
+      )
+      await reload()
+      await until(
+        () => evaluate("document.body.innerText.includes('초안 생성 실패')"),
+        'draft failure restored',
+      )
+      assert.equal(posts('preflights').length, before)
+      assert.deepEqual(await sessionState(), beforeSession)
+      await confirm()
+      await click('확인한 자료로 초안 다시 생성')
+      await until(
+        () => has('[data-testid=draft-result]'),
+        'draft-only retry saved',
+      )
+      assert.equal(posts('preflights').length, before)
+      const drafts = posts('drafts')
+      assert.equal(drafts.length, 2)
+      assert.notEqual(drafts[0].key, drafts[1].key)
+      checks.push(
+        'failed draft survives reload; confirmation resets; explicit draft-only retry uses new key without reanalysis or input changes',
+      )
+    } else await click('확인한 자료로 초안 생성')
+    if (!live && !draftRecovery) {
     await until(() => dropped, 'draft response lost')
     await idle()
     await reload()
