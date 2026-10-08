@@ -280,6 +280,7 @@ export function usePublication(
         if (review?.status === 'applied' && savedRef.current.impactRecovery) {
           remember({
             ...savedRef.current,
+            boundPreflightId: review.preflight_id,
             impactRecovery: undefined,
             impactCreate: undefined,
           })
@@ -842,7 +843,12 @@ export function usePublication(
         install(await snapshot(sid, did))
         setEdits({})
         setRemoved([])
-        remember({ ...savedRef.current, impactRecovery: undefined })
+        remember({
+          ...savedRef.current,
+          boundPreflightId: currentReview.preflight_id,
+          impactRecovery: undefined,
+          impactCreate: undefined,
+        })
         setImpactReview(currentReview)
         setNotice(
           '이미 적용된 변경을 불러왔습니다. 검증 상태를 다시 확인해 주세요.',

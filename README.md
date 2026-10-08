@@ -277,3 +277,11 @@ build·ESLint·격리 --publication --required-insert 28묶음/PDF4쪽 통과. �
 통합 후 build·전체 ESLint 및 백엔드 내용검증 98건 통과. 최종 PDF 통합 36묶음/4쪽 승인·다운로드 통과(Temp ddalgi-ai-ui-kCq9Ef). 기존 500kB 청크 경고는 유지한다. 원본 시연 DB·API 키는 변경하거나 커밋하지 않았다.
 
 최종 DOCX도 실제 API 우회 없이 35묶음/4쪽 승인·다운로드 통과(Temp ddalgi-ai-ui-liz3Ok). 중간 실행의 화면 복원 실패는 최종 통과와 구분하며, 재실행에서는 소스 변경 없이 완료했다.
+
+### 2026-10-08 보완 적용 후 필수 사실 추가 잠금 복구
+
+자료 변경이 서버에 적용됐지만 응답이 유실되어 새로고침한 경우, 이전 boundPreflightId가 남아 추가·검사 버튼을 잠그는 문제를 수정했다. 조회한 영향 검토가 applied일 때 그 검토의 점검 ID도 복원한다. 같은 화면에서 이미 적용된 요청을 다시 확인하는 경로에도 동일하게 반영한다. 이후 새 점검이 있으면 ID 불일치 차단을 유지하며 사실 판정이나 승인을 자동 확정하지 않는다.
+
+`AI_CHECK_BACKEND=C:/final/backend`, `AI_CHECK_LIVE=0`에서 `node scripts/check-ai-workflow.mjs --publication --impact --supplement-required --photos --required-insert`와 같은 명령의 `--docx` 조합이 각각 실제 4쪽 승인·다운로드까지 통과했다. PDF는 Temp ddalgi-ai-ui-RpGeUm, DOCX는 ddalgi-ai-ui-z49PIe에 있다. build·변경 파일 ESLint·diff 검사 통과, 기존 500kB 청크 경고는 유지한다.
+
+새 검사는 격리 세션의 작성 조건에 대응 범위를 필수로 지정하는 준비 요청만 실제 inputs API로 수행한다. 보완 자료 선택·재점검·최신 근거 선택·적용 응답 유실·새로고침·누락 사실/페이지 선택·저장/재검증은 실제 화면에서 수행한다. 필수 오류 해소, 다른 경고 유지, 기존 문서ID/다른 블록/원문 근거 보존, 추가 단계의 재추출·재생성 없음과 중복 방지를 확인했다. 각 실행의 초안 요청은 1회다. 가상 AI의 화면/API 회귀이며 실제 LLM 의미 판단 품질 검사는 아니다. 원본 시연 DB·환경 설정·백엔드 API는 변경하지 않았다.
