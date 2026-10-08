@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { sourceApi, SourceApiError } from '../api/sources'
 import type {
   ReadingJob,
+  PublicDataStatus,
   SourceBrief,
   SourceSession,
   WorkSource,
@@ -10,6 +11,7 @@ import type {
 
 const STORAGE = previewStorage
 const UPLOAD = `${STORAGE}.upload`
+const PUBLIC_IMPORT = `${STORAGE}.public-import`
 const INITIAL_BRIEF: SourceBrief = {
   purpose: '신규 고객 소개 (표준 제안용)',
   target_company: '거산케미칼',
@@ -61,6 +63,7 @@ function persist(
 function forget() {
   sessionStorage.removeItem(STORAGE)
   sessionStorage.removeItem(UPLOAD)
+  sessionStorage.removeItem(PUBLIC_IMPORT)
   sessionStorage.removeItem(`${STORAGE}.ai`)
   sessionStorage.removeItem(`${STORAGE}.publication`)
 }
@@ -119,12 +122,11 @@ export function useSources(allowDocumentChanges = false) {
   const [busy, setBusy] = useState('작업 확인 중')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [publicStatus, setPublicStatus] = useState<PublicDataStatus | null>(
+    null,
+  )
   const [polling, setPolling] = useState(true)
   const [pendingUpload, setPendingUpload] = useState(false)
-  const [publicStatus, setPublicStatus] = useState<{
-    message: string
-    status: string
-  } | null>(null)
   const statusSessionId = session?.session_id
   useEffect(() => {
     let cancelled = false
@@ -148,6 +150,7 @@ export function useSources(allowDocumentChanges = false) {
   const companyAttempt = useRef<{ body: string; key: string } | null>(null)
   const attempts = useRef(0)
   const generation = useRef(0)
+
 
   function clear() {
     forget()
@@ -261,6 +264,25 @@ export function useSources(allowDocumentChanges = false) {
         setSession(value.session)
         setSources(value.sources)
         setJobs(value.jobs)
+        let publicRequest: { jobId?: string } | null = null
+        try {
+          publicRequest = JSON.parse(
+            sessionStorage.getItem(PUBLIC_IMPORT) || 'null',
+          )
+        } catch {
+          /* Ignore invalid storage. */
+        }
+        const publicJob = value.jobs.find(
+          (job) => job.job_id === publicRequest?.jobId,
+        )
+        if (publicJob && !running(publicJob)) {
+          sessionStorage.removeItem(PUBLIC_IMPORT)
+          if (publicJob.status !== 'succeeded') setNotice('')
+          if (publicJob.status === 'succeeded')
+            setNotice(
+              'DART 공개 자료를 가져왔습니다. 사용할 자료를 선택해 주세요.',
+            )
+        }
         const failed = value.jobs.find(
           (job) => job.status === 'failed' || job.status === 'cancelled',
         )
@@ -448,6 +470,7 @@ export function useSources(allowDocumentChanges = false) {
           ![408, 429].includes(cause.status)
         ) {
           sessionStorage.removeItem(UPLOAD)
+          sessionStorage.removeItem(PUBLIC_IMPORT)
           setPendingUpload(false)
           pendingFiles.current = []
         }
@@ -456,6 +479,7 @@ export function useSources(allowDocumentChanges = false) {
       const jobIds = [...new Set([...(readSaved()?.jobs || []), result.job_id])]
       persist(activeSession.session_id, jobIds)
       sessionStorage.removeItem(UPLOAD)
+      sessionStorage.removeItem(PUBLIC_IMPORT)
       setPendingUpload(false)
       pendingFiles.current = []
       apply(await snapshot(activeSession.session_id, jobIds))
@@ -548,19 +572,31 @@ export function useSources(allowDocumentChanges = false) {
     })
   }
 
-  async function changeCompany(name: string) {
+  async function changeCompany(name: string, corpCode?: string) {
     const target = name.trim()
     if (!target || target.length > 50 || lock.current) return false
     if (session?.document_summary && !allowDocumentChanges) return false
-    if (target === (session?.brief.target_company || brief.target_company))
+    const current = session?.brief || brief
+    if (
+      target === current.target_company &&
+      (corpCode || null) === (current.dart_corp_code || null)
+    )
       return true
     if (!session) {
-      setBrief({ ...brief, target_company: target })
+      setBrief({
+        ...brief,
+        target_company: target,
+        dart_corp_code: corpCode || null,
+      })
       return true
     }
     let completed = false
     await run('회사 변경 저장 중', async () => {
-      const next = { ...session.brief, target_company: target }
+      const next = {
+        ...session.brief,
+        target_company: target,
+        dart_corp_code: corpCode || null,
+      }
       const change = { brief: next, selected_source_ids: [] }
       const body = JSON.stringify({
         session: session.session_id,
@@ -575,7 +611,11 @@ export function useSources(allowDocumentChanges = false) {
         companyAttempt.current.key,
       )
       setSession({ ...session, ...result, brief: next })
-      setBrief({ ...brief, target_company: target })
+      setBrief({
+        ...brief,
+        target_company: target,
+        dart_corp_code: corpCode || null,
+      })
       companyAttempt.current = null
       setNotice(
         '회사를 저장하고 자료 선택을 해제했습니다. 해당 회사 자료를 선택해 다시 점검해 주세요. 기존 파일과 문서는 보존됩니다.',
@@ -586,7 +626,7 @@ export function useSources(allowDocumentChanges = false) {
   }
 
   async function importPublic() {
-    await run('공개 자료 가져오는 중', async () => {
+    await run('DART 공개 자료 가져오는 중', async () => {
       const activeSession = session || (await ensureSession())
       if (activeSession.document_summary && !allowDocumentChanges) return
       try {
@@ -647,6 +687,7 @@ export function useSources(allowDocumentChanges = false) {
     demo,
     setDemo,
     sources,
+    publicStatus,
     jobs,
     brief,
     setBrief,
@@ -661,7 +702,6 @@ export function useSources(allowDocumentChanges = false) {
     saveBrief,
     changeCompany,
     importPublic,
-    publicStatus,
     remove,
     close,
     retryUpload: () => upload(pendingFiles.current),
