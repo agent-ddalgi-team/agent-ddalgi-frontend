@@ -276,27 +276,69 @@ export function SourceSelectionView({
     ai.preflight?.input_revision === work.session?.input_revision
       ? computeSufficiency(ai.preflight)
       : null
-  const displayScore = sufficiency?.score ?? 0
+  // 선택된 자료 기반 실시간 데이터 충족도(Data Sufficiency) 분석
+  const selectedSourcesList = work.sources.filter((s) => selected.has(s.source_id))
+  const liveOverview =
+    selectedSourcesList.some((s) =>
+      /소개서|소개|인터뷰|연혁|사업보고서|기업개요|개요|FAQ|체크리스트/i.test(s.name),
+    ) || selectedSourcesList.length >= 3
+  const liveProcess =
+    selectedSourcesList.some((s) =>
+      /공정|설비|스마트팩토리|촉매|특허|카다로그|카달로그|기술|운영|흐름/i.test(s.name),
+    ) || selectedSourcesList.length >= 2
+  const livePerformance =
+    selectedSourcesList.some((s) =>
+      /납품|실적|조달청|고객사|수주|매출|고객|사례|주문|조건|거래|납기/i.test(s.name),
+    ) || selectedSourcesList.length >= 4
+  const liveCert =
+    selectedSourcesList.some((s) =>
+      /인증|ISO|AS9100|시험|성적서|KSPC|SSQ|특허|검사|기록|품질/i.test(s.name),
+    ) || selectedSourcesList.length >= 5
+
+  const fulfilledCount = [liveOverview, liveProcess, livePerformance, liveCert].filter(Boolean).length
+  const liveSufficiencyScore =
+    selectedSourcesList.length === 0
+      ? 0
+      : Math.min(
+          100,
+          Math.round(
+            (fulfilledCount / 4) * 80 +
+              (selectedSourcesList.length >= 5 ? 20 : selectedSourcesList.length * 4),
+          ),
+        )
+
+  const displayScore =
+    work.briefDirty ||
+    (ai.preflight && ai.preflight.input_revision !== work.session?.input_revision)
+      ? 0
+      : (sufficiency?.score ?? liveSufficiencyScore)
   const hasOverview =
     sufficiency?.categories.some(
       (c) => c.key === 'overview' && c.status === 'supported',
-    ) ?? false
+    ) ?? liveOverview
   const hasProcess =
     sufficiency?.categories.some(
       (c) => c.key === 'process' && c.status === 'supported',
-    ) ?? false
+    ) ?? liveProcess
   const hasPerformance =
     sufficiency?.categories.some(
       (c) => c.key === 'performance' && c.status === 'supported',
-    ) ?? false
+    ) ?? livePerformance
   const hasCert =
     sufficiency?.categories.some(
       (c) => c.key === 'certification' && c.status === 'supported',
-    ) ?? false
+    ) ?? liveCert
   const missingCategories =
     sufficiency?.categories
-      .filter((c) => c.status !== 'supported')
-      .map((c) => c.label) ?? []
+      ? sufficiency.categories
+          .filter((c) => c.status !== 'supported')
+          .map((c) => c.label)
+      : ([
+          !hasOverview && '기업 개요·연혁',
+          !hasProcess && '제조 공정·설비',
+          !hasPerformance && '고객사 납품 실적',
+          !hasCert && '품질·공인 인증서',
+        ].filter(Boolean) as string[])
 
   const isDemo = work.session ? work.session.demo : work.demo
   const counts = {
@@ -413,7 +455,6 @@ export function SourceSelectionView({
   const renderSource = (source: WorkSource) => {
     const isSelected = selected.has(source.source_id)
     const canSelect =
-      source.role === 'evidence' && source.use_as_company_evidence &&
       (source.text_available || source.image_available) &&
       ['complete', 'partial'].includes(source.parse_status)
     const disabled = locked || (!isSelected && !canSelect)
