@@ -259,6 +259,8 @@ assert(
 )
 const live = paid || reviewReplay
 const publication = process.argv.includes('--publication')
+const sessionExpiryTrial = process.argv.includes('--session-expiry')
+assert(!sessionExpiryTrial || !live, '--session-expiry uses isolated mock data only')
 const unusedReviewTrial = process.argv.includes('--unused-review')
 assert(!unusedReviewTrial || (publication && !live), '--unused-review requires mock --publication')
 const saveReviewTrial = process.argv.includes('--save-review')
@@ -1578,6 +1580,33 @@ finally:
   )
   await screenshot('draft.png')
   checks.push('draft saved, rendered and restored; source changes locked')
+  if (sessionExpiryTrial) {
+    const sessionRoute = `/api/v1/sessions/${sessionId}`
+    const documentRoute = `${sessionRoute}/documents/${doc.document_id}`
+    const state = (route) => evaluate(`fetch(${JSON.stringify(route)}).then(r=>{if(!r.ok)throw Error('State read failed');return r.json()})`)
+    for (const step of [1, 2, 3]) {
+      await screen(step)
+      await evaluate('window.scrollTo(0,0)')
+      const beforeSession = await state(sessionRoute)
+      const beforeDocument = await state(documentRoute)
+      await until(() => evaluate(`!!document.querySelector('[data-session-expiry] button:not(:disabled)')`), 'expiry refresh ready')
+      assert.ok(await evaluate(`(()=>{const e=document.querySelector('[data-session-expiry]');const r=e.getBoundingClientRect();return r.width>0&&r.height>0&&r.top>=0&&r.top<window.innerHeight&&e.textContent.includes('작업 종료·만료')})()`), `Expiry notice visible in S0${step}`)
+      const start = calls.length
+      await click('만료 시각 다시 확인')
+      await idle()
+      const afterSession = await state(sessionRoute)
+      const afterDocument = await state(documentRoute)
+      assert.equal(await evaluate(`document.querySelector('[data-session-expiry] time').dateTime`), afterSession.expires_at)
+      assert.equal(afterSession.expires_at, beforeSession.expires_at, 'Refresh must not extend expiry')
+      assert.equal(afterSession.last_activity_at, beforeSession.last_activity_at, 'Refresh must not count as activity')
+      assert.equal(afterSession.input_revision, beforeSession.input_revision)
+      assert.deepEqual(afterDocument, beforeDocument, 'Refresh must preserve document, validation and approvals')
+      assert.ok(calls.slice(start).every((request) => request.method === 'GET'), 'Expiry refresh must only read')
+      await screenshot(`session-expiry-s0${step}.png`)
+      checks.push(`S0${step} expiry notice visible; refresh matches server without extending expiry, AI calls or document changes`)
+    }
+    await screen(2)
+  }
   if (publication) {
     const route = `/api/v1/sessions/${sessionId}/documents/${doc.document_id}`
     const documentState = () =>
