@@ -29,7 +29,7 @@ import {
 } from 'lucide-react'
 import type { DraftBlock, DraftResult, Preflight } from '../../api/aiWorkflow'
 import { FIELD_LABELS, issueMessageParts } from '../../constants/profileLabels'
-import { canAcknowledge, canReviewIssueEvidence, issueEditLocations, unusedReviewFactIds } from '../../api/publication'
+import { canAcknowledge, canReviewIssueEvidence, issueEditLocations, issueRecoverySteps, unusedReviewFactIds } from '../../api/publication'
 import { Evidence } from './AiWorkflowPanel'
 import type { WorkSource } from '../../api/sources'
 import { usePublication } from '../../hooks/usePublication'
@@ -265,7 +265,8 @@ export function DocumentWorkspace({
     requestAnimationFrame(() => {
       const target = document.querySelector<HTMLElement>(
         `[data-edit-block="${id}"]`,
-      )
+      ) || document.querySelector<HTMLElement>(`[data-block-id="${id}"]`)
+      if (target && !target.matches('textarea,input,button')) target.tabIndex = -1
       target?.focus({ preventScroll: true })
       target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     })
@@ -1338,13 +1339,18 @@ export function DocumentWorkspace({
             {selectedBlock && openIssues.some(issue => issue.block_ids.includes(selectedBlock.block_id) ||
               (!issue.block_ids.length && issue.fact_ids?.some(id => selectedBlock.fact_ids.includes(id)))) && (
               <section className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs" data-editor-issues>
-                <h3 className="font-bold text-amber-950">이 문장에서 확인할 내용</h3>
+                <h3 className="font-bold text-amber-950">이 {isPhoto(selectedBlock) ? '사진에서' : '문장에서'} 확인할 내용</h3>
                 {openIssues.filter(issue => issue.block_ids.includes(selectedBlock.block_id) ||
                   (!issue.block_ids.length && issue.fact_ids?.some(id => selectedBlock.fact_ids.includes(id)))).map(issue => (
                   <div key={issue.issue_id} className="mt-2 whitespace-pre-wrap break-words" data-editor-issue={issue.issue_id}>
-                    <p className="font-semibold">{issue.origin === 'preflight' ? '자료 확인 필요' : '내용 검사 지적'}</p>
+                    <p className="font-semibold">{issue.origin === 'preflight' ? '자료 확인 필요' : issue.scope === 'layout' ? '배치 검사 지적' : '내용 검사 지적'}</p>
                     <p>{issueMessageParts(issue.message).reason}</p>
                     {issueMessageParts(issue.message).action && <p className="mt-1">권장 수정: {issueMessageParts(issue.message).action}</p>}
+                    {!!issueRecoverySteps(issue).length && (
+                      <ol data-issue-recovery className="mt-2 list-decimal space-y-1 pl-4">
+                        {issueRecoverySteps(issue).map(step => <li key={step}>{step}</li>)}
+                      </ol>
+                    )}
                   </div>
                 ))}
                 <details className="mt-3">
@@ -2393,6 +2399,14 @@ export function DocumentWorkspace({
                         </button>
                       )}
                     </div>
+                    {!!issueRecoverySteps(issue).length && (
+                      <div className="mt-3 rounded-lg bg-white p-3" data-issue-recovery>
+                        <p className="font-bold text-teal-900">해결 순서</p>
+                        <ol className="mt-2 list-decimal space-y-2 pl-4">
+                          {issueRecoverySteps(issue).map(step => <li key={step}>{step}</li>)}
+                        </ol>
+                      </div>
+                    )}
                     {issueMessageParts(issue.message).action && (
                       <div className="mt-3 rounded-lg border border-teal-100 bg-teal-50 p-2.5 text-slate-800">
                         <p className="font-bold text-teal-900">권장 수정</p>

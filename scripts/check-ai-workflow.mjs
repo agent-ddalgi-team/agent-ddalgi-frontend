@@ -26,7 +26,14 @@ async function reviewRegressions() {
   runInNewContext(transpile(await readFile(new URL('../src/api/publication.ts', import.meta.url), 'utf8')), {
     exports: publicationModule.exports, require: () => ({}),
   })
-  const { unusedReviewFactIds, issueEditLocations, canKeepDocumentAndValidate } = publicationModule.exports
+  const { unusedReviewFactIds, issueEditLocations, canKeepDocumentAndValidate, issueRecoverySteps, canAcknowledge } = publicationModule.exports
+  for (const code of ['IMAGE_MISMATCH', 'IMAGE_UNVERIFIABLE', 'PHOTO_CONTENT_REVIEW', 'BROKEN_IMAGE', 'PLACEHOLDER_REMAINING', 'REQUIRED_MISSING']) {
+    const issue = { code, status: 'open', severity: 'warning', origin: 'agent', scope: 'content' }
+    assert.ok(issueRecoverySteps(issue).length >= 2)
+    assert.equal(canAcknowledge(issue, true), false)
+    assert.equal(issueRecoverySteps({ ...issue, status: 'resolved' }).length, 0)
+  }
+  assert.ok(issueRecoverySteps({code:'REQUIRED_MISSING',status:'open',origin:'preflight'}).join(' ').includes('자료를 첨부'))
   const unchangedReview = { status: 'pending', from_input_revision: 3, to_input_revision: 3,
     items: [{ code: 'INPUT_CHANGED', requires_change: false }], fact_rebindings: { same: 'same' } }
   assert.equal(canKeepDocumentAndValidate(unchangedReview), true)
@@ -2448,6 +2455,7 @@ finally:
         '붉은색 사각형',
       )
       await selectBlock(photo.block_id)
+      assert.equal(state.document.pages.flatMap(p=>p.blocks).find(b=>b.block_id===photo.block_id).content.alt, '붉은색 사각형')
       await click('사진 교체 후보 보기')
       await photoReady()
       await evaluate(
@@ -2834,6 +2842,12 @@ finally:
         fixture('LAYOUT_OVERFLOW',{scope:'layout',origin:'layout'}),
         fixture('UNSUPPORTED_CLAIM',{status:'resolved'}),
       ]}
+      const auditPhoto = beforeAudit.document.pages.flatMap(p=>p.blocks).find(b=>b.type==='image')
+      if (photoTrial) {
+        assert.ok(auditPhoto)
+        for (const code of ['IMAGE_MISMATCH','IMAGE_UNVERIFIABLE','PHOTO_CONTENT_REVIEW'])
+          issueActionFixture.issues.push(fixture(code,{block_ids:[auditPhoto.block_id],severity:'warning'}))
+      }
       await refreshReady()
       await click('문서 상태 새로고침')
       await until(()=>has('[data-issue-code="VALUE_CONFLICT"] [data-issue-evidence-action]'),'conflict evidence action')
@@ -2847,6 +2861,18 @@ finally:
       assert.equal(await evaluate(`document.querySelectorAll('[data-issue-code="CERTIFICATION_MISMATCH"] [data-issue-block]').length`),1)
       assert.ok(await has('[data-issue-code="CERTIFICATION_MISMATCH"] [data-issue-location-kind="direct"]'))
       assert.ok(await has('[data-issue-code="REQUIRED_MISSING"] [data-issue-evidence-action]'))
+      assert.ok(await has('[data-issue-code="REQUIRED_MISSING"] [data-issue-recovery]'))
+      if (photoTrial) {
+        for (const code of ['IMAGE_MISMATCH','IMAGE_UNVERIFIABLE','PHOTO_CONTENT_REVIEW']) {
+          assert.ok(await evaluate(`document.querySelector('[data-issue-code="${code}"] [data-issue-recovery]').textContent.includes('사진')`))
+          assert.equal(await has(`[data-issue-code="${code}"] input[aria-label^="경고 확인 사유"]`), false)
+        }
+        await evaluate(`document.querySelector('[data-issue-code="IMAGE_MISMATCH"] [data-issue-block]').click()`)
+        await until(()=>evaluate(`document.activeElement?.dataset.editBlock==='${auditPhoto.block_id}'`),'photo issue focuses caption editor')
+        assert.ok(await evaluate(`document.querySelector('[data-editor-issues]').textContent.includes('사진에서 확인할 내용')`))
+        assert.ok(await has('[data-editor-issues] [data-issue-recovery]'))
+        await screen(3)
+      }
       for (const code of ['LAYOUT_OVERFLOW','UNSUPPORTED_CLAIM']) assert.equal(await has(`[data-issue-code="${code}"] [data-issue-evidence-action]`),false)
       for (const issue of issueActionFixture.issues) assert.equal(await has(`[data-issue-code="${issue.code}"] input[aria-label^="경고 확인 사유"]`),false)
       await evaluate(`document.querySelector('[data-issue-code="VALUE_CONFLICT"] [data-issue-block="${linked.block_id}"]').click()`)

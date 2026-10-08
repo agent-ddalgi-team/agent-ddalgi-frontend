@@ -55,6 +55,30 @@ export function canReviewIssueEvidence(issue: Issue) {
       'UNVERIFIED_SUPERLATIVE', 'MOCK_VALUE', 'IMAGE_MISMATCH', 'IMAGE_UNVERIFIABLE'].includes(issue.code))
 }
 
+export function issueRecoverySteps(issue: Issue): string[] {
+  if (issue.status !== 'open') return []
+  switch (issue.code) {
+    case 'IMAGE_MISMATCH':
+    case 'IMAGE_UNVERIFIABLE':
+    case 'PHOTO_CONTENT_REVIEW':
+      return [
+        '아래 사진 위치로 이동해 실제 사진과 사진 설명을 비교하세요.',
+        '확인할 수 없는 장비명·성능·공정명은 설명에서 빼거나 근거가 확인되는 내용으로 수정하세요. 사진이 잘못되었다면 사진 교체 후보 보기에서 교체하거나 해당 사진을 삭제하세요.',
+        '설명을 수정하거나 사진을 삭제한 뒤 저장하고 내용 검사를 실행하세요. 교체한 사진은 설명을 다시 입력해야 합니다. 확인 기록만으로 이 문제를 해제할 수 없습니다.',
+      ]
+    case 'BROKEN_IMAGE':
+      return ['아래 사진 위치에서 다른 사진으로 교체하거나 불러올 수 없는 사진을 삭제하세요.', '수정 내용을 저장하고 내용 검사 후 선택한 출력 형식의 배치 검사를 다시 실행하세요.']
+    case 'PLACEHOLDER_REMAINING':
+      return ['아래 사진 자리로 이동해 사진을 넣거나 빈 사진 자리를 삭제하세요.', '수정 내용을 저장하고 내용 검사 후 선택한 출력 형식의 배치 검사를 다시 실행하세요.']
+    case 'REQUIRED_MISSING':
+      return issue.origin === 'preflight'
+        ? ['자료 점검에서 필수 항목의 원문 근거를 확인하고 부족한 자료를 첨부·선택해 다시 점검하세요.', '초안이 있으면 기존 문서로 돌아가 변경 영향을 반영한 뒤 내용 검사를 진행하세요. 필수 항목은 제외로 해결할 수 없습니다.']
+        : ['자료 점검에서 해당 필수 사실의 근거를 확인하세요. 근거가 없다면 자료를 보완하고 다시 점검해야 합니다.', '근거가 있다면 해당 사실과 연결된 본문에 필수 내용을 명시하고 저장한 뒤 내용 검사를 실행하세요. 근거 연결만 있고 본문에 내용이 없으면 통과하지 않습니다.']
+    default:
+      return []
+  }
+}
+
 export interface Layout {
   layout_check_id: string
   document_revision: number
