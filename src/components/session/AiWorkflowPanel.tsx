@@ -1,4 +1,4 @@
-import { readableIssueMessage } from '../../constants/profileLabels'
+import { factSupplementGuidance, readableIssueMessage } from '../../constants/profileLabels'
 import {
   AlertTriangle,
   Check,
@@ -114,6 +114,20 @@ export function Evidence({
   )
 }
 
+function FactEvidence({ fact, sources }: { fact: Preflight['facts'][number]; sources: WorkSource[] }) {
+  return <>
+    {fact.alternatives?.map((alternative, index) => (
+      <div key={index} data-fact-alternative className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
+        <p>후보 {index + 1}: {alternative.value || '내용 없음'}</p>
+        {alternative.evidence_refs?.length
+          ? <Evidence refs={alternative.evidence_refs} sources={sources} />
+          : <p className="mt-1">이 후보에 연결된 원문 근거가 없습니다.</p>}
+      </div>
+    ))}
+    <Evidence refs={fact.evidence_refs} sources={sources} />
+  </>
+}
+
 export function Block({
   block,
   sid,
@@ -176,6 +190,7 @@ export function AiWorkflowPanel({
   onAnalyze,
   onSupplement,
   supplementBlocked = false,
+  focusedFactIds = [],
 }: {
   ai: Workflow
   sources: WorkSource[]
@@ -187,6 +202,7 @@ export function AiWorkflowPanel({
   onAnalyze: () => void
   onSupplement: () => void
   supplementBlocked?: boolean
+  focusedFactIds?: string[]
 }) {
   const { preflight, document: result, job } = ai
   const document = result?.document
@@ -480,10 +496,10 @@ export function AiWorkflowPanel({
                             <strong>확인할 내용:</strong>{' '}
                             {fact.value || '자료별 내용 비교가 필요합니다.'}
                           </p>
-                          <Evidence
-                            refs={fact.evidence_refs}
-                            sources={sources}
-                          />
+                          <FactEvidence fact={fact} sources={sources} />
+                          <p data-fact-guidance className="mt-2 text-xs leading-relaxed">
+                            {factSupplementGuidance(fact.field_key, fact.status, canExclude(fact.fact_id))}
+                          </p>
                           <div className="mt-2 flex flex-wrap gap-2">
                             <button
                               type="button"
@@ -507,12 +523,6 @@ export function AiWorkflowPanel({
                               </button>
                             )}
                           </div>
-                          {!canExclude(fact.fact_id) &&
-                            fact.status === 'missing' && (
-                              <p className="mt-2 text-[11px]">
-                                필수 내용은 근거를 보완한 뒤 다시 점검해 주세요.
-                              </p>
-                            )}
                         </div>
                       ))}
                   </li>
@@ -551,7 +561,9 @@ export function AiWorkflowPanel({
               {facts.map((fact) => (
                 <article
                   key={fact.fact_id}
-                  className="rounded-lg border border-slate-200 p-3"
+                  data-preflight-fact={fact.fact_id}
+                  tabIndex={-1}
+                  className={`scroll-mt-24 rounded-lg border p-3 ${focusedFactIds.includes(fact.fact_id) ? 'border-teal-600 bg-teal-50 ring-2 ring-teal-200' : 'border-slate-200'}`}
                 >
                   <div className="flex flex-wrap justify-between gap-2">
                     <h4 className="text-xs font-semibold">
@@ -569,12 +581,12 @@ export function AiWorkflowPanel({
                         ? '자료마다 내용이 달라 확정하지 않았습니다.'
                         : '선택한 자료에서 확인되지 않았습니다.')}
                   </p>
-                  {fact.alternatives?.map((alternative, i) => (
-                    <p key={i} className="mt-1.5 text-xs text-amber-900">
-                      후보 {i + 1}: {alternative.value}
+                  <FactEvidence fact={fact} sources={sources} />
+                  {fact.status !== 'supported' && (
+                    <p data-fact-guidance className="mt-2 text-xs leading-relaxed text-slate-700">
+                      {factSupplementGuidance(fact.field_key, fact.status, canExclude(fact.fact_id))}
                     </p>
-                  ))}
-                  <Evidence refs={fact.evidence_refs} sources={sources} />
+                  )}
                   {fact.status !== 'supported' && (
                     <button type="button" className={`${button} mt-2`} disabled={reviewBlocked || supplementBlocked} onClick={onSupplement}>
                       근거 자료 보완

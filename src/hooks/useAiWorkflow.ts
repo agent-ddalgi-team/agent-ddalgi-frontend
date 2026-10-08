@@ -350,7 +350,7 @@ export function useAiWorkflow(session: SourceSession | null) {
               ? '선택 항목을 제외했습니다. 남은 점검 내용을 다시 확인해 주세요.'
               : '제외 항목을 복원했습니다. 원래 근거 상태로 돌아왔습니다.',
         }))
-        return
+        return preflight
       }
       const accepted =
         attempt.kind === 'preflight'
@@ -510,7 +510,7 @@ export function useAiWorkflow(session: SourceSession | null) {
         },
       )
     },
-    reviewFact: (factId: string, action: 'exclude' | 'restore') => {
+    reviewFact: (factId: string | string[], action: 'exclude' | 'restore') => {
       if (
         !session ||
         locked ||
@@ -525,7 +525,7 @@ export function useAiWorkflow(session: SourceSession | null) {
           key: crypto.randomUUID(),
           preflightId: current.preflight.preflight_id,
           action,
-          factIds: [factId],
+          factIds: typeof factId === 'string' ? [factId] : factId,
           reason:
             action === 'exclude'
               ? '사용자가 이번 문서에서 해당 선택 항목을 제외했습니다.'

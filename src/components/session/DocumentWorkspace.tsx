@@ -29,7 +29,7 @@ import {
 } from 'lucide-react'
 import type { DraftBlock, DraftResult, Preflight } from '../../api/aiWorkflow'
 import { FIELD_LABELS, issueMessageParts } from '../../constants/profileLabels'
-import { canAcknowledge, canReviewIssueEvidence, issueEditLocations } from '../../api/publication'
+import { canAcknowledge, canReviewIssueEvidence, issueEditLocations, issueRecoverySteps, missingRequiredFacts, requiredTextRestorations, unusedReviewFactIds } from '../../api/publication'
 import { Evidence } from './AiWorkflowPanel'
 import type { WorkSource } from '../../api/sources'
 import { usePublication } from '../../hooks/usePublication'
@@ -134,6 +134,10 @@ export function DocumentWorkspace({
   initial,
   inputRevision,
   preflight,
+  onExcludeFacts,
+  onReviewEvidence,
+  reviewError,
+  onRetryExclusion,
   inputBusy,
   sources,
   onEditingStateChange,
@@ -146,6 +150,10 @@ export function DocumentWorkspace({
   initial: DraftResult
   inputRevision: number
   preflight: Preflight | null
+  onExcludeFacts: (ids: string[]) => Promise<Preflight | undefined> | void
+  onReviewEvidence: (ids: string[]) => void
+  reviewError: string
+  onRetryExclusion?: () => Promise<Preflight | undefined> | undefined
   inputBusy: boolean
   sources: WorkSource[]
   onEditingStateChange: (blocked: boolean) => void
@@ -187,6 +195,8 @@ export function DocumentWorkspace({
     setKeepReason('')
   }
   const [reasons, setReasons] = useState<Record<string, string>>({})
+  const [requiredChoices, setRequiredChoices] = useState<Record<string, { factId: string; pageId: string }>>({})
+  const [showIssueHistory, setShowIssueHistory] = useState(false)
   const [discard, setDiscard] = useState(false)
   const [pageIndex, setPageIndex] = useState(0)
   const [blockId, setBlockId] = useState('')
@@ -256,7 +266,8 @@ export function DocumentWorkspace({
     requestAnimationFrame(() => {
       const target = document.querySelector<HTMLElement>(
         `[data-edit-block="${id}"]`,
-      )
+      ) || document.querySelector<HTMLElement>(`[data-block-id="${id}"]`)
+      if (target && !target.matches('textarea,input,button')) target.tabIndex = -1
       target?.focus({ preventScroll: true })
       target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     })
@@ -292,6 +303,11 @@ export function DocumentWorkspace({
           CheckCircle2,
         ]
   const SaveIcon = saveBadge[2]
+  const openIssueCount = work.issues.filter(issue => issue.status === 'open').length
+  const historyCount = work.issues.length - openIssueCount
+  const unusedFacts = preflight?.input_revision === inputRevision
+    ? unusedReviewFactIds(work.issues, doc.pages, preflight.reviewable_fact_ids || [])
+    : []
   const reviewBadge = work.approved
     ? [
         `${work.formatLabel} 승인 완료`,
@@ -319,6 +335,13 @@ export function DocumentWorkspace({
       className={`${panel} bg-amber-50 text-xs`}
     >
       <h3 className="font-bold text-amber-950">자료 변경 영향 확인</h3>
+      <p className="mt-2 font-semibold">선택 항목 변경을 문서에 반영하면 내용 검증을 이어갈 수 있습니다.</p>
+      <button type="button" className={`${primary} mt-3`} data-keep-and-validate
+        disabled={work.blocked || work.dirty || !preflight}
+        onClick={() => void work.keepDocumentAndValidate().then(applied => { if (applied) onImpactApplied() })}>
+        기존 본문 유지하고 다시 검사
+      </button>
+      <p className="mt-1 text-slate-600">본문에 영향이 없으면 바로 반영·재검증합니다. 수정이 필요하면 아래에 표시합니다.</p>
       <p className="mt-2">
         기존 문구·사진·배치는 적용 전까지 유지됩니다. 최신 점검의 사실과 근거를
         확인하고 아래 변경을 선택해 주세요. 유지 사유만으로 필수 문제가
@@ -533,6 +556,17 @@ export function DocumentWorkspace({
   )
   const statusBlocks = (
     <>
+      {!!reviewError && <Banner tone="error">{reviewError}</Banner>}
+      {onRetryExclusion && (
+        <Banner tone="warn">
+          <p>선택 항목 처리 결과를 확인하지 못했습니다. 저장된 요청을 확인한 뒤 검사를 이어갑니다.</p>
+          <button type="button" className={`${button} mt-2`} data-exclusion-retry disabled={inputBusy || work.busy || work.dirty}
+            onClick={() => void (async () => {
+              const reviewed = await onRetryExclusion()
+              if (reviewed && await work.keepDocumentAndValidate(reviewed.preflight_id)) onImpactApplied()
+            })()}>처리 결과 확인하고 검사 이어가기</button>
+        </Banner>
+      )}
       {impactPanel}
       {(work.busy || work.watch) && (
         <Banner tone="info">
@@ -1303,6 +1337,31 @@ export function DocumentWorkspace({
               </span>
             </div>
 
+            {selectedBlock && openIssues.some(issue => issue.block_ids.includes(selectedBlock.block_id) ||
+              (!issue.block_ids.length && issue.fact_ids?.some(id => selectedBlock.fact_ids.includes(id)))) && (
+              <section className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs" data-editor-issues>
+                <h3 className="font-bold text-amber-950">이 {isPhoto(selectedBlock) ? '사진에서' : '문장에서'} 확인할 내용</h3>
+                {openIssues.filter(issue => issue.block_ids.includes(selectedBlock.block_id) ||
+                  (!issue.block_ids.length && issue.fact_ids?.some(id => selectedBlock.fact_ids.includes(id)))).map(issue => (
+                  <div key={issue.issue_id} className="mt-2 whitespace-pre-wrap break-words" data-editor-issue={issue.issue_id}>
+                    <p className="font-semibold">{issue.origin === 'preflight' ? '자료 확인 필요' : issue.scope === 'layout' ? '배치 검사 지적' : '내용 검사 지적'}</p>
+                    <p>{issueMessageParts(issue.message).reason}</p>
+                    {issueMessageParts(issue.message).action && <p className="mt-1">권장 수정: {issueMessageParts(issue.message).action}</p>}
+                    {!!issueRecoverySteps(issue).length && (
+                      <ol data-issue-recovery className="mt-2 list-decimal space-y-1 pl-4">
+                        {issueRecoverySteps(issue).map(step => <li key={step}>{step}</li>)}
+                      </ol>
+                    )}
+                  </div>
+                ))}
+                <details className="mt-3">
+                  <summary className="cursor-pointer font-semibold">이 문장에 연결된 원문 근거</summary>
+                  <Evidence refs={selectedBlock.evidence_refs} sources={sources} />
+                </details>
+                <p className="mt-2 text-amber-900">문구를 수정한 뒤 아래 ‘저장하고 내용 검사’를 누르세요. 자료 자체의 확인이 필요한 항목은 자료 점검에서 보완하거나 제외해야 합니다.</p>
+              </section>
+            )}
+
             <div className="flex flex-col gap-1.5">
               <label
                 htmlFor="ai-instruction"
@@ -1602,6 +1661,11 @@ export function DocumentWorkspace({
           >
             <Save size={15} className="text-[#007A78]" />
             문구 저장
+          </button>
+          <button type="button" className={primary} data-save-and-validate
+            disabled={work.blocked || work.impactRequired || !work.dirty}
+            onClick={() => void work.save(true)}>
+            저장하고 내용 검사
           </button>
           <button
             type="button"
@@ -2215,11 +2279,18 @@ export function DocumentWorkspace({
                       <button
                         type="button"
                         className={`${button} mt-1 self-start`}
-                        disabled={work.actionBlocked}
-                        onClick={run}
+                        disabled={name === '내용 검증' && work.impactRequired
+                          ? work.blocked || work.dirty || !preflight
+                          : work.actionBlocked}
+                        onClick={name === '내용 검증' && work.impactRequired
+                          ? () => void work.keepDocumentAndValidate().then(applied => { if (applied) onImpactApplied() })
+                          : run}
                       >
-                        {action}
+                        {name === '내용 검증' && work.impactRequired ? '변경 반영하고 다시 검사' : action}
                       </button>
+                      {name === '내용 검증' && work.impactRequired && (
+                        <span className="text-[11px] text-amber-800">선택 항목이 바뀌었습니다. 문서에 반영한 뒤 검사를 이어갑니다.</span>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -2229,9 +2300,28 @@ export function DocumentWorkspace({
             {!!work.issues.length && (
               <div className="flex flex-col gap-2">
                 <h3 className="text-xs font-bold text-slate-900">
-                  확인할 문제와 경고 ({work.issues.length})
+                  확인할 문제와 경고 · 미해결 {openIssueCount}건
                 </h3>
-                {work.issues.map((issue) => (
+                {!!unusedFacts.length && (
+                  <div className="rounded-xl border border-teal-200 bg-teal-50 p-3 text-xs text-teal-900">
+                    <p>본문에 사용하지 않은 선택 항목 {unusedFacts.length}건이 자료 확인을 기다리고 있습니다. 제외한 뒤 본문에 영향이 없으면 바로 다시 검사합니다.</p>
+                    <button type="button" className={`${button} mt-2`} data-unused-facts-exclude
+                      disabled={work.actionBlocked || unusedFacts.length > 50}
+                      onClick={() => void (async () => {
+                        const reviewed = await onExcludeFacts(unusedFacts)
+                        if (reviewed && await work.keepDocumentAndValidate(reviewed.preflight_id)) onImpactApplied()
+                      })()}>
+                      선택 항목 {unusedFacts.length}건 제외하고 다시 검사
+                    </button>
+                  </div>
+                )}
+                {!!historyCount && (
+                  <button type="button" className={ghost} data-issue-history-toggle
+                    onClick={() => setShowIssueHistory(!showIssueHistory)}>
+                    처리 기록 {historyCount}건 {showIssueHistory ? '접기' : '보기'}
+                  </button>
+                )}
+                {work.issues.filter(issue => showIssueHistory || issue.status === 'open').map((issue) => (
                   <article
                     key={issue.issue_id}
                     data-issue-code={issue.code}
@@ -2241,13 +2331,16 @@ export function DocumentWorkspace({
                       <span
                         className={`rounded px-1.5 py-0.5 text-[10px] ${issue.severity === 'blocker' ? 'bg-red-100 text-red-800' : issue.severity === 'warning' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'}`}
                       >
-                        {issue.severity === 'blocker'
+                        {issue.status !== 'open'
+                          ? '처리됨'
+                          : issue.severity === 'blocker'
                           ? '필수 수정'
                           : issue.severity === 'warning'
                             ? '경고'
                             : '안내'}
                       </span>
                       <span>{stateLabel[issue.status]}</span>
+                      <span className="text-slate-500">{issue.origin === 'preflight' ? '자료 확인' : issue.origin === 'layout' ? '배치 검사' : '내용 검사'}</span>
                       {issue.layout_format && (
                         <span className="text-slate-400">
                           · {issue.layout_format.toUpperCase()}
@@ -2298,12 +2391,76 @@ export function DocumentWorkspace({
                           type="button"
                           className={button}
                           data-issue-evidence-action
-                          onClick={() => navigate(1)}
+                          onClick={() => {
+                            onReviewEvidence(issue.fact_ids ?? [])
+                            navigate(1)
+                          }}
                         >
                           자료 점검에서 근거 확인하기 →
                         </button>
                       )}
                     </div>
+                    {!!issueRecoverySteps(issue).length && (
+                      <div className="mt-3 rounded-lg bg-white p-3" data-issue-recovery>
+                        <p className="font-bold text-teal-900">해결 순서</p>
+                        <ol className="mt-2 list-decimal space-y-2 pl-4">
+                          {issueRecoverySteps(issue).map(step => <li key={step}>{step}</li>)}
+                        </ol>
+                      </div>
+                    )}
+                    {!!preflight && requiredTextRestorations(issue, preflight, doc.pages).map(({page, pageIndex, block, fact}) => (
+                      <fieldset key={block.block_id} data-required-restore={block.block_id}
+                        disabled={work.actionBlocked || preflight.input_revision !== inputRevision}
+                        className="mt-3 rounded-lg border border-teal-200 bg-white p-3">
+                        <legend className="font-bold text-teal-900">연결된 필수 사실로 문구 복구</legend>
+                        <p>{pageIndex + 1}쪽 · {page.title}</p>
+                        <p className="mt-2 font-bold">현재 문구</p>
+                        <p className="whitespace-pre-wrap break-words">{String(block.content.text || '(빈 문구)')}</p>
+                        <p className="mt-2 font-bold">복구할 문구</p>
+                        <p className="whitespace-pre-wrap break-words">{fact.value}</p>
+                        <Evidence refs={fact.evidence_refs} sources={sources} />
+                        <p className="mt-2">이 블록의 현재 문구 전체를 위 내용으로 바꿉니다. 직접 작성한 문구도 교체되므로 비교 후 선택하세요. 근거 연결과 다른 블록은 유지합니다.</p>
+                        <button type="button" data-required-restore-submit className={`${primary} mt-3`}
+                          onClick={() => void work.restoreRequiredText(issue.issue_id, block.block_id, preflight)}>
+                          이 문구를 복구하고 내용 검사
+                        </button>
+                        {work.actionBlocked && <p className="mt-2">미저장 문구·자료 변경 반영·진행 중인 작업을 먼저 마쳐 주세요.</p>}
+                      </fieldset>
+                    ))}
+                    {!!preflight && !!missingRequiredFacts(issue, preflight, doc.pages).length && (
+                      <fieldset data-required-insert={issue.issue_id} disabled={work.actionBlocked || preflight.input_revision !== inputRevision}
+                        className="mt-3 rounded-lg border border-teal-200 bg-white p-3">
+                        <legend className="font-bold text-teal-900">빠진 필수 사실을 본문에 추가</legend>
+                        <p>넣을 내용과 원문을 확인하고 페이지를 선택하세요. 선택한 페이지 끝에 근거와 함께 추가하고 내용 검사를 실행합니다.</p>
+                        {missingRequiredFacts(issue, preflight, doc.pages).map(fact => (
+                          <div key={fact.fact_id} className="mt-3">
+                            <label className="flex items-start gap-2">
+                              <input type="radio" name={`required-${issue.issue_id}`} data-required-fact={fact.fact_id}
+                                checked={requiredChoices[issue.issue_id]?.factId === fact.fact_id}
+                                onChange={() => setRequiredChoices(old => ({ ...old, [issue.issue_id]: { factId: fact.fact_id, pageId: old[issue.issue_id]?.pageId || '' } }))} />
+                              <span className="whitespace-pre-wrap break-words">{fact.value}</span>
+                            </label>
+                            <Evidence refs={fact.evidence_refs} sources={sources} />
+                          </div>
+                        ))}
+                        <label className="mt-3 block">추가할 페이지
+                          <select className="mt-1 w-full rounded border p-2" data-required-page
+                            value={requiredChoices[issue.issue_id]?.pageId || ''}
+                            onChange={event => setRequiredChoices(old => ({ ...old, [issue.issue_id]: { factId: old[issue.issue_id]?.factId || '', pageId: event.target.value } }))}>
+                            <option value="">페이지를 선택하세요</option>
+                            {doc.pages.map((item, index) => <option key={item.page_id} value={item.page_id}>{index + 1}쪽 · {item.title}</option>)}
+                          </select>
+                        </label>
+                        <button type="button" className={`${primary} mt-3`} data-required-insert-submit
+                          disabled={!doc.pages.some(item => item.page_id === requiredChoices[issue.issue_id]?.pageId) ||
+                            !missingRequiredFacts(issue, preflight, doc.pages).some(fact => fact.fact_id === requiredChoices[issue.issue_id]?.factId)}
+                          onClick={() => {
+                            const choice = requiredChoices[issue.issue_id]
+                            if (choice) void work.insertRequiredFact(issue.issue_id, choice.factId, choice.pageId, preflight)
+                          }}>선택한 사실 추가하고 내용 검사</button>
+                        {work.actionBlocked && <p className="mt-2">미저장 문구·자료 변경 반영·진행 중인 작업을 먼저 마쳐 주세요.</p>}
+                      </fieldset>
+                    )}
                     {issueMessageParts(issue.message).action && (
                       <div className="mt-3 rounded-lg border border-teal-100 bg-teal-50 p-2.5 text-slate-800">
                         <p className="font-bold text-teal-900">권장 수정</p>

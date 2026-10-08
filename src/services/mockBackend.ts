@@ -252,6 +252,14 @@ function applyOperations(operations: Operation[]) {
       state!.document!.document.pages = pages.filter(
         (p) => p.page_id !== operation.page_id,
       )
+    else if (operation.op === 'insert_block') {
+      const target = pages.find(page => page.page_id === operation.page_id)
+      const after = operation.after_block_id === null ? -1 : target?.blocks.findIndex(block => block.block_id === operation.after_block_id)
+      if (!target || after === undefined || (operation.after_block_id !== null && after < 0) ||
+          pages.some(page => page.blocks.some(block => block.block_id === operation.block.block_id)))
+        throw new Error('추가할 페이지·위치·블록 ID를 확인해 주세요.')
+      target.blocks.splice(after + 1, 0, structuredClone(operation.block))
+    }
     else
       for (const page of pages) {
         if (operation.op === 'delete_block')

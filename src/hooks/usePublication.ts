@@ -1,6 +1,6 @@
 import { previewStorage } from '../services/mockBackend'
 import { useEffect, useRef, useState } from 'react'
-import { publicationApi } from '../api/publication'
+import { publicationApi, canKeepDocumentAndValidate, missingRequiredFacts, requiredTextRestorations } from '../api/publication'
 import type {
   Action,
   ImpactReview,
@@ -11,7 +11,7 @@ import type {
   PublicationJob,
   Proposal,
 } from '../api/publication'
-import type { DraftResult } from '../api/aiWorkflow'
+import type { DraftResult, Preflight } from '../api/aiWorkflow'
 import { SourceApiError } from '../api/sources'
 
 const STORAGE = previewStorage + '.publication'
@@ -207,7 +207,7 @@ export function usePublication(
         setResult(value.result)
         setIssues(value.issues)
         setProposal(restoredProposal)
-        setBusy(false)
+        if (!lock.current) setBusy(false)
         const restored = read(sid, did)
         if (
           !restored.boundPreflightId &&
@@ -230,7 +230,7 @@ export function usePublication(
       })
       .catch((cause) => {
         if (!cancelled) {
-          setBusy(false)
+          if (!lock.current) setBusy(false)
           setError(failure(cause))
         }
       })
@@ -419,8 +419,9 @@ export function usePublication(
     }
   }, [saved.job, watch, sid, did])
 
-  async function perform(action: Action) {
+  async function perform(action: Action): Promise<void> {
     if (lock.current) return
+    let followup: Action | undefined
     lock.current = true
     setBusy(true)
     setError('')
@@ -430,7 +431,7 @@ export function usePublication(
     try {
       const response = await publicationApi.act(sid, did, action)
       if (!active.current) return
-      const next = { ...savedRef.current, pending: undefined }
+      const next: Saved = { ...savedRef.current, pending: undefined }
       if (action.kind === 'propose') delete next.proposalRecovery
       if (action.kind === 'save' || action.kind === 'applyProposal') {
         delete next.exportId
@@ -447,7 +448,7 @@ export function usePublication(
         next.job = {
           id: response.job_id,
           kind: action.kind,
-          revision: result!.document.document_revision,
+          revision: action.kind === 'validate' ? Number(action.body.expected_revision) : result!.document.document_revision,
         }
         remember(next)
         setJob(null)
@@ -466,6 +467,16 @@ export function usePublication(
             throw new Error('수정안의 문서가 일치하지 않습니다.')
           setProposal(latestProposal)
         }
+        if (action.kind === 'save' && action.validateAfterSave &&
+            response.document_revision === value.result.document.document_revision &&
+            !value.result.input_review_required) {
+          followup = { kind: 'validate', key: crypto.randomUUID(), body: {
+            expected_revision: value.result.document.document_revision,
+            input_revision: value.result.document.input_revision,
+          } }
+          // Persist the next request before starting it; no manuscript text is stored.
+          next.pending = followup
+        }
         install(value)
         remember(next)
         if (action.kind === 'save') {
@@ -475,7 +486,9 @@ export function usePublication(
         }
         setNotice(
           action.kind === 'save'
-            ? '문서 변경을 저장했습니다. 내용·배치 검사를 다시 실행해 주세요.'
+            ? followup ? '문구를 저장했습니다. 내용 검사를 이어서 진행합니다.'
+              : action.validateAfterSave ? '저장 후 자료 또는 문서가 변경됐습니다. 현재 저장본을 확인한 뒤 다시 검사해 주세요.'
+              : '문서 변경을 저장했습니다. 내용·배치 검사를 다시 실행해 주세요.'
             : action.kind === 'applyProposal'
               ? '수정안을 적용했습니다. 내용·배치 검사를 다시 실행해 주세요.'
               : action.kind === 'rejectProposal'
@@ -518,6 +531,7 @@ export function usePublication(
       lock.current = false
       if (active.current) setBusy(false)
     }
+    if (followup && active.current) await perform(followup)
   }
   const document = result?.document || initial.document
   const blocked =
@@ -725,10 +739,11 @@ export function usePublication(
         ]
       })
   }
-  async function createImpact(confirmed: boolean) {
-    const pfid = preflightId || result?.latest_preflight_id
+  async function createImpact(confirmed: boolean, requestedPreflightId?: string) {
+    const pfid = requestedPreflightId || preflightId || result?.latest_preflight_id
     if (
       !confirmed ||
+      lock.current ||
       !pfid ||
       blocked ||
       dirty ||
@@ -780,6 +795,7 @@ export function usePublication(
       setNotice(
         '변경 영향을 확인한 뒤 선택한 수정과 유지 사유를 적용해 주세요.',
       )
+      return currentReview
     } catch (cause) {
       if (active.current) {
         setError(failure(cause))
@@ -796,11 +812,13 @@ export function usePublication(
       if (active.current) setBusy(false)
     }
   }
-  async function applyImpact(reason: string, references: ImpactReferences[]) {
+  async function applyImpact(reason: string, references: ImpactReferences[], suppliedReview?: ImpactReview, requestedPreflightId?: string) {
+    const selectedReview = suppliedReview || impactReview
     if (
       !reason.trim() ||
+      lock.current ||
       blocked ||
-      !impactReview ||
+      !selectedReview ||
       !result ||
       saved.pending ||
       saved.job
@@ -814,7 +832,7 @@ export function usePublication(
       const currentReview = await publicationApi.impactReview(
         sid,
         did,
-        impactReview.review_id,
+        selectedReview.review_id,
       )
       if (!active.current) return false
       if (
@@ -835,7 +853,7 @@ export function usePublication(
         currentReview.status !== 'pending' ||
         currentReview.to_input_revision !== inputRevision ||
         currentReview.preflight_id !==
-          (preflightId || result.latest_preflight_id)
+          (requestedPreflightId || preflightId || result.latest_preflight_id)
       ) {
         setImpactReview(currentReview)
         throw new Error(
@@ -917,6 +935,23 @@ export function usePublication(
       lock.current = false
       if (active.current) setBusy(false)
     }
+  }
+  async function keepDocumentAndValidate(requestedPreflightId?: string) {
+    if (lock.current || blocked || dirty || !result) return false
+    const pfid = requestedPreflightId || preflightId || result.latest_preflight_id
+    if (!pfid) return false
+    const reason = '사용자가 선택 항목 변경을 반영하고 기존 본문을 유지한 채 재검증을 요청했습니다.'
+    if (savedRef.current.impactRecovery && impactReview) {
+      // Reuse the persisted apply key/body; never start a second application.
+      return applyImpact(reason, [], impactReview, pfid)
+    }
+    const review = await createImpact(true, pfid)
+    if (!review) return false
+    if (!canKeepDocumentAndValidate(review)) {
+      setNotice('문장이나 근거에 확인할 변경이 있습니다. 아래 표시된 항목을 선택한 뒤 적용해 주세요.')
+      return false
+    }
+    return applyImpact(reason, [], review, pfid)
   }
   async function requestProposal(
     blockId: string,
@@ -1051,6 +1086,7 @@ export function usePublication(
     impactReview,
     createImpact,
     applyImpact,
+    keepDocumentAndValidate,
     result,
     document,
     issues,
@@ -1126,7 +1162,33 @@ export function usePublication(
       )
       setConfirmed(false)
     },
-    save: () => {
+    restoreRequiredText: (issueId: string, blockId: string, preflight: Preflight) => {
+      if (lock.current || actionBlocked || preflight.preflight_id !== preflightId || preflight.input_revision !== inputRevision) return
+      const issue = issues.find(item => item.issue_id === issueId)
+      const candidate = issue && requiredTextRestorations(issue, preflight, document.pages).find(item => item.block.block_id === blockId)
+      if (!candidate) return
+      return perform({ kind: 'save', key: crypto.randomUUID(), validateAfterSave: true, body: {
+        expected_revision: document.document_revision,
+        operations: [{ op: 'replace_block_content', block_id: blockId,
+          content: { ...candidate.block.content, text: candidate.fact.value } }],
+      } })
+    },
+    insertRequiredFact: (issueId: string, factId: string, pageId: string, preflight: Preflight) => {
+      if (lock.current || actionBlocked || preflight.preflight_id !== preflightId || preflight.input_revision !== inputRevision) return
+      const issue = issues.find(item => item.issue_id === issueId)
+      const page = document.pages.find(item => item.page_id === pageId)
+      const fact = issue && missingRequiredFacts(issue, preflight, document.pages).find(item => item.fact_id === factId)
+      if (!fact || !page) return
+      return perform({ kind: 'save', key: crypto.randomUUID(), validateAfterSave: true, body: {
+        expected_revision: document.document_revision,
+        operations: [{ op: 'insert_block', page_id: page.page_id,
+          after_block_id: page.blocks.at(-1)?.block_id ?? null,
+          block: { block_id: `required_${crypto.randomUUID()}`, type: 'paragraph',
+            content: { text: fact.value }, fact_ids: [fact.fact_id], evidence_refs: fact.evidence_refs },
+        }],
+      } })
+    },
+    save: (validateAfterSave = false) => {
       if (blocked || impactRequired || !dirty || saved.impactRecovery) return
       const operations: Operation[] = document.pages
         .flatMap((p) => p.blocks)
@@ -1146,10 +1208,10 @@ export function usePublication(
             { op: 'replace_block_content', block_id: b.block_id, content },
           ]
         })
-      return run('save', {
+      return perform({ kind: 'save', key: crypto.randomUUID(), validateAfterSave, body: {
         expected_revision: document.document_revision,
         operations,
-      })
+      } })
     },
     validate: () =>
       !actionBlocked &&
