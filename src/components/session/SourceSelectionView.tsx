@@ -330,7 +330,7 @@ export function SourceSelectionView({
     !aiBlocked &&
     !ai.locked &&
     !ai.pendingResponse &&
-    (!hasDocument || sourceEditing) &&
+    (!hasDocument || (sourceEditing && !sourceChangeBlocked)) &&
     selected.size > 0 &&
     readable > 0
   const openInspector = (target = 'ai-workflow') => {
@@ -342,7 +342,6 @@ export function SourceSelectionView({
   const analyze = async () => {
     if (!canAnalyze) return
     setSourceEditing(true)
-    setSourceChangeBlocked(false)
     void ai.analyze()
     openInspector()
   }
@@ -366,17 +365,46 @@ export function SourceSelectionView({
     setTagOpen(false)
   }
   const suggestedPages = enrichedPreflight?.recommendations.suggested_pages
-  const dockLabel = enrichedAi.preflight
+  const currentPreflight = !!ai.preflight && ai.preflight.input_revision === work.session?.input_revision
+  const canReturnToDocument = !!ai.document && currentPreflight && !aiBlocked && !ai.locked && !ai.pendingResponse
+  const openDocumentReview = () => {
+    flushSync(() => onNavigate(2))
+    const target = document.querySelector<HTMLElement>('[data-screen="S02"] [data-testid="impact-review"]')
+    if (target) {
+      target.setAttribute('tabindex', '-1')
+      target.focus({ preventScroll: true })
+      target.scrollIntoView({ block: 'start' })
+    }
+  }
+  const documentDockLabel = ai.pendingResponse
+    ? '점검 요청 처리 결과 확인'
+    : ai.locked ? '작업 상태 확인 중'
+    : work.briefDirty ? '작성 조건 저장 필요'
+    : work.pendingUpload || pending > 0 ? '자료 읽기 완료 대기'
+    : canReturnToDocument ? '점검 결과 확인 · 기존 문서로 이동'
+    : !sourceEditing ? '자료 변경 시작'
+    : '변경 자료 AI 점검'
+  const dockLabel = hasDocument ? documentDockLabel : enrichedAi.preflight
     ? enrichedAi.confirmed
       ? '확인하고 초안 만들기'
       : '점검 결과 확인 · 초안 만들기'
     : 'AI 자료 점검'
-  const dockAction = enrichedAi.preflight
+  const dockAction = hasDocument
+    ? ai.pendingResponse ? () => openInspector()
+      : canReturnToDocument ? openDocumentReview
+      : !sourceEditing ? () => setSourceEditing(true)
+      : analyze
+    : enrichedAi.preflight
     ? enrichedAi.confirmed && enrichedAi.canConfirm
       ? () => void enrichedAi.generate()
       : () => openInspector()
     : analyze
-  const dockDisabled = enrichedAi.preflight
+  const dockDisabled = hasDocument
+    ? ai.pendingResponse ? ai.busy
+      : canReturnToDocument ? false
+      : !sourceEditing ? sourceChangeBlocked || aiBlocked || ai.locked
+      : !canAnalyze
+    : enrichedAi.preflight
     ? enrichedAi.confirmed
       ? !enrichedAi.canConfirm
       : false
@@ -594,6 +622,21 @@ export function SourceSelectionView({
               >
                 편집 화면으로 돌아가기
               </button>
+            )}
+            {canReturnToDocument && (
+              <button type="button" className={`${primary} mt-3 ml-2`} data-source-review-continue onClick={openDocumentReview}>
+                점검 결과 확인 · 기존 문서로 이동
+              </button>
+            )}
+            {sourceEditing && (
+              <p data-source-review-progress className="mt-2">
+                {work.briefDirty ? '변경한 작성 조건을 먼저 저장해 주세요.'
+                  : work.pendingUpload || pending > 0 ? '자료를 읽고 있습니다. 완료 후 사용할 자료를 선택하고 변경 자료 AI 점검을 실행해 주세요.'
+                  : ai.pendingResponse ? '요청 결과를 확인하지 못했습니다. 사전 점검 패널에서 같은 요청의 처리 결과를 확인해 주세요.'
+                  : ai.locked ? '작업 결과를 확인하고 있습니다.'
+                  : currentPreflight ? '현재 자료의 점검 결과를 불러왔습니다. 기존 문서로 이동해 확인하고 변경 영향을 반영하세요. 문제가 남아 있으면 사전 점검에서 근거를 보완해 주세요.'
+                  : '사용할 자료를 선택한 뒤 변경 자료 AI 점검을 실행하세요. 기존 문서 반영은 점검 후 진행합니다.'}
+              </p>
             )}
             {sourceChangeBlocked && (
               <p className="mt-2">
@@ -1494,6 +1537,7 @@ export function SourceSelectionView({
             </div>
             <button
               type="button"
+              data-source-next
               disabled={dockDisabled}
               onClick={dockAction}
               className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#007A78] to-[#0F766E] px-6 py-2.5 text-xs font-bold text-white shadow-sm transition-all hover:brightness-105 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:bg-none disabled:text-slate-400 disabled:shadow-none"

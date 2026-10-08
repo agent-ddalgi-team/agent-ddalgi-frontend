@@ -1563,8 +1563,17 @@ finally:
         .find((b) => b.type === 'paragraph' && b.fact_ids.length)
       const preservedText =
         paragraph.content.text + ' 사용자가 직접 편집한 내용입니다.'
+      await screen(1)
+      await until(() => evaluate(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='자료 변경 시작'&&!b.disabled)`), 'source editing initially available')
+      await click('자료 변경 시작')
+      await screen(2)
       await setText(paragraph.block_id, preservedText)
       await screen(1)
+      assert.ok(await evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='변경 자료 AI 점검').disabled`))
+      assert.ok(await evaluate(`!document.querySelector('[data-source-next]').textContent.includes('초안')`))
+      const dirtyPreflightPosts = posts('preflights').length
+      await evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='변경 자료 AI 점검').click()`)
+      assert.equal(posts('preflights').length, dirtyPreflightPosts)
       assert.equal(
         await evaluate(
           `[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='자료 변경 시작').disabled`,
@@ -1632,12 +1641,32 @@ finally:
         (await documentState()).document.pages,
         beforeImpact.document.pages,
       )
-      await click('변경 자료 AI 점검')
+      await until(() => has('[data-source-next]:not(:disabled)'), 'changed inputs ready for analysis')
+      assert.ok(await evaluate(`document.querySelector('[data-source-next]').textContent.includes('변경 자료 AI 점검')`))
+      dropPost = 'preflights'
+      dropped = false
+      await evaluate(`document.querySelector('[data-source-next]').click()`)
+      await until(() => dropped, 'supplement preflight response lost')
+      await idle()
+      const supplementPosts = posts('preflights').length
+      await reload()
+      await screen(2)
+      await screen(1)
+      await until(() => evaluate(`document.querySelector('[data-source-next]').textContent.includes('점검 요청 처리 결과 확인')&&!document.querySelector('[data-source-next]').disabled`), 'supplement recovery after reload')
+      await evaluate(`document.querySelector('[data-source-next]').click()`)
+      await until(() => evaluate(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='같은 AI 요청 다시 확인'&&!b.disabled)`), 'same supplement request recovery available')
+      assert.equal(posts('preflights').length, supplementPosts)
+      await click('같은 AI 요청 다시 확인')
       await until(
         () => has('[data-testid=preflight-result]'),
         'new source preflight',
       )
-      await screen(2)
+      assert.equal(posts('preflights').at(-1).key, posts('preflights').at(-2).key)
+      await until(() => has('[data-source-review-continue]'), 'supplement continuation available')
+      const beforeContinuePosts = calls.filter(c=>c.method==='POST').length
+      await evaluate(`document.querySelector('[data-source-next]').click()`)
+      await until(() => evaluate(`document.activeElement?.dataset.testid==='impact-review'`), 'continuation focuses impact review')
+      assert.equal(calls.filter(c=>c.method==='POST').length, beforeContinuePosts)
       await until(
         () => has('input[aria-label="최신 점검 확인"]'),
         'impact panel',
@@ -1868,6 +1897,7 @@ finally:
       checks.push(
         'C-05: source replacement preserves edits/photos; explicit confirmation resets; lost create reuses key; same-input reanalysis stales review; selected text/references applied once; lost apply restores by GET; reason/body absent from storage; full validation without regeneration',
       )
+      checks.push('supplement dock advances from analysis to existing document; dirty text blocks reanalysis; lost analysis restores same key after reload; review navigation focuses panel without POST')
       prepared = afterImpact
       await until(async () => {
         const checked = (await documentState()).validation
