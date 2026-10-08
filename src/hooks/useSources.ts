@@ -629,30 +629,73 @@ export function useSources(allowDocumentChanges = false) {
     await run('DART 공개 자료 가져오는 중', async () => {
       const activeSession = session || (await ensureSession())
       if (activeSession.document_summary && !allowDocumentChanges) return
+      let attempt: { sessionId: string; revision: number; key: string } | null =
+        null
       try {
-        const accepted = await sourceApi.importPublic(activeSession)
-        const jobIds = [
+        attempt = JSON.parse(sessionStorage.getItem(PUBLIC_IMPORT) || 'null')
+      } catch {
+        /* Start a new request. */
+      }
+      if (
+        !attempt ||
+        attempt.sessionId !== activeSession.session_id ||
+        attempt.revision !== activeSession.input_revision ||
+        typeof attempt.key !== 'string'
+      ) {
+        attempt = {
+          sessionId: activeSession.session_id,
+          revision: activeSession.input_revision,
+          key: crypto.randomUUID(),
+        }
+      }
+      sessionStorage.setItem(PUBLIC_IMPORT, JSON.stringify(attempt))
+      try {
+        const accepted = await sourceApi.importPublic(
+          activeSession,
+          attempt.key,
+        )
+        sessionStorage.setItem(
+          PUBLIC_IMPORT,
+          JSON.stringify({ ...attempt, jobId: accepted.job_id }),
+        )
+        const ids = [
           ...new Set([...(readSaved()?.jobs || []), accepted.job_id]),
         ]
-        persist(activeSession.session_id, jobIds)
-        apply(await snapshot(activeSession.session_id, jobIds))
+        // Retain accepted Job before the status lookup, including a lost lookup response.
+        persist(activeSession.session_id, ids)
+        const value = await snapshot(activeSession.session_id, ids)
+        apply(value)
         attempts.current = 0
         setPolling(true)
-        setNotice(
-          '공개 자료를 가져오고 있습니다. 완료된 실제 자료를 목록에서 선택해 주세요.',
-        )
+        const job = value.jobs.find((item) => item.job_id === accepted.job_id)
+        if (job && !running(job)) sessionStorage.removeItem(PUBLIC_IMPORT)
+        if (job?.status === 'failed' || job?.status === 'cancelled') {
+          setNotice('')
+          setError(
+            job.error?.message || 'DART 공개 자료를 가져오지 못했습니다.',
+          )
+        } else {
+          setNotice(
+            job?.status === 'succeeded'
+              ? 'DART 공개 자료를 가져왔습니다. 사용할 자료를 선택해 주세요.'
+              : 'DART 공개 자료를 조회하고 있습니다. 완료되면 공개 연동 데이터 탭에서 선택해 주세요.',
+          )
+        }
       } catch (cause) {
         if (
           cause instanceof SourceApiError &&
-          (cause.status === 404 ||
-            cause.code === 'RESOURCE_NOT_FOUND' ||
-            cause.status === 503 ||
-            cause.code === 'PUBLIC_DATA_NOT_CONFIGURED')
+          cause.status >= 400 &&
+          cause.status < 500 &&
+          ![408, 429].includes(cause.status)
+        )
+          sessionStorage.removeItem(PUBLIC_IMPORT)
+        if (
+          cause instanceof SourceApiError &&
+          cause.code === 'PUBLIC_DATA_NOT_CONFIGURED'
         ) {
-          throw new Error(
-            'DART API 키 미설정: 공공데이터 수집을 위한 외부 API 키가 설정되지 않았습니다.',
-            { cause },
-          )
+          sessionStorage.removeItem(PUBLIC_IMPORT)
+          setNotice(cause.message)
+          return
         }
         throw cause
       }

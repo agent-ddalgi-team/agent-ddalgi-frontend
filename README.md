@@ -269,3 +269,11 @@ build·ESLint·격리 --publication --required-insert 28묶음/PDF4쪽 통과. �
 - DOCX: node scripts/check-ai-workflow.mjs --publication --photos --required-insert --docx
 
 백엔드 선택 회귀7건도 통과했다. 중복 검사 수를 합산하지 않는다. 남은 범위는 실제 자료/LLM 품질과 다중 사실·제목·목록의 직접 편집 경로이며 모든 오류가 자동 해결된다는 뜻은 아니다.
+
+### 2026-10-08 develop 통합 시 요청 복구 보존
+
+최신 develop의 세션 자료 선택·충족도 변경을 포함했다. 공개자료 가져오기에서 빠진 멱등 키와 응답 유실 복구, 완료/실패 Job 안내를 복원하여 TypeScript 호출 계약을 맞췄다. 격리 검사 서버에서 제외 API를 가짜 성공 응답으로 가로채던 middleware를 제거했다. 제외/복원은 실제 서버에 저장되며 같은 요청 재전송·C-05·재검증까지 실제 API로 검사한다.
+
+통합 후 build·전체 ESLint 및 백엔드 내용검증 98건 통과. 최종 PDF 통합 36묶음/4쪽 승인·다운로드 통과(Temp ddalgi-ai-ui-kCq9Ef). 기존 500kB 청크 경고는 유지한다. 원본 시연 DB·API 키는 변경하거나 커밋하지 않았다.
+
+최종 DOCX도 실제 API 우회 없이 35묶음/4쪽 승인·다운로드 통과(Temp ddalgi-ai-ui-liz3Ok). 중간 실행의 화면 복원 실패는 최종 통과와 구분하며, 재실행에서는 소스 변경 없이 완료했다.

@@ -597,50 +597,6 @@ def _diagnostic_run(cmd, timeout, what):
 if not live_trial: _render._run=_diagnostic_run
 init_orm_db(settings.db_path,settings.private_runs_dir)
 app=create_app(settings)
-from starlette.responses import Response
-excluded_facts_map={}
-orig_facts_cache={}
-@app.middleware('http')
-async def review_middleware(request,call_next):
- path=request.url.path
- if request.method == 'POST' and '/preflights/' in path and path.endswith('/reviews'):
-  parts=path.strip('/').split('/')
-  if len(parts) == 7:
-   sid,pid=parts[3],parts[5]
-   body_bytes=await request.body()
-   body=json.loads(body_bytes.decode('utf-8')) if body_bytes else {}
-   action=body.get('action')
-   fact_ids=set(body.get('fact_ids',[]))
-   curr=excluded_facts_map.setdefault(pid,set())
-   if action == 'exclude': curr.update(fact_ids)
-   elif action == 'restore': curr.difference_update(fact_ids)
-   from app.db import connect
-   from app.services import preflights as pf_service
-   with connect(settings.db_path) as conn:
-    pf_out=pf_service.get(conn,sid,pid)
-    pf_data=pf_out.model_dump()
-   all_facts=orig_facts_cache.setdefault(pid,pf_data['facts'])
-   rev_ids=[f['fact_id'] for f in all_facts if f.get('field_key') != 'company_name']
-   pf_data['reviewable_fact_ids']=rev_ids
-   pf_data['excluded_facts']=[f for f in all_facts if f['fact_id'] in curr]
-   pf_data['facts']=[f for f in all_facts if f['fact_id'] not in curr]
-   return Response(content=json.dumps(pf_data),media_type='application/json',status_code=200)
- response=await call_next(request)
- if request.method == 'GET' and '/preflights/' in path and not path.endswith('/preflights'):
-  parts=path.strip('/').split('/')
-  if len(parts) == 6 and response.status_code == 200:
-   pid=parts[5]
-   body=b''
-   async for chunk in response.body_iterator: body+=chunk
-   data=json.loads(body.decode('utf-8'))
-   all_facts=orig_facts_cache.setdefault(pid,data['facts'])
-   curr=excluded_facts_map.setdefault(pid,set())
-   rev_ids=[f['fact_id'] for f in all_facts if f.get('field_key') != 'company_name']
-   data['reviewable_fact_ids']=rev_ids
-   data['excluded_facts']=[f for f in all_facts if f['fact_id'] in curr]
-   data['facts']=[f for f in all_facts if f['fact_id'] not in curr]
-   return Response(content=json.dumps(data),media_type='application/json')
- return response
 trial_ledger=None
 # The synthetic failure is used only by mock tests.
 if live_trial:
