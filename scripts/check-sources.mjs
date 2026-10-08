@@ -209,7 +209,7 @@ try {
     'purpose input ready',
   )
   await evaluate(
-    `(()=>{const i=document.querySelector('input[aria-label="사용 목적"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(i,'연결 확인용 목적');i.dispatchEvent(new Event('input',{bubbles:true}));})()`,
+    `(()=>{const i=document.querySelector('input[aria-label="사용 목적"]');i.focus();i.select();if(!document.execCommand('insertText',false,'연결 확인용 목적')){const set=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;set.call(i,'연결 확인용 목적');i.dispatchEvent(new InputEvent('input',{bubbles:true,data:'연결 확인용 목적'}));i.dispatchEvent(new Event('change',{bubbles:true}));}})()`,
   )
   await until(
     () =>
@@ -233,7 +233,7 @@ try {
   )
   await readFinished('connection-check.txt')
   await evaluate(
-    `document.querySelector('input[aria-label="connection-check.txt 선택"]').click()`,
+    `(()=>{const i=document.querySelector('input[aria-label="connection-check.txt 선택"]');if(!i.checked)i.click();})()`,
   )
   await idle()
   assert.equal(
@@ -255,6 +255,13 @@ try {
   )
   await until(() => dropped, 'response intercepted')
   await idle()
+  await until(
+    () =>
+      evaluate(
+        `(()=>{const b=[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='같은 업로드 재시도');return !!b&&!b.disabled})()`,
+      ),
+    'retry upload button enabled',
+  )
   await click('같은 업로드 재시도')
   await readFinished('lost-response.txt')
   assert.equal(
