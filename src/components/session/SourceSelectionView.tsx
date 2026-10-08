@@ -602,7 +602,10 @@ export function SourceSelectionView({
     setSourceSession(work.session?.session_id)
     setSourceEditing(false)
   }
-  const selected = new Set(work.session?.selected_source_ids || [])
+  const selected = useMemo(
+    () => new Set(work.session?.selected_source_ids || []),
+    [work.session?.selected_source_ids],
+  )
   const hasDocument = !!work.session?.document_summary || !!ai.document
   const documentAvailable = !!ai.document
   useEffect(() => {

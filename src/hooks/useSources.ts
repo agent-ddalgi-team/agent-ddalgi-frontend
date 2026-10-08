@@ -519,7 +519,7 @@ export function useSources(allowDocumentChanges = false) {
         clientOnlySelected,
       )
 
-      let result: Partial<SourceSession> = {}
+      let result: Partial<SourceSession>
       try {
         result = await sourceApi.inputs(
           activeSession,
