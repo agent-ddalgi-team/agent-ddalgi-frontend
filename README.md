@@ -2,7 +2,9 @@
 
 ## 현재 PC의 연동·인계 상태 (2026-10-08)
 
-현재 작업본은 `C:\final\frontend`의 `test/supplement-required-ui-20261008`이며 백엔드는 `C:\final\backend`의 `eval/customer-purpose-quality-20261008`이다. 백엔드 API 계약1.9·데이터 형식1.0·DB v11·출력 template_v11을 기준으로 사용한다. 계약 원본은 `C:\final\backend\contracts.md`, 검사 근거는 `C:\final\backend\task_backend.md`다. 이 프론트 저장소에 계약 문서 사본을 새로 생성하지 않았으며 현재 작업 브랜치의 원격 공유·병합은 별도다.
+오류 복구 작업은 백엔드 PR44(`test`), 프론트 PR24(`develop`)에 병합됐다. 현재 안내 보완 작업본은 `C:\final\frontend`의 `fix/session-expiry-guidance-20261008`이며 검수 기록은 `C:\final\backend`의 `qa/demo-format-parity-20261008`에 있다. 백엔드 API 계약1.9·데이터 형식1.0·DB v11·출력 template_v11을 기준으로 사용한다. 계약 원본은 `C:\final\backend\contracts.md`, 검사 근거는 `C:\final\backend\task_backend.md`다. 이 프론트 저장소에 계약 문서 사본을 새로 생성하지 않았으며 이번 안내 보완의 원격 공유·병합은 별도다.
+
+작업이 있으면 1·2·3단계 상단에서 서버가 알려준 만료 시각과 임시 보관 안내를 확인할 수 있다. `만료 시각 다시 확인`은 기존 조회만 실행하며 기한을 연장하거나 AI를 호출하지 않는다. 저장은 현재 작업 안에서의 임시 보관이며, 종료·만료 뒤 첨부·문서는 정리된다. 필요한 파일은 승인·다운로드로 기기에 보관하고, 만료되면 새 작업을 시작한다. 별도 작업 연장 버튼·10분 전 자동 알림은 구현된 기능으로 안내하지 않는다. build·변경 파일 ESLint·diff 검사에 이어 `AI_CHECK_BACKEND=C:/final/backend`, `AI_CHECK_LIVE=0`의 `node scripts/check-ai-workflow.mjs --session-expiry`도 통과했다. 격리 DB·실제 브라우저에서 전 단계의 표시/조회와 서버 만료·활동 시각/문서 상태 불변을 확인했으며 유료 AI 호출은0이다. 사용자 시연 세션을 대신 생성하거나 검사한 것은 아니다.
 
 ```powershell
 Set-Location C:\final\frontend
@@ -30,6 +32,8 @@ npm run dev -- --host 127.0.0.1
 
 
 ## 실제 백엔드 연결 고정 (2026-10-01)
+
+`--session-expiry` 검사는 임시 DB의 테스트 세션만 만료시켜 실제410 응답→이전 초안/출력 작업 참조 정리→시작 화면 복귀→별도 새 세션 생성도 확인한다. 전체16묶음 통과, 새 작업 시작에 AI 자동 호출은 없다. 이 명령은 가상 AI/격리 실행만 허용하며 사용자 시연 DB의 기한이나 만료된 내용을 변경하지 않는다.
 
 현재 서비스에서는 고정 가짜 자료·점검·초안·승인·PDF 대체 결과를 사용하지 않는다. 첫 접속은 작업 시작 화면이며, 서버 연결에 실패하면 오류를 표시한다. 이전 `session-demo-standalone` 저장값은 복원하지 않는다. `mockBackend.ts`의 예시 자료/회사 정보/고정 사진은 제거했고, 미연결 사진 수집은 명시적인 오류를 반환한다. 실제 회사 자료와 백엔드 DB에 명시적으로 등록한 `[시연]` 자료는 계속 구분해 조회한다.
 

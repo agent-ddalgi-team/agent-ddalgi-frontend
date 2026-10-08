@@ -618,6 +618,36 @@ export function SourceSelectionView({
 
   return (
     <>
+      {work.session && (
+        <div
+          role="note"
+          data-session-expiry
+          className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-950"
+        >
+          <div>
+            <p className="font-semibold">
+              확인된 작업 만료 시각:{' '}
+              <time dateTime={work.session.expires_at}>
+                {new Date(work.session.expires_at).toLocaleString('ko-KR')}
+              </time>
+            </p>
+            <p className="mt-1 leading-relaxed">
+              저장된 내용은 이 작업 안에서만 보관됩니다. 작업 종료·만료 시
+              첨부와 문서가 삭제되며, 내려받은 파일은 기기에 남습니다.
+            </p>
+          </div>
+          <button
+            type="button"
+            className={button}
+            disabled={!!work.busy || ai.locked}
+            onClick={() => void work.refresh()}
+            title="서버의 현재 만료 시각을 확인합니다. 조회만으로 작업 기한이 연장되지는 않습니다."
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            만료 시각 다시 확인
+          </button>
+        </div>
+      )}
       {work.error && (
         <div
           role="alert"
