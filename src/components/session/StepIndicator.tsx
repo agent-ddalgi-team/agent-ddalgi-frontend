@@ -21,10 +21,10 @@ export const StepIndicator: React.FC<StepIndicatorProps> = ({
   ] as const
 
   return (
-    <div className="w-full bg-white shadow-[0_1px_4px_rgba(0,0,0,0.02)] border-b border-slate-200/80 mb-6 py-2">
+    <div className="w-full bg-white/70 backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.02)] border-b border-slate-200/70 mb-6 py-2.5">
       <div className="max-w-[1600px] mx-auto px-4 sm:px-8 flex items-center justify-center">
         <nav
-          className="flex items-center gap-1 sm:gap-2 p-1 rounded-full bg-[#F1F5F9]"
+          className="flex items-center gap-1 sm:gap-2 p-1.5 rounded-full bg-slate-100/90 border border-slate-200/60 shadow-inner"
           aria-label="제작 단계 네비게이션"
         >
           {steps.map((s, idx) => {
@@ -44,30 +44,30 @@ export const StepIndicator: React.FC<StepIndicatorProps> = ({
                       : undefined
                   }
                   onClick={() => onStepChange?.(s.number as WizardStep)}
-                  className={`px-3.5 sm:px-4 py-1.5 rounded-full text-xs font-semibold transition-all flex items-center gap-2 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
+                  className={`px-4 sm:px-4.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 flex items-center gap-2 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${
                     isActive
-                      ? 'bg-[#E6F4F1] text-[#007A78] font-bold shadow-xs scale-[1.02]'
+                      ? 'bg-white text-slate-950 font-black shadow-sm shadow-slate-300/60 scale-[1.02]'
                       : isCompleted
-                        ? 'text-slate-700 hover:text-slate-900'
-                        : 'text-slate-500 hover:text-slate-800'
+                        ? 'text-slate-700 hover:text-slate-900 hover:bg-white/50'
+                        : 'text-slate-400 hover:text-slate-600'
                   }`}
                 >
                   <span
-                    className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold ${
+                    className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold transition-transform ${
                       isActive
-                        ? 'bg-[#007A78] text-white'
+                        ? 'bg-gradient-to-tr from-slate-950 to-zinc-700 text-white shadow-xs'
                         : isCompleted
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : 'bg-slate-200 text-slate-600'
+                          ? 'bg-slate-200 text-slate-900 font-bold'
+                          : 'bg-slate-200 text-slate-500'
                     }`}
                   >
                     {s.number}
                   </span>
-                  <span>{s.label}</span>
+                  <span className="tracking-tight">{s.label}</span>
                 </button>
 
                 {idx < steps.length - 1 && (
-                  <ChevronRight className="h-4 w-4 text-slate-400 shrink-0" />
+                  <ChevronRight className="h-3.5 w-3.5 text-slate-300 shrink-0" />
                 )}
               </React.Fragment>
             )

@@ -37,19 +37,19 @@ function App() {
   }, [])
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#F1F5F9] font-sans text-[#0F172A] antialiased">
-      {/* 1. 고정 글로벌 헤더 (56px) */}
-      <header className="sticky top-0 z-40 h-14 border-b border-slate-200/80 bg-white/95 shadow-[0_1px_8px_rgba(0,0,0,0.03)] backdrop-blur-md">
+    <div className="flex min-h-screen flex-col bg-[#F8FAFC] bg-[radial-gradient(ellipse_100%_70%_at_50%_-15%,rgba(15,23,42,0.08),rgba(248,250,252,1))] font-sans text-[#0F172A] antialiased">
+      {/* 1. 고정 글로벌 헤더 (58px) */}
+      <header className="sticky top-0 z-40 h-14.5 border-b border-slate-200/80 bg-white/90 shadow-[0_4px_24px_-4px_rgba(15,23,42,0.06)] backdrop-blur-xl">
         <div className="mx-auto flex h-full max-w-[1600px] items-center justify-between px-4 sm:px-8">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#005f5e] text-white shadow-xs">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-slate-950 via-slate-800 to-zinc-700 text-white shadow-sm shadow-slate-900/30">
               <FileText className="h-5 w-5" />
             </div>
-            <div className="flex items-baseline gap-2">
-              <h1 className="text-sm font-bold tracking-tight text-slate-900 sm:text-base">
+            <div className="flex items-baseline gap-2.5">
+              <h1 className="text-sm font-extrabold tracking-tight text-slate-900 sm:text-base">
                 회사소개서 도우미
               </h1>
-              <span className="hidden text-[11px] font-semibold text-slate-400 sm:inline">
+              <span className="hidden rounded-full border border-slate-300/80 bg-slate-100/90 px-2 py-0.5 text-[10px] font-bold text-slate-800 shadow-2xs sm:inline">
                 Enterprise Studio
               </span>
             </div>
@@ -59,14 +59,14 @@ function App() {
             <button
               type="button"
               onClick={() => setIsCompanyModalOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-full border border-blue-200/60 bg-blue-50 px-3 py-1 text-blue-700 shadow-2xs hover:bg-blue-100/90 transition-colors cursor-pointer group"
+              className="inline-flex items-center gap-1.5 rounded-full border border-slate-300/90 bg-gradient-to-r from-slate-100 to-zinc-100/70 px-3.5 py-1 text-slate-900 shadow-2xs hover:border-slate-400 hover:shadow-xs transition-all duration-200 cursor-pointer group"
               title="소속 기업/기관 변경"
             >
-              <Building2 className="h-3.5 w-3.5 text-blue-600" />
-              <span className="text-xs font-bold">
+              <Building2 className="h-3.5 w-3.5 text-slate-700" />
+              <span className="text-xs font-bold tracking-tight">
                 {hasDraft ? '초안 작업' : '현재 작업'} · {company}
               </span>
-              <span className="ml-0.5 rounded bg-blue-200/70 px-1.5 py-0.2 text-[10px] font-bold text-blue-800 group-hover:bg-blue-300 transition-colors">
+              <span className="ml-0.5 rounded-full bg-slate-200 px-2 py-0.2 text-[10px] font-bold text-slate-900 group-hover:bg-slate-300 transition-colors">
                 변경
               </span>
             </button>
@@ -74,7 +74,7 @@ function App() {
 
           <div className="flex items-center gap-3">
             <div className="hidden items-center gap-1.5 text-xs font-medium text-slate-400 lg:flex">
-              <CloudCheck className="h-4 w-4 text-[#007A78]" />
+              <CloudCheck className="h-4 w-4 text-slate-700" />
               <span>
                 {isScreenPreview
                   ? '가상 데이터 · 이 탭에서만 보관'
@@ -84,12 +84,12 @@ function App() {
             <button
               type="button"
               onClick={() => setStatusOpen(true)}
-              className="cursor-pointer rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-200"
+              className="cursor-pointer rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-2xs transition-colors hover:bg-slate-50"
               title="예외 상태 안내 열기"
             >
               상태 안내
             </button>
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#005f5e] text-white shadow-2xs">
+            <div className="flex h-8.5 w-8.5 items-center justify-center rounded-full bg-gradient-to-tr from-slate-950 to-zinc-700 text-white shadow-2xs shadow-slate-900/20">
               <User className="h-4 w-4" />
             </div>
           </div>
@@ -131,8 +131,8 @@ function App() {
         <div className="mx-auto flex max-w-[1600px] flex-col items-center justify-between gap-3 px-4 text-xs text-slate-500 sm:flex-row sm:px-8">
           <div className="flex flex-wrap items-center justify-center gap-3">
             <span>© 2026 회사소개서 도우미</span>
-            <span className="inline-flex items-center gap-1 rounded-full border border-blue-200/60 bg-blue-50 px-2.5 py-0.5 text-[11px] font-semibold text-blue-700">
-              <ShieldCheck className="h-3 w-3" />
+            <span className="inline-flex items-center gap-1 rounded-full border border-slate-300/80 bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-800">
+              <ShieldCheck className="h-3 w-3 text-slate-700" />
               {isScreenPreview
                 ? '작업 종료 시 가상 자료 정리'
                 : '작업 종료 시 서버 자료 정리'}

@@ -1,11 +1,29 @@
 @import 'tailwindcss';
 
+@theme {
+  --color-teal-50: #f8fafc;
+  --color-teal-100: #f1f5f9;
+  --color-teal-200: #e2e8f0;
+  --color-teal-300: #cbd5e1;
+  --color-teal-400: #94a3b8;
+  --color-teal-500: #64748b;
+  --color-teal-600: #334155;
+  --color-teal-700: #1e293b;
+  --color-teal-800: #0f172a;
+  --color-teal-900: #020617;
+  --color-teal-950: #000000;
+
+  --color-emerald-500: #334155;
+  --color-emerald-600: #1e293b;
+  --color-emerald-700: #0f172a;
+}
+
 @layer base {
   :root {
-    --color-teal-primary: #007a78;
-    --color-teal-hover: #0f766e;
-    --color-teal-subtle: #e6f4f1;
-    --color-teal-border: #a7f3d0;
+    --color-teal-primary: #0f172a;
+    --color-teal-hover: #1e293b;
+    --color-teal-subtle: #f1f5f9;
+    --color-teal-border: #cbd5e1;
   }
 
   html,
@@ -24,47 +42,112 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+
+  ::selection {
+    background-color: #0f172a;
+    color: #ffffff;
+  }
 }
 
-/* Custom Slate & Teal Theme Utilities */
+/* Custom Midnight Slate & Tech Charcoal Theme Utilities */
 .bg-canvas {
   background-color: #f8fafc;
 }
 
 .bg-teal-primary {
-  background-color: #007a78;
+  background-color: #0f172a;
 }
 
 .text-teal-primary {
-  color: #007a78;
+  color: #0f172a;
 }
 
 .border-teal-primary {
-  border-color: #007a78;
+  border-color: #0f172a;
 }
 
 .bg-teal-subtle {
-  background-color: #e6f4f1;
+  background-color: #f1f5f9;
 }
 
 .bg-teal-light {
-  background-color: #f0fdfa;
+  background-color: #f8fafc;
+}
+
+/* Global color remap for legacy hardcoded colors */
+.bg-\[\#007A78\],
+.bg-\[\#007a78\],
+.bg-\[\#006663\],
+.bg-\[\#0F766E\],
+.bg-\[\#0f766e\],
+.bg-\[\#005f5e\] {
+  background-color: #0f172a !important;
+}
+
+.text-\[\#007A78\],
+.text-\[\#007a78\],
+.text-\[\#006663\],
+.text-\[\#0F766E\],
+.text-\[\#0f766e\],
+.text-\[\#005f5e\] {
+  color: #0f172a !important;
+}
+
+.border-\[\#007A78\],
+.border-\[\#007a78\],
+.border-\[\#006663\],
+.border-\[\#0F766E\],
+.border-\[\#0f766e\],
+.border-\[\#005f5e\] {
+  border-color: #0f172a !important;
+}
+
+.bg-\[\#E6F4F1\],
+.bg-\[\#e6f4f1\],
+.bg-\[\#F0FDFA\],
+.bg-\[\#f0fdfa\],
+.bg-\[\#e0f2f1\] {
+  background-color: #f1f5f9 !important;
+}
+
+.text-\[\#E6F4F1\],
+.text-\[\#e6f4f1\],
+.text-\[\#F0FDFA\],
+.text-\[\#f0fdfa\] {
+  color: #0f172a !important;
+}
+
+.border-\[\#E6F4F1\],
+.border-\[\#e6f4f1\],
+.border-\[\#F0FDFA\],
+.border-\[\#f0fdfa\] {
+  border-color: #cbd5e1 !important;
+}
+
+.border-\[\#007A78\]\/20,
+.border-\[\#007a78\]\/20 {
+  border-color: rgba(15, 23, 42, 0.15) !important;
+}
+
+.ring-\[\#007A78\]\/20,
+.ring-\[\#007a78\]\/20 {
+  --tw-ring-color: rgba(15, 23, 42, 0.2) !important;
 }
 
 /* Glassmorphism & Elevation utilities */
 .glass-header {
-  background: rgba(255, 255, 255, 0.88);
+  background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
 
 .glass-dock {
-  background: rgba(255, 255, 255, 0.94);
+  background: rgba(255, 255, 255, 0.96);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   box-shadow:
-    0 10px 30px -5px rgba(15, 23, 42, 0.1),
-    0 0 1px 1px rgba(15, 23, 42, 0.05);
+    0 10px 30px -5px rgba(15, 23, 42, 0.12),
+    0 0 1px 1px rgba(15, 23, 42, 0.08);
 }
 
 .card-subtle-hover {
@@ -74,8 +157,8 @@
 .card-subtle-hover:hover {
   transform: translateY(-1px);
   box-shadow:
-    0 8px 20px -4px rgba(15, 23, 42, 0.06),
-    0 2px 6px -1px rgba(15, 23, 42, 0.04);
+    0 8px 20px -4px rgba(15, 23, 42, 0.08),
+    0 2px 6px -1px rgba(15, 23, 42, 0.05);
 }
 
 /* Tag Chip animations and shadows */
@@ -84,11 +167,11 @@
 }
 
 .tag-chip.active {
-  background-color: #e6f4f1;
-  color: #007a78;
-  border-color: #007a78;
+  background-color: #0f172a;
+  color: #ffffff;
+  border-color: #0f172a;
   font-weight: 600;
-  box-shadow: 0 0 0 1px #007a78;
+  box-shadow: 0 0 0 1px #0f172a;
 }
 
 /* Custom Micro Animations */
@@ -104,10 +187,10 @@
 @keyframes pulseGlow {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(0, 122, 120, 0.4);
+    box-shadow: 0 0 0 0 rgba(15, 23, 42, 0.35);
   }
   50% {
-    box-shadow: 0 0 0 6px rgba(0, 122, 120, 0);
+    box-shadow: 0 0 0 6px rgba(15, 23, 42, 0);
   }
 }
 
@@ -199,10 +282,10 @@
   background: #f8fafc;
 }
 .toc-page.selected {
-  border-color: #99d5cb;
-  background: #e6f4f1;
-  color: #007a78;
-  font-weight: 600;
+  border-color: #94a3b8;
+  background: #f1f5f9;
+  color: #0f172a;
+  font-weight: 700;
 }
 .editor-toolbar {
   display: flex;
@@ -246,8 +329,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-weight: 700;
-  color: #007a78;
+  font-weight: 800;
+  color: #0f172a;
 }
 .editor-page-footer {
   margin-top: auto;
@@ -264,8 +347,8 @@
   scroll-margin-top: 110px;
 }
 .editor-block.selected:not(.reading .editor-block) {
-  border-color: #93c9c3;
-  box-shadow: 0 0 0 3px #007a7808;
+  border-color: #64748b;
+  box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.08);
 }
 .editor-text {
   display: block;
@@ -420,8 +503,8 @@
   box-shadow: 0 2px 8px #0f172a06;
 }
 .preview-card:hover {
-  border-color: #007a78;
-  box-shadow: 0 3px 14px #007a7814;
+  border-color: #0f172a;
+  box-shadow: 0 4px 18px rgba(15, 23, 42, 0.12);
 }
 .preview-card img {
   width: 100%;
@@ -450,9 +533,9 @@ button[aria-pressed='true'] {
   outline-offset: 2px;
 }
 .document-workspace button[aria-pressed='true'] {
-  background-color: #e6f4f1;
-  color: #007a78;
-  border-color: #007a78;
+  background-color: #0f172a;
+  color: #ffffff;
+  border-color: #0f172a;
 }
 @media (max-width: 1279px) {
   .source-layout {
@@ -589,8 +672,8 @@ button[aria-pressed='true'] {
 .editor-paper:not([data-layout='text'])
   [data-block-type='heading']
   .editor-text {
-  color: #163b55;
-  border-left: 4px solid #007a78;
+  color: #0f172a;
+  border-left: 4px solid #0f172a;
   padding-left: 12px;
 }
 .editor-paper:not([data-layout='text']) [data-hero='true'] .editor-text {
@@ -619,7 +702,7 @@ button[aria-pressed='true'] {
   border-bottom: 4px solid #163b55;
 }
 .editor-paper[data-layout='process_steps'] [data-block-type='image'] {
-  border-top: 3px solid #007a78;
+  border-top: 3px solid #0f172a;
 }
 .editor-paper[data-layout='contact_photo'] .editor-page-body {
   border-bottom: 6px solid #163b55;

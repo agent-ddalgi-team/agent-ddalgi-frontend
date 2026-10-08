@@ -533,6 +533,62 @@ export function useSources(allowDocumentChanges = false) {
     })
   }
 
+  async function selectMultiple(sourcesToUpdate: WorkSource[], selectState: boolean) {
+    await run('자료 선택 저장 중', async () => {
+      const activeSession = session || (await ensureSession())
+      if (activeSession.document_summary && !allowDocumentChanges) return
+      const targetIds = new Set(sourcesToUpdate.map((s) => s.source_id))
+      let nextSelected: string[]
+      if (selectState) {
+        nextSelected = Array.from(new Set([...activeSession.selected_source_ids, ...targetIds]))
+      } else {
+        nextSelected = activeSession.selected_source_ids.filter((id) => !targetIds.has(id))
+      }
+
+      const backendSelected = nextSelected.filter((id) => !isClientOnlySource(id))
+      const clientOnlySelected = nextSelected.filter(isClientOnlySource)
+
+      const saved = readSaved()
+      persist(
+        activeSession.session_id,
+        saved?.jobs || [],
+        clientOnlySelected,
+      )
+
+      let result: Partial<SourceSession>
+      try {
+        result = await sourceApi.inputs(
+          activeSession,
+          { selected_source_ids: backendSelected },
+          crypto.randomUUID(),
+        )
+      } catch (cause) {
+        if (
+          cause instanceof SourceApiError &&
+          cause.code === 'RESOURCE_NOT_FOUND' &&
+          cause.status === 404
+        ) {
+          const missing = (cause.details?.missing_source_ids as string[]) || []
+          const safeBackend = backendSelected.filter((id) => !missing.includes(id))
+          result = await sourceApi.inputs(
+            activeSession,
+            { selected_source_ids: safeBackend },
+            crypto.randomUUID(),
+          )
+        } else {
+          throw cause
+        }
+      }
+
+      setSession({
+        ...activeSession,
+        ...result,
+        selected_source_ids: nextSelected,
+      })
+      setNotice('자료 선택을 서버에 저장했습니다.')
+    })
+  }
+
   async function saveBrief() {
     await run('작성 조건 저장 중', async () => {
       const activeSession = session || (await ensureSession())
@@ -658,6 +714,7 @@ export function useSources(allowDocumentChanges = false) {
     refresh,
     upload,
     select,
+    selectMultiple,
     saveBrief,
     changeCompany,
     importPublic,
