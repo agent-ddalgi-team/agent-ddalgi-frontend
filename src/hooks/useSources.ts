@@ -431,7 +431,8 @@ export function useSources(allowDocumentChanges = false) {
         key: crypto.randomUUID(),
       }
       sessionStorage.setItem(UPLOAD, JSON.stringify(attempt))
-      const prevIds = new Set(sources.map((s) => s.source_id))
+      pendingFiles.current = files
+      setPendingUpload(true)
       let result
       try {
         result = await sourceApi.upload(
@@ -457,47 +458,23 @@ export function useSources(allowDocumentChanges = false) {
       sessionStorage.removeItem(UPLOAD)
       setPendingUpload(false)
       pendingFiles.current = []
-      const nextSnap = await snapshot(activeSession.session_id, jobIds)
-
-      // 새로 업로드된 세션 첨부 자료들을 자동으로 선택 목록에 추가
-      const newUploadedIds = nextSnap.sources
-        .filter((s) => !prevIds.has(s.source_id) && s.scope === 'session')
-        .map((s) => s.source_id)
-
-      const mergedSelected = Array.from(
-        new Set([...nextSnap.session.selected_source_ids, ...newUploadedIds]),
-      )
-
-      let selectionSaved = false
-      if (newUploadedIds.length > 0) {
-        try {
-          const res = await sourceApi.inputs(
-            nextSnap.session,
-            { selected_source_ids: mergedSelected },
-            crypto.randomUUID(),
-          )
-          nextSnap.session = {
-            ...nextSnap.session,
-            ...res,
-            selected_source_ids: res.selected_source_ids,
-          }
-          selectionSaved = true
-        } catch {
-          setNotice(
-            '첨부는 완료됐지만 자료 선택은 저장되지 않았습니다. 목록에서 선택해 주세요.',
-          )
-        }
-      }
-
-      apply(nextSnap)
+      apply(await snapshot(activeSession.session_id, jobIds))
       attempts.current = 0
       setPolling(true)
       setNotice(
-        selectionSaved
-          ? `파일 ${files.length}개를 첨부하여 자동으로 선택했습니다. 읽기 완료 후 점검을 진행해 주세요.`
-          : `파일 ${files.length}개를 첨부했습니다. 읽기 완료 후 목록에서 자료를 선택해 주세요.`,
+        `파일 ${files.length}개를 첨부했습니다. 읽기 완료 후 목록에서 자료를 선택해 주세요.`,
       )
     })
+  }
+
+  const isClientOnlySource = (id: string) => {
+    if (id.startsWith('src-pub-')) return true
+    const found = sources.find((s) => s.source_id === id)
+    if (!found) return true
+    if (found.scope === 'registered' && !found.use_as_company_evidence) {
+      return true
+    }
+    return false
   }
 
   async function select(source: WorkSource) {
@@ -512,16 +489,45 @@ export function useSources(allowDocumentChanges = false) {
           )
         : [...activeSession.selected_source_ids, source.source_id]
 
-      const result = await sourceApi.inputs(
-        activeSession,
-        { selected_source_ids: nextSelected },
-        crypto.randomUUID(),
+      const backendSelected = nextSelected.filter((id) => !isClientOnlySource(id))
+      const clientOnlySelected = nextSelected.filter(isClientOnlySource)
+
+      const saved = readSaved()
+      persist(
+        activeSession.session_id,
+        saved?.jobs || [],
+        clientOnlySelected,
       )
-      persist(activeSession.session_id, readSaved()?.jobs || [])
+
+      let result: Partial<SourceSession>
+      try {
+        result = await sourceApi.inputs(
+          activeSession,
+          { selected_source_ids: backendSelected },
+          crypto.randomUUID(),
+        )
+      } catch (cause) {
+        if (
+          cause instanceof SourceApiError &&
+          cause.code === 'RESOURCE_NOT_FOUND' &&
+          cause.status === 404
+        ) {
+          const missing = (cause.details?.missing_source_ids as string[]) || []
+          const safeBackend = backendSelected.filter((id) => !missing.includes(id))
+          result = await sourceApi.inputs(
+            activeSession,
+            { selected_source_ids: safeBackend },
+            crypto.randomUUID(),
+          )
+        } else {
+          throw cause
+        }
+      }
+
       setSession({
         ...activeSession,
         ...result,
-        selected_source_ids: result.selected_source_ids,
+        selected_source_ids: nextSelected,
       })
       setNotice('자료 선택을 서버에 저장했습니다.')
     })
@@ -583,17 +589,33 @@ export function useSources(allowDocumentChanges = false) {
     await run('공개 자료 가져오는 중', async () => {
       const activeSession = session || (await ensureSession())
       if (activeSession.document_summary && !allowDocumentChanges) return
-      const accepted = await sourceApi.importPublic(activeSession)
-      const jobIds = [
-        ...new Set([...(readSaved()?.jobs || []), accepted.job_id]),
-      ]
-      persist(activeSession.session_id, jobIds)
-      apply(await snapshot(activeSession.session_id, jobIds))
-      attempts.current = 0
-      setPolling(true)
-      setNotice(
-        '공개 자료를 가져오고 있습니다. 완료된 실제 자료를 목록에서 선택해 주세요.',
-      )
+      try {
+        const accepted = await sourceApi.importPublic(activeSession)
+        const jobIds = [
+          ...new Set([...(readSaved()?.jobs || []), accepted.job_id]),
+        ]
+        persist(activeSession.session_id, jobIds)
+        apply(await snapshot(activeSession.session_id, jobIds))
+        attempts.current = 0
+        setPolling(true)
+        setNotice(
+          '공개 자료를 가져오고 있습니다. 완료된 실제 자료를 목록에서 선택해 주세요.',
+        )
+      } catch (cause) {
+        if (
+          cause instanceof SourceApiError &&
+          (cause.status === 404 ||
+            cause.code === 'RESOURCE_NOT_FOUND' ||
+            cause.status === 503 ||
+            cause.code === 'PUBLIC_DATA_NOT_CONFIGURED')
+        ) {
+          throw new Error(
+            'DART API 키 미설정: 공공데이터 수집을 위한 외부 API 키가 설정되지 않았습니다.',
+            { cause },
+          )
+        }
+        throw cause
+      }
     })
   }
 
