@@ -156,6 +156,7 @@ export type Action = {
   body: Record<string, unknown>
   issueId?: string
   proposalId?: string
+  validateAfterSave?: boolean
 }
 export type ActionResult = {
   job_id?: string | null

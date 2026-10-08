@@ -1333,6 +1333,26 @@ export function DocumentWorkspace({
               </span>
             </div>
 
+            {selectedBlock && openIssues.some(issue => issue.block_ids.includes(selectedBlock.block_id) ||
+              (!issue.block_ids.length && issue.fact_ids?.some(id => selectedBlock.fact_ids.includes(id)))) && (
+              <section className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs" data-editor-issues>
+                <h3 className="font-bold text-amber-950">이 문장에서 확인할 내용</h3>
+                {openIssues.filter(issue => issue.block_ids.includes(selectedBlock.block_id) ||
+                  (!issue.block_ids.length && issue.fact_ids?.some(id => selectedBlock.fact_ids.includes(id)))).map(issue => (
+                  <div key={issue.issue_id} className="mt-2 whitespace-pre-wrap break-words" data-editor-issue={issue.issue_id}>
+                    <p className="font-semibold">{issue.origin === 'preflight' ? '자료 확인 필요' : '내용 검사 지적'}</p>
+                    <p>{issueMessageParts(issue.message).reason}</p>
+                    {issueMessageParts(issue.message).action && <p className="mt-1">권장 수정: {issueMessageParts(issue.message).action}</p>}
+                  </div>
+                ))}
+                <details className="mt-3">
+                  <summary className="cursor-pointer font-semibold">이 문장에 연결된 원문 근거</summary>
+                  <Evidence refs={selectedBlock.evidence_refs} sources={sources} />
+                </details>
+                <p className="mt-2 text-amber-900">문구를 수정한 뒤 아래 ‘저장하고 내용 검사’를 누르세요. 자료 자체의 확인이 필요한 항목은 자료 점검에서 보완하거나 제외해야 합니다.</p>
+              </section>
+            )}
+
             <div className="flex flex-col gap-1.5">
               <label
                 htmlFor="ai-instruction"
@@ -1632,6 +1652,11 @@ export function DocumentWorkspace({
           >
             <Save size={15} className="text-[#007A78]" />
             문구 저장
+          </button>
+          <button type="button" className={primary} data-save-and-validate
+            disabled={work.blocked || work.impactRequired || !work.dirty}
+            onClick={() => void work.save(true)}>
+            저장하고 내용 검사
           </button>
           <button
             type="button"

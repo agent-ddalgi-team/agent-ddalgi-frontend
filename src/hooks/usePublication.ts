@@ -419,8 +419,9 @@ export function usePublication(
     }
   }, [saved.job, watch, sid, did])
 
-  async function perform(action: Action) {
+  async function perform(action: Action): Promise<void> {
     if (lock.current) return
+    let followup: Action | undefined
     lock.current = true
     setBusy(true)
     setError('')
@@ -430,7 +431,7 @@ export function usePublication(
     try {
       const response = await publicationApi.act(sid, did, action)
       if (!active.current) return
-      const next = { ...savedRef.current, pending: undefined }
+      const next: Saved = { ...savedRef.current, pending: undefined }
       if (action.kind === 'propose') delete next.proposalRecovery
       if (action.kind === 'save' || action.kind === 'applyProposal') {
         delete next.exportId
@@ -447,7 +448,7 @@ export function usePublication(
         next.job = {
           id: response.job_id,
           kind: action.kind,
-          revision: result!.document.document_revision,
+          revision: action.kind === 'validate' ? Number(action.body.expected_revision) : result!.document.document_revision,
         }
         remember(next)
         setJob(null)
@@ -466,6 +467,16 @@ export function usePublication(
             throw new Error('수정안의 문서가 일치하지 않습니다.')
           setProposal(latestProposal)
         }
+        if (action.kind === 'save' && action.validateAfterSave &&
+            response.document_revision === value.result.document.document_revision &&
+            !value.result.input_review_required) {
+          followup = { kind: 'validate', key: crypto.randomUUID(), body: {
+            expected_revision: value.result.document.document_revision,
+            input_revision: value.result.document.input_revision,
+          } }
+          // Persist the next request before starting it; no manuscript text is stored.
+          next.pending = followup
+        }
         install(value)
         remember(next)
         if (action.kind === 'save') {
@@ -475,7 +486,9 @@ export function usePublication(
         }
         setNotice(
           action.kind === 'save'
-            ? '문서 변경을 저장했습니다. 내용·배치 검사를 다시 실행해 주세요.'
+            ? followup ? '문구를 저장했습니다. 내용 검사를 이어서 진행합니다.'
+              : action.validateAfterSave ? '저장 후 자료 또는 문서가 변경됐습니다. 현재 저장본을 확인한 뒤 다시 검사해 주세요.'
+              : '문서 변경을 저장했습니다. 내용·배치 검사를 다시 실행해 주세요.'
             : action.kind === 'applyProposal'
               ? '수정안을 적용했습니다. 내용·배치 검사를 다시 실행해 주세요.'
               : action.kind === 'rejectProposal'
@@ -518,6 +531,7 @@ export function usePublication(
       lock.current = false
       if (active.current) setBusy(false)
     }
+    if (followup && active.current) await perform(followup)
   }
   const document = result?.document || initial.document
   const blocked =
@@ -1148,7 +1162,7 @@ export function usePublication(
       )
       setConfirmed(false)
     },
-    save: () => {
+    save: (validateAfterSave = false) => {
       if (blocked || impactRequired || !dirty || saved.impactRecovery) return
       const operations: Operation[] = document.pages
         .flatMap((p) => p.blocks)
@@ -1168,10 +1182,10 @@ export function usePublication(
             { op: 'replace_block_content', block_id: b.block_id, content },
           ]
         })
-      return run('save', {
+      return perform({ kind: 'save', key: crypto.randomUUID(), validateAfterSave, body: {
         expected_revision: document.document_revision,
         operations,
-      })
+      } })
     },
     validate: () =>
       !actionBlocked &&

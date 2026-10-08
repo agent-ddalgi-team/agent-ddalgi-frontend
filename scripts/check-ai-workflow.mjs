@@ -239,6 +239,8 @@ const live = paid || reviewReplay
 const publication = process.argv.includes('--publication')
 const unusedReviewTrial = process.argv.includes('--unused-review')
 assert(!unusedReviewTrial || (publication && !live), '--unused-review requires mock --publication')
+const saveReviewTrial = process.argv.includes('--save-review')
+assert(!saveReviewTrial || (publication && !live), '--save-review requires mock --publication')
 const docxTrial = process.argv.includes('--docx')
 assert(
   !docxTrial || (publication && !live),
@@ -2486,24 +2488,46 @@ finally:
       )
       if (!live) {
         dropped = false
-        dropSave = true
+        if (saveReviewTrial && process.argv.includes('--save-review-lost-validate')) dropPost = 'validate'
+        else dropSave = true
       }
-      await click('문구 저장')
+      await click(saveReviewTrial ? '저장하고 내용 검사' : '문구 저장')
       if (!live) {
         await until(() => dropped, 'save response dropped')
         await idle()
+        if (saveReviewTrial && process.argv.includes('--save-review-lost-validate')) {
+          await reload()
+          await until(() => has('[data-testid=draft-result]'), 'saved validation request restored')
+          await screen(2)
+          await until(() => evaluate(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='같은 문서 요청 다시 확인'&&!b.disabled)`), 'validation replay ready after reload')
+          const recovery = await evaluate(`JSON.parse(sessionStorage.getItem('ddalgi.sources.v1.publication'))`)
+          assert.equal(recovery.pending.kind, 'validate')
+          assert.equal(recovery.pending.body.expected_revision, current.document.document_revision + 1)
+          assert.equal(JSON.stringify(recovery).includes(editable.content.text), false)
+        }
         await click('같은 문서 요청 다시 확인')
       }
       await idle()
+      if (saveReviewTrial) await until(async () => {
+        const state = await documentState()
+        return !!state.validation && state.validation.document_revision === state.document.document_revision && state.validation.status !== 'pending'
+      }, 'save continues through content validation')
       const edited = await documentState()
       assert.equal(
         edited.document.document_revision,
         current.document.document_revision + 1,
       )
-      assert.equal(edited.validation, null)
+      if (saveReviewTrial) assert.equal(edited.validation.document_revision, edited.document.document_revision)
+      else assert.equal(edited.validation, null)
+      if (saveReviewTrial && process.argv.includes('--save-review-lost-validate')) {
+        const attempts = posts('validate').slice(-2)
+        assert.equal(attempts.length, 2)
+        assert.equal(attempts[0].key, attempts[1].key)
+      }
       assert.equal(edited.approval, null)
       checks.push(
-        live
+        saveReviewTrial ? 'save-and-validate resumes the same failed request, creates one document revision and validates the saved revision'
+          : live
           ? 'edit/delete/save creates one revision'
           : 'edit/delete/save and lost save response create one revision',
       )
@@ -2754,6 +2778,9 @@ finally:
       for (const issue of issueActionFixture.issues) assert.equal(await has(`[data-issue-code="${issue.code}"] input[aria-label^="경고 확인 사유"]`),false)
       await evaluate(`document.querySelector('[data-issue-code="VALUE_CONFLICT"] [data-issue-block="${linked.block_id}"]').click()`)
       await until(()=>evaluate(`!!document.querySelector('[data-screen="S02"]:not([hidden])')`),'related fact opens editor')
+      assert.ok(await has('[data-editor-issues]'))
+      assert.ok(await evaluate(`document.querySelector('[data-editor-issues]').textContent.includes('화면 처리 경로 검사')`))
+      assert.ok(await evaluate(`document.querySelector('[data-editor-issues] summary').textContent.includes('원문 근거')`))
       await screen(3)
       await evaluate(`document.querySelector('[data-issue-code="REQUIRED_MISSING"] [data-issue-evidence-action]').click()`)
       await until(()=>evaluate(`!!document.querySelector('[data-screen="S01"]:not([hidden])')`),'whole document issue opens preflight')
