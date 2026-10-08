@@ -326,7 +326,16 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms))
 async function until(check, label, timeout = 25000) {
   const end = Date.now() + timeout
   while (Date.now() < end) {
-    if (await check()) return
+    try {
+      if (await check()) return
+    } catch (cause) {
+      // A reload can destroy the context while a readiness read is pending.
+      // Only polling retries; clicks, POSTs and unrelated CDP errors still fail.
+      if (
+        cause?.code !== -32000 ||
+        !/^(Inspected target navigated or closed|Execution context was destroyed|Cannot find context with specified id)/i.test(cause.message || '')
+      ) throw cause
+    }
     await delay(120)
   }
   throw new Error(`Timeout: ${label}`)
