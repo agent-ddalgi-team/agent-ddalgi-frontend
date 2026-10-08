@@ -1,7 +1,7 @@
 import { apiClient } from './client'
 import { isScreenPreview } from '../services/mockBackend'
 import { request, SourceApiError } from './sources'
-import type { DraftBlock, DraftResult, EvidenceRef } from './aiWorkflow'
+import type { DraftBlock, DraftResult, EvidenceRef, Preflight } from './aiWorkflow'
 
 export interface Validation {
   validation_id: string
@@ -77,6 +77,15 @@ export function issueRecoverySteps(issue: Issue): string[] {
     default:
       return []
   }
+}
+
+// Offer known, supported facts that are not yet linked to any document block.
+export function missingRequiredFacts(issue: Issue, preflight: Preflight | null, pages: DraftResult['document']['pages']) {
+  if (issue.status !== 'open' || issue.code !== 'REQUIRED_MISSING' ||
+      issue.origin !== 'server' || issue.scope !== 'content') return []
+  const used = new Set(pages.flatMap(page => page.blocks.flatMap(block => block.fact_ids)))
+  return (preflight?.facts ?? []).filter(fact => issue.fact_ids?.includes(fact.fact_id) &&
+    fact.status === 'supported' && !!fact.value?.trim() && fact.evidence_refs.length > 0 && !used.has(fact.fact_id))
 }
 
 export interface Layout {
@@ -164,6 +173,7 @@ export type Operation =
     }
   | { op: 'delete_block'; block_id: string }
   | { op: 'delete_page'; page_id: string }
+  | { op: 'insert_block'; page_id: string; after_block_id: string | null; block: DraftBlock }
 export type ActionKind =
   | 'save'
   | 'validate'

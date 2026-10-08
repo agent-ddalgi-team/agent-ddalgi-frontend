@@ -29,7 +29,7 @@ import {
 } from 'lucide-react'
 import type { DraftBlock, DraftResult, Preflight } from '../../api/aiWorkflow'
 import { FIELD_LABELS, issueMessageParts } from '../../constants/profileLabels'
-import { canAcknowledge, canReviewIssueEvidence, issueEditLocations, issueRecoverySteps, unusedReviewFactIds } from '../../api/publication'
+import { canAcknowledge, canReviewIssueEvidence, issueEditLocations, issueRecoverySteps, missingRequiredFacts, unusedReviewFactIds } from '../../api/publication'
 import { Evidence } from './AiWorkflowPanel'
 import type { WorkSource } from '../../api/sources'
 import { usePublication } from '../../hooks/usePublication'
@@ -195,6 +195,7 @@ export function DocumentWorkspace({
     setKeepReason('')
   }
   const [reasons, setReasons] = useState<Record<string, string>>({})
+  const [requiredChoices, setRequiredChoices] = useState<Record<string, { factId: string; pageId: string }>>({})
   const [showIssueHistory, setShowIssueHistory] = useState(false)
   const [discard, setDiscard] = useState(false)
   const [pageIndex, setPageIndex] = useState(0)
@@ -2406,6 +2407,40 @@ export function DocumentWorkspace({
                           {issueRecoverySteps(issue).map(step => <li key={step}>{step}</li>)}
                         </ol>
                       </div>
+                    )}
+                    {!!preflight && !!missingRequiredFacts(issue, preflight, doc.pages).length && (
+                      <fieldset data-required-insert={issue.issue_id} disabled={work.actionBlocked || preflight.input_revision !== inputRevision}
+                        className="mt-3 rounded-lg border border-teal-200 bg-white p-3">
+                        <legend className="font-bold text-teal-900">빠진 필수 사실을 본문에 추가</legend>
+                        <p>넣을 내용과 원문을 확인하고 페이지를 선택하세요. 선택한 페이지 끝에 근거와 함께 추가하고 내용 검사를 실행합니다.</p>
+                        {missingRequiredFacts(issue, preflight, doc.pages).map(fact => (
+                          <div key={fact.fact_id} className="mt-3">
+                            <label className="flex items-start gap-2">
+                              <input type="radio" name={`required-${issue.issue_id}`} data-required-fact={fact.fact_id}
+                                checked={requiredChoices[issue.issue_id]?.factId === fact.fact_id}
+                                onChange={() => setRequiredChoices(old => ({ ...old, [issue.issue_id]: { factId: fact.fact_id, pageId: old[issue.issue_id]?.pageId || '' } }))} />
+                              <span className="whitespace-pre-wrap break-words">{fact.value}</span>
+                            </label>
+                            <Evidence refs={fact.evidence_refs} sources={sources} />
+                          </div>
+                        ))}
+                        <label className="mt-3 block">추가할 페이지
+                          <select className="mt-1 w-full rounded border p-2" data-required-page
+                            value={requiredChoices[issue.issue_id]?.pageId || ''}
+                            onChange={event => setRequiredChoices(old => ({ ...old, [issue.issue_id]: { factId: old[issue.issue_id]?.factId || '', pageId: event.target.value } }))}>
+                            <option value="">페이지를 선택하세요</option>
+                            {doc.pages.map((item, index) => <option key={item.page_id} value={item.page_id}>{index + 1}쪽 · {item.title}</option>)}
+                          </select>
+                        </label>
+                        <button type="button" className={`${primary} mt-3`} data-required-insert-submit
+                          disabled={!doc.pages.some(item => item.page_id === requiredChoices[issue.issue_id]?.pageId) ||
+                            !missingRequiredFacts(issue, preflight, doc.pages).some(fact => fact.fact_id === requiredChoices[issue.issue_id]?.factId)}
+                          onClick={() => {
+                            const choice = requiredChoices[issue.issue_id]
+                            if (choice) void work.insertRequiredFact(issue.issue_id, choice.factId, choice.pageId, preflight)
+                          }}>선택한 사실 추가하고 내용 검사</button>
+                        {work.actionBlocked && <p className="mt-2">미저장 문구·자료 변경 반영·진행 중인 작업을 먼저 마쳐 주세요.</p>}
+                      </fieldset>
                     )}
                     {issueMessageParts(issue.message).action && (
                       <div className="mt-3 rounded-lg border border-teal-100 bg-teal-50 p-2.5 text-slate-800">

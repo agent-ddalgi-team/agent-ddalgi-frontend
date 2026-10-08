@@ -1,6 +1,6 @@
 import { previewStorage } from '../services/mockBackend'
 import { useEffect, useRef, useState } from 'react'
-import { publicationApi, canKeepDocumentAndValidate } from '../api/publication'
+import { publicationApi, canKeepDocumentAndValidate, missingRequiredFacts } from '../api/publication'
 import type {
   Action,
   ImpactReview,
@@ -11,7 +11,7 @@ import type {
   PublicationJob,
   Proposal,
 } from '../api/publication'
-import type { DraftResult } from '../api/aiWorkflow'
+import type { DraftResult, Preflight } from '../api/aiWorkflow'
 import { SourceApiError } from '../api/sources'
 
 const STORAGE = previewStorage + '.publication'
@@ -1161,6 +1161,21 @@ export function usePublication(
         old.includes(id) ? old.filter((i) => i !== id) : [...old, id],
       )
       setConfirmed(false)
+    },
+    insertRequiredFact: (issueId: string, factId: string, pageId: string, preflight: Preflight) => {
+      if (lock.current || actionBlocked || preflight.preflight_id !== preflightId || preflight.input_revision !== inputRevision) return
+      const issue = issues.find(item => item.issue_id === issueId)
+      const page = document.pages.find(item => item.page_id === pageId)
+      const fact = issue && missingRequiredFacts(issue, preflight, document.pages).find(item => item.fact_id === factId)
+      if (!fact || !page) return
+      return perform({ kind: 'save', key: crypto.randomUUID(), validateAfterSave: true, body: {
+        expected_revision: document.document_revision,
+        operations: [{ op: 'insert_block', page_id: page.page_id,
+          after_block_id: page.blocks.at(-1)?.block_id ?? null,
+          block: { block_id: `required_${crypto.randomUUID()}`, type: 'paragraph',
+            content: { text: fact.value }, fact_ids: [fact.fact_id], evidence_refs: fact.evidence_refs },
+        }],
+      } })
     },
     save: (validateAfterSave = false) => {
       if (blocked || impactRequired || !dirty || saved.impactRecovery) return

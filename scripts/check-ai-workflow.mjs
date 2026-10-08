@@ -26,7 +26,15 @@ async function reviewRegressions() {
   runInNewContext(transpile(await readFile(new URL('../src/api/publication.ts', import.meta.url), 'utf8')), {
     exports: publicationModule.exports, require: () => ({}),
   })
-  const { unusedReviewFactIds, issueEditLocations, canKeepDocumentAndValidate, issueRecoverySteps, canAcknowledge } = publicationModule.exports
+  const { unusedReviewFactIds, issueEditLocations, canKeepDocumentAndValidate, issueRecoverySteps, canAcknowledge, missingRequiredFacts } = publicationModule.exports
+  const missingIssue = {code:'REQUIRED_MISSING',status:'open',origin:'server',scope:'content',block_ids:[],fact_ids:['required']}
+  const requiredFact = {fact_id:'required',status:'supported',value:'확인된 사실',evidence_refs:[{segment_id:'segment'}]}
+  assert.equal(missingRequiredFacts(missingIssue,{facts:[requiredFact]},[]).length,1)
+  for (const patch of [{status:'resolved'},{origin:'preflight'},{scope:'layout'},{fact_ids:[]}])
+    assert.equal(missingRequiredFacts({...missingIssue,...patch},{facts:[requiredFact]},[]).length,0)
+  for (const patch of [{status:'needs_confirmation'},{status:'conflict'},{value:' '},{evidence_refs:[]}])
+    assert.equal(missingRequiredFacts(missingIssue,{facts:[{...requiredFact,...patch}]},[]).length,0)
+  assert.equal(missingRequiredFacts(missingIssue,{facts:[requiredFact]},[{blocks:[{fact_ids:['required']}]}]).length,0)
   for (const code of ['IMAGE_MISMATCH', 'IMAGE_UNVERIFIABLE', 'PHOTO_CONTENT_REVIEW', 'BROKEN_IMAGE', 'PLACEHOLDER_REMAINING', 'REQUIRED_MISSING']) {
     const issue = { code, status: 'open', severity: 'warning', origin: 'agent', scope: 'content' }
     assert.ok(issueRecoverySteps(issue).length >= 2)
@@ -247,6 +255,8 @@ const publication = process.argv.includes('--publication')
 const unusedReviewTrial = process.argv.includes('--unused-review')
 assert(!unusedReviewTrial || (publication && !live), '--unused-review requires mock --publication')
 const saveReviewTrial = process.argv.includes('--save-review')
+const requiredInsertTrial = process.argv.includes('--required-insert')
+assert(!requiredInsertTrial || (publication && !live), '--required-insert requires mock --publication')
 assert(!saveReviewTrial || (publication && !live), '--save-review requires mock --publication')
 const docxTrial = process.argv.includes('--docx')
 assert(
@@ -2805,6 +2815,56 @@ finally:
     if (!live) {
       const refreshReady = () => until(() => evaluate(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='문서 상태 새로고침'&&!b.disabled)`),'snapshot refresh settled')
       await refreshReady()
+      if (requiredInsertTrial) {
+        const initialState = await documentState()
+        const aiState = await saved()
+        const pf = await evaluate(`fetch('/api/v1/sessions/${sessionId}/preflights/${aiState.preflightId}').then(r=>r.json())`)
+        const company = pf.facts.find(f=>f.field_key==='company_name'&&f.status==='supported')
+        assert.ok(company)
+        const removedIds = initialState.document.pages.flatMap(p=>p.blocks).filter(b=>b.fact_ids.includes(company.fact_id)).map(b=>b.block_id)
+        assert.ok(removedIds.length)
+        const removedStatus = await evaluate(`fetch(${JSON.stringify(route)},{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(${JSON.stringify({expected_revision:initialState.document.document_revision,operations:removedIds.map(block_id=>({op:'delete_block',block_id}))})})}).then(r=>r.status)`)
+        assert.equal(removedStatus,200)
+        await refreshReady()
+        await click('문서 상태 새로고침')
+        await until(()=>evaluate(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='내용 검증 실행'&&!b.disabled)`),'missing content validation ready')
+        await click('내용 검증 실행')
+        await until(()=>has(`[data-required-fact="${company.fact_id}"]`),'real missing company exposes supported insertion')
+        await idle()
+        const beforeInsert = await documentState()
+        const chosenPage = beforeInsert.document.pages[1]
+        const generationCalls = posts('preflights').length + posts('drafts').length
+        await evaluate(`document.querySelector('[data-required-fact="${company.fact_id}"]').click()`)
+        assert.ok(await evaluate(`document.querySelector('[data-required-insert-submit]').disabled`))
+        await evaluate(`(()=>{const s=document.querySelector('[data-required-page]');s.value='${chosenPage.page_id}';s.dispatchEvent(new Event('change',{bubbles:true}))})()`)
+        await until(()=>has('[data-required-insert-submit]:enabled'),'explicit insertion ready')
+        dropSave = true
+        dropped = false
+        await evaluate(`document.querySelector('[data-required-insert-submit]').click()`)
+        await until(()=>dropped,'insertion save response lost')
+        await until(()=>evaluate(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='같은 문서 요청 다시 확인'&&!b.disabled)`),'insert retry ready')
+        await click('같은 문서 요청 다시 확인')
+        await until(async()=>{const out=await documentState();return out.document.document_revision===beforeInsert.document.document_revision+1&&out.validation?.document_revision===out.document.document_revision&&out.validation.status!=='pending'},'insert saved once and validated')
+        await idle()
+        const afterInsert = await documentState()
+        const inserted = afterInsert.document.pages.flatMap(p=>p.blocks).filter(b=>b.fact_ids.includes(company.fact_id))
+        assert.equal(inserted.length,1)
+        assert.equal(inserted[0].content.text,company.value)
+        assert.deepEqual(inserted[0].evidence_refs,company.evidence_refs)
+        assert.equal(afterInsert.document.pages[1].blocks.at(-1).block_id,inserted[0].block_id)
+        for (const page of beforeInsert.document.pages)
+          assert.deepEqual(afterInsert.document.pages.find(p=>p.page_id===page.page_id).blocks.filter(b=>b.block_id!==inserted[0].block_id),page.blocks)
+        assert.equal(posts('preflights').length+posts('drafts').length,generationCalls)
+        const patchCalls=calls.filter(c=>c.method==='PATCH'&&c.path===route)
+        assert.equal(patchCalls.at(-1).key,patchCalls.at(-2).key)
+        await reload()
+        await screen(3)
+        await until(()=>has('[data-testid=draft-result]'),'inserted document reload')
+        assert.equal(await has(`[data-required-fact="${company.fact_id}"]`),false)
+        const currentIssues=await evaluate(`fetch(${JSON.stringify(route)}+'/issues').then(r=>r.json())`)
+        assert.equal(currentIssues.issues.some(i=>i.status==='open'&&i.code==='REQUIRED_MISSING'&&i.fact_ids?.includes(company.fact_id)),false)
+        checks.push('real missing company inserted on selected page with original evidence; explicit choices; lost save retries same key once; saved revision validated; other blocks preserved; reload prevents duplicate; no extraction or draft generation')
+      }
       const beforeAudit = await documentState()
       const originalSnapshotPosts = calls.filter(c=>c.method==='POST').length
       const issueGetCount = () => calls.filter(c=>c.method==='GET' && c.path.endsWith('/issues')).length
