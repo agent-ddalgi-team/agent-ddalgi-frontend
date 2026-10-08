@@ -29,7 +29,7 @@ import {
 } from 'lucide-react'
 import type { DraftBlock, DraftResult, Preflight } from '../../api/aiWorkflow'
 import { FIELD_LABELS, issueMessageParts } from '../../constants/profileLabels'
-import { canAcknowledge } from '../../api/publication'
+import { canAcknowledge, canReviewIssueEvidence, issueEditLocations } from '../../api/publication'
 import { Evidence } from './AiWorkflowPanel'
 import type { WorkSource } from '../../api/sources'
 import { usePublication } from '../../hooks/usePublication'
@@ -2264,50 +2264,40 @@ export function DocumentWorkspace({
                       className="mt-2 flex flex-col gap-2"
                       data-issue-locations
                     >
-                      {doc.pages.flatMap((page, pi) =>
-                        page.blocks
-                          .filter((block) =>
-                            issue.block_ids.includes(block.block_id),
-                          )
-                          .map((block) => (
-                            <button
-                              type="button"
-                              key={block.block_id}
-                              className="rounded-lg border border-current/15 bg-white p-2 text-left hover:bg-slate-50"
-                              onClick={() => {
-                                navigate(2)
-                                selectPage(pi)
-                                focusBlock(block.block_id)
-                              }}
-                            >
-                              <span className="block font-bold">
-                                {pi + 1}쪽 · 블록{' '}
-                                {page.blocks.indexOf(block) + 1} ·{' '}
-                                {blockLabel[block.type]} 수정하기 →
-                              </span>
-                              <span className="mt-1 block text-[11px] text-slate-500">
-                                {page.title} · 검사 대상 문구
-                              </span>
-                              <span className="mt-2 block max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded-md border-l-2 border-amber-400 bg-amber-50/60 p-2 leading-relaxed text-slate-800">
-                                {blockText(block) ||
-                                  '텍스트가 없는 블록입니다.'}
-                              </span>
-                            </button>
-                          )),
-                      )}
-                      {!doc.pages.some((page) =>
-                        page.blocks.some((block) =>
-                          issue.block_ids.includes(block.block_id),
-                        ),
-                      ) && (
+                      {issueEditLocations(issue, doc.pages).map(({ page, pageIndex, block, blockIndex, direct }) => (
+                        <button
+                          type="button"
+                          key={block.block_id}
+                          data-issue-block={block.block_id}
+                          data-issue-location-kind={direct ? 'direct' : 'related'}
+                          className="rounded-lg border border-current/15 bg-white p-2 text-left hover:bg-slate-50"
+                          onClick={() => {
+                            navigate(2)
+                            selectPage(pageIndex)
+                            focusBlock(block.block_id)
+                          }}
+                        >
+                          <span className="block font-bold">
+                            {pageIndex + 1}쪽 · 블록 {blockIndex + 1} · {blockLabel[block.type]} 수정하기 →
+                          </span>
+                          <span className="mt-1 block text-[11px] text-slate-500">
+                            {page.title} · {direct ? '검사 대상 문구' : '관련 사실·자료가 연결된 위치 · 원문과 비교해 주세요'}
+                          </span>
+                          <span className="mt-2 block max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded-md border-l-2 border-amber-400 bg-amber-50/60 p-2 leading-relaxed text-slate-800">
+                            {blockText(block) || '텍스트가 없는 블록입니다.'}
+                          </span>
+                        </button>
+                      ))}
+                      {!issueEditLocations(issue, doc.pages).length && (
                         <p className="text-[11px] text-slate-600">
                           문서 전체 검사 · 특정 문장 위치가 지정되지 않았습니다.
                         </p>
                       )}
-                      {issue.code === 'REQUIRED_MISSING' && (
+                      {canReviewIssueEvidence(issue) && (
                         <button
                           type="button"
                           className={button}
+                          data-issue-evidence-action
                           onClick={() => navigate(1)}
                         >
                           자료 점검에서 근거 확인하기 →

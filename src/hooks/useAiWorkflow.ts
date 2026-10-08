@@ -7,10 +7,13 @@ import type { SourceSession } from '../api/sources'
 
 const STORAGE = previewStorage + '.ai'
 type Attempt = {
-  kind: 'preflight' | 'draft'
+  kind: 'preflight' | 'draft' | 'review'
   key: string
   jobId?: string
   preflightId?: string
+  action?: 'exclude' | 'restore'
+  factIds?: string[]
+  reason?: string
 }
 type Saved = {
   sessionId: string
@@ -62,12 +65,20 @@ function read(): Saved | null {
       return null
     if (
       value.attempt &&
-      (!['preflight', 'draft'].includes(value.attempt.kind) ||
+      (!['preflight', 'draft', 'review'].includes(value.attempt.kind) ||
         typeof value.attempt.key !== 'string' ||
         (value.attempt.jobId !== undefined &&
           typeof value.attempt.jobId !== 'string') ||
-        (value.attempt.kind === 'draft' &&
-          typeof value.attempt.preflightId !== 'string'))
+        (['draft', 'review'].includes(value.attempt.kind) &&
+          typeof value.attempt.preflightId !== 'string') ||
+        (value.attempt.kind === 'review' &&
+          (!['exclude', 'restore'].includes(value.attempt.action) ||
+            !Array.isArray(value.attempt.factIds) ||
+            !value.attempt.factIds.length ||
+            value.attempt.factIds.some(
+              (id: unknown) => typeof id !== 'string',
+            ) ||
+            typeof value.attempt.reason !== 'string')))
     )
       return null
     return value
@@ -133,6 +144,18 @@ export function useAiWorkflow(session: SourceSession | null) {
           throw new Error(
             '이전 입력의 점검입니다. AI 점검을 다시 실행해 주세요.',
           )
+        if (
+          preflight?.latest_preflight_id &&
+          preflight.latest_preflight_id !== preflight.preflight_id &&
+          !saved.attempt
+        ) {
+          preflight = await aiApi.preflight(sid, preflight.latest_preflight_id)
+          if (cancelled || epoch.current !== version) return
+          if (preflight.input_revision !== revision)
+            throw new Error(
+              '이전 입력의 점검입니다. 자료 상태를 새로고침해 주세요.',
+            )
+        }
         if (
           document?.latest_preflight_id &&
           document.latest_preflight_id !== preflight?.preflight_id &&
@@ -297,6 +320,38 @@ export function useAiWorkflow(session: SourceSession | null) {
         confirmed: false,
         preflight: attempt.kind === 'preflight' ? null : s.preflight,
       }))
+      if (attempt.kind === 'review') {
+        const preflight = await aiApi.review(
+          saved.sessionId,
+          saved.revision,
+          attempt.preflightId!,
+          attempt.action!,
+          attempt.factIds!,
+          attempt.reason!,
+          attempt.key,
+        )
+        if (epoch.current !== version) return
+        const completed = {
+          ...saved,
+          attempt: undefined,
+          preflightId: preflight.preflight_id,
+        }
+        persist(completed)
+        setState((s) => ({
+          ...s,
+          saved: completed,
+          preflight,
+          busy: false,
+          watch: false,
+          confirmed: false,
+          error: '',
+          notice:
+            attempt.action === 'exclude'
+              ? '선택 항목을 제외했습니다. 남은 점검 내용을 다시 확인해 주세요.'
+              : '제외 항목을 복원했습니다. 원래 근거 상태로 돌아왔습니다.',
+        }))
+        return
+      }
       const accepted =
         attempt.kind === 'preflight'
           ? await aiApi.analyze(saved.sessionId, saved.revision, attempt.key)
@@ -335,6 +390,32 @@ export function useAiWorkflow(session: SourceSession | null) {
         watch: false,
         error: message(cause),
       }))
+      if (
+        definitive &&
+        cause instanceof SourceApiError &&
+        cause.code === 'INPUT_REVISION_CONFLICT'
+      ) {
+        try {
+          const latestSession = await sourceApi.session(saved.sessionId)
+          if (epoch.current !== version) return
+          if (latestSession.input_revision === saved.revision) {
+            setRestoreTick((n) => n + 1) // Same input: restore the latest preflight with GET only.
+          } else {
+            const stale = { ...retained, preflightId: undefined }
+            persist(stale)
+            setState((s) => ({
+              ...s,
+              saved: stale,
+              preflight: null,
+              confirmed: false,
+              error: message(cause),
+              notice: '자료 상태를 새로고침한 뒤 다시 점검해 주세요.',
+            }))
+          }
+        } catch {
+          /* Keep the original conflict when a status lookup also fails. */
+        }
+      }
       if (cause instanceof SourceApiError && cause.code === 'DOCUMENT_EXISTS') {
         try {
           const latest = await sourceApi.session(saved.sessionId)
@@ -368,19 +449,32 @@ export function useAiWorkflow(session: SourceSession | null) {
     current.job &&
     ['queued', 'running'].includes(current.job.status)
   const locked =
-    !!session &&
-    (state.sessionId !== sid ||
-      current.busy ||
-      !!activeJob)
+    !!session && (state.sessionId !== sid || current.busy || !!activeJob)
   const draftFailed = terminalFailure && attempt?.kind === 'draft'
+  const canRetryDraft =
+    draftFailed &&
+    current.job?.status === 'failed' &&
+    !!current.preflight?.can_generate &&
+    !current.document &&
+    !documentId &&
+    current.preflight.input_revision === revision &&
+    (current.job.error?.details?.recovery_action === 'retry_draft' ||
+      [
+        'AGENT_OUTPUT_INVALID',
+        'SERVICE_TEMPORARY_FAILURE',
+        'AI_RATE_LIMIT',
+        'INTERNAL_ERROR',
+      ].includes(current.job.error?.code || ''))
   return {
     ...current,
     locked,
-    pendingResponse: !!attempt && !attempt.jobId && current.busy,
+    canRetryDraft,
+    pendingResponse: !!attempt && !attempt.jobId,
     canConfirm:
       !!current.preflight?.can_generate &&
       !locked &&
-      !draftFailed &&
+      !(attempt && !attempt.jobId) &&
+      !(draftFailed && !canRetryDraft) &&
       !current.document &&
       !documentId,
     setConfirmed: (confirmed: boolean) =>
@@ -398,7 +492,7 @@ export function useAiWorkflow(session: SourceSession | null) {
         locked ||
         !current.confirmed ||
         !current.preflight?.can_generate ||
-        draftFailed ||
+        (draftFailed && !canRetryDraft) ||
         current.document ||
         documentId
       )
@@ -408,6 +502,34 @@ export function useAiWorkflow(session: SourceSession | null) {
           kind: 'draft',
           key: crypto.randomUUID(),
           preflightId: current.preflight.preflight_id,
+        },
+        {
+          sessionId: sid,
+          revision,
+          preflightId: current.preflight.preflight_id,
+        },
+      )
+    },
+    reviewFact: (factId: string, action: 'exclude' | 'restore') => {
+      if (
+        !session ||
+        locked ||
+        (attempt && !attempt.jobId) ||
+        !current.preflight ||
+        current.preflight.input_revision !== revision
+      )
+        return
+      return submit(
+        {
+          kind: 'review',
+          key: crypto.randomUUID(),
+          preflightId: current.preflight.preflight_id,
+          action,
+          factIds: [factId],
+          reason:
+            action === 'exclude'
+              ? '사용자가 이번 문서에서 해당 선택 항목을 제외했습니다.'
+              : '사용자가 제외 항목을 복원했습니다.',
         },
         {
           sessionId: sid,

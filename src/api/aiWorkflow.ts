@@ -12,6 +12,7 @@ export interface EvidenceRef {
 
 export interface Preflight {
   preflight_id: string
+  latest_preflight_id?: string | null
   session_id: string
   input_revision: number
   usable_source_ids: string[]
@@ -34,6 +35,8 @@ export interface Preflight {
     evidence_refs: EvidenceRef[]
     alternatives: { value?: string; evidence_refs?: EvidenceRef[] }[] | null
   }[]
+  excluded_facts?: Preflight['facts']
+  reviewable_fact_ids?: string[]
   issues: {
     issue_id: string
     severity: 'blocker' | 'warning' | 'info'
@@ -96,6 +99,27 @@ export const aiApi = {
       apiClient.post(
         `${path(sid)}/preflights`,
         { expected_input_revision: revision },
+        withKey(key),
+      ),
+    ),
+  review: (
+    sid: string,
+    revision: number,
+    preflight: string,
+    action: 'exclude' | 'restore',
+    factIds: string[],
+    reason: string,
+    key: string,
+  ) =>
+    request<Preflight>(() =>
+      apiClient.post(
+        `${path(sid)}/preflights/${encodeURIComponent(preflight)}/reviews`,
+        {
+          expected_input_revision: revision,
+          action,
+          fact_ids: factIds,
+          reason,
+        },
         withKey(key),
       ),
     ),

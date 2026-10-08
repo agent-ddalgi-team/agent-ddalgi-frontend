@@ -44,7 +44,12 @@ export interface ReadingJob {
   status:
     'queued' | 'running' | 'waiting_user' | 'succeeded' | 'failed' | 'cancelled'
   progress: { stage: string; message: string | null }
-  error: { code: string; message: string; retryable: boolean } | null
+  error: {
+    code: string
+    message: string
+    retryable: boolean
+    details?: { recovery_action?: string }
+  } | null
 }
 
 export class SourceApiError extends Error {
@@ -149,8 +154,12 @@ export const sourceApi = {
         },
       ),
     ),
+  publicStatus: (id: string) =>
+    request<{ status: string; message: string }>(() =>
+      apiClient.get(sessionPath(id) + '/public-data', options),
+    ),
   importPublic: (session: SourceSession) =>
-    request<never>(() =>
+    request<{ job_id: string }>(() =>
       apiClient.post(
         sessionPath(session.session_id) + '/public-data/import',
         { expected_input_revision: session.input_revision },
