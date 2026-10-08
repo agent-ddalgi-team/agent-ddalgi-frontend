@@ -26,7 +26,14 @@ async function reviewRegressions() {
   runInNewContext(transpile(await readFile(new URL('../src/api/publication.ts', import.meta.url), 'utf8')), {
     exports: publicationModule.exports, require: () => ({}),
   })
-  const { unusedReviewFactIds, issueEditLocations } = publicationModule.exports
+  const { unusedReviewFactIds, issueEditLocations, canKeepDocumentAndValidate } = publicationModule.exports
+  const unchangedReview = { status: 'pending', from_input_revision: 3, to_input_revision: 3,
+    items: [{ code: 'INPUT_CHANGED', requires_change: false }], fact_rebindings: { same: 'same' } }
+  assert.equal(canKeepDocumentAndValidate(unchangedReview), true)
+  for (const change of [{ status: 'stale' }, { status: 'applied' }, { to_input_revision: 4 },
+    { items: [{ requires_change: true }] }, { fact_rebindings: { old: 'new' } }]) {
+    assert.equal(canKeepDocumentAndValidate({ ...unchangedReview, ...change }), false)
+  }
   const pages = [{ blocks: [
     { block_id: 'used', fact_ids: ['used'], evidence_refs: [{ source_id: 'shared' }] },
     { block_id: 'other', fact_ids: ['other'], evidence_refs: [{ source_id: 'shared' }] },
@@ -230,6 +237,8 @@ assert(
 )
 const live = paid || reviewReplay
 const publication = process.argv.includes('--publication')
+const unusedReviewTrial = process.argv.includes('--unused-review')
+assert(!unusedReviewTrial || (publication && !live), '--unused-review requires mock --publication')
 const docxTrial = process.argv.includes('--docx')
 assert(
   !docxTrial || (publication && !live),
@@ -574,6 +583,17 @@ async def proposal_fixture(self, request):
   raise AgentError('UNSUPPORTED_PROPOSAL', '실제 AI 수정안 기능은 아직 연결되지 않았습니다.', False)
  return await original_propose(self, request)
 if not live_trial: MockAgent.propose=proposal_fixture
+if not live_trial and ${unusedReviewTrial ? 'True' : 'False'}:
+ from app.models import Fact
+ original_analyze=MockAgent.analyze
+ async def unused_fact_fixture(self, request):
+  result=await original_analyze(self, request)
+  evidence=next(f.evidence_refs for f in result.facts if f.evidence_refs)
+  for label in ('first','second'):
+   result.facts.append(Fact(fact_id='unused_'+label, field_key='unused_review_fixture',
+    value='추가 확인 대상 '+label, status='needs_confirmation', evidence_refs=evidence))
+  return result
+ MockAgent.analyze=unused_fact_fixture
 if os.environ.get('AI_UI_REVIEW_INPUT'):
  from app import agent_llm as llm
  from app.agent_bridge import AnalyzeResult, DraftResult
@@ -742,6 +762,10 @@ finally:
       })
     } else if (data.method === 'Fetch.requestPaused') {
       const p = data.params
+      if (unusedReviewTrial && p.request.method === 'POST' &&
+          /\/preflights\/[^/]+\/reviews$/.test(new URL(p.request.url).pathname) && p.responseStatusCode === 200) {
+        issueActionFixture = null
+      }
       if (mismatchedIssueReads > 0 && p.request.method === 'GET' &&
           /\/documents\/[^/]+\/issues$/.test(new URL(p.request.url).pathname) && p.responseStatusCode === 200) {
         mismatchedIssueReads--
@@ -1844,29 +1868,8 @@ finally:
       )
       await screen(2)
       await until(() => evaluate(`!JSON.parse(sessionStorage.getItem('ddalgi.sources.v1.publication')).impactReviewId`), 'previous applied review cleared for new preflight')
-      await until(
-        () => has('input[aria-label="최신 점검 확인"]:not(:disabled)'),
-        'normal confirmation ready',
-      )
-      await evaluate(
-        `document.querySelector('input[aria-label="최신 점검 확인"]').click()`,
-      )
-      await click('변경 영향 불러오기')
-      await until(
-        () => has('textarea[aria-label="변경 유지 사유"]:not(:disabled)'),
-        'normal review loaded',
-      )
-      const normalRid = await evaluate(
-        `JSON.parse(sessionStorage.getItem('ddalgi.sources.v1.publication')).impactReviewId`,
-      )
-      const normalReview = await evaluate(
-        `fetch(${JSON.stringify(route)}+'/impact-reviews/'+${JSON.stringify(normalRid)}).then(r=>r.json())`,
-      )
-      assert.equal(normalReview.status, 'pending')
-      await evaluate(
-        `(()=>{const t=document.querySelector('textarea[aria-label="변경 유지 사유"]');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(t,'같은 입력의 최신 점검을 확인하고 기존 내용을 유지합니다.');t.dispatchEvent(new Event('input',{bubbles:true}))})()`,
-      )
-      await click('선택한 변경 적용·전체 재검증')
+      await until(() => has('[data-keep-and-validate]:not(:disabled)'), 'one click continuation ready')
+      await evaluate(`document.querySelector('[data-keep-and-validate]:not(:disabled)').click()`)
       await until(async () => {
         const out = await documentState()
         return (
@@ -1877,6 +1880,9 @@ finally:
           out.validation.status !== 'pending'
         )
       }, 'normal apply full validation')
+      const normalRid = await evaluate(`JSON.parse(sessionStorage.getItem('ddalgi.sources.v1.publication')).impactReviewId`)
+      const normalReview = await evaluate(`fetch(${JSON.stringify(route)}+'/impact-reviews/'+${JSON.stringify(normalRid)}).then(r=>r.json())`)
+      assert.equal(normalReview.status, 'applied')
       await until(
         () =>
           evaluate(
@@ -2565,6 +2571,62 @@ finally:
         'explicit empty-page cleanup preserves all nonempty pages; dirty edits block cleanup; persisted once and restored after reload',
       )
     }
+    if (unusedReviewTrial) {
+      await screen(3)
+      await idle()
+      const before = await documentState()
+      const state = await saved()
+      const pf = await evaluate(`fetch('/api/v1/sessions/${state.sessionId}/preflights/${state.preflightId}').then(r=>r.json())`)
+      const optional = pf.facts.filter(f => f.field_key === 'unused_review_fixture')
+      assert.equal(optional.length, 2)
+      assert.ok(optional.every(f => pf.reviewable_fact_ids.includes(f.fact_id)))
+      assert.ok(optional.every(f => !before.document.pages.some(p => p.blocks.some(b => b.fact_ids.includes(f.fact_id)))))
+      issueActionFixture = { document_revision: before.document.document_revision,
+        validation_id: before.validation?.validation_id || null,
+        issues: optional.map(f => ({ issue_id: 'unused_' + f.fact_id, code: 'UNSUPPORTED_CLAIM',
+          message: '사용하지 않은 선택 항목의 확인 필요', severity: 'blocker', scope: 'content',
+          status: 'open', origin: 'preflight', layout_format: null, block_ids: [], fact_ids: [f.fact_id],
+          source_ids: f.evidence_refs.map(ref => ref.source_id), resolution: null })) }
+      await click('문서 상태 새로고침')
+      await until(() => has('[data-unused-facts-exclude]:not(:disabled)'), 'unused exclusion ready')
+      const analyses = posts('preflights').length
+      const drafts = posts('drafts').length
+      const lostExclusion = process.argv.includes('--unused-review-lost')
+      if (lostExclusion) { dropped = false; dropPost = 'reviews' }
+      await evaluate(`document.querySelector('[data-unused-facts-exclude]').click()`)
+      if (lostExclusion) {
+        await until(() => dropped, 'exclusion reply lost')
+        await until(() => has('[data-exclusion-retry]:not(:disabled)'), 'in-app exclusion recovery')
+        await reload()
+        await until(() => has('[data-testid=draft-result]'), 'pending exclusion restored')
+        await screen(3)
+        await until(() => has('[data-exclusion-retry]:not(:disabled)'), 'recovery survives reload')
+        const reviews = posts('reviews')
+        await evaluate(`document.querySelector('[data-exclusion-retry]:not(:disabled)').click()`)
+        await until(() => posts('reviews').length > reviews.length, 'same review replay sent')
+        const replayed = posts('reviews').slice(-2)
+        assert.equal(replayed[0].key, replayed[1].key)
+      }
+      await until(async () => {
+        const current = await documentState()
+        return current.document.document_revision === before.document.document_revision + 1 &&
+          current.validation && current.validation.status !== 'pending'
+      }, 'one click excludes unused facts, keeps document and completes validation')
+      await idle()
+      const after = await documentState()
+      assert.deepEqual(after.document.pages, before.document.pages)
+      assert.equal(posts('preflights').length, analyses)
+      assert.equal(posts('drafts').length, drafts)
+      await reload()
+      await until(() => has('[data-testid=draft-result]'), 'completed exclusion reload')
+      await screen(3)
+      await until(() => has('#publication-panel'), 'publication restored')
+      assert.equal(await has('[data-keep-and-validate]'), false)
+      assert.equal((await documentState()).document.document_revision, after.document.document_revision)
+      checks.push(lostExclusion
+        ? 'lost batch exclusion response recovers in S03 after reload using the same key, then applies and validates without re-extraction or regeneration'
+        : 'one click batch excludes two unused facts, applies unchanged document, polls validation and survives reload without re-extraction or draft generation')
+    }
     const edited = await documentState()
     if (live) {
       // Only this script's synthetic fixture and own session; no cookies or credentials.
@@ -2666,7 +2728,7 @@ finally:
       assert.ok(linked)
       const originalPosts = calls.filter(c=>c.method==='POST').length
       const fixture = (code, fields={}) => ({issue_id:'audit_'+code,code,message:'화면 처리 경로 검사',severity:'blocker',scope:'content',status:'open',origin:'agent',layout_format:null,block_ids:[],fact_ids:[],source_ids:[],resolution:null,...fields})
-      issueActionFixture = {document_revision:beforeAudit.document.document_revision,validation_id:null,issues:[
+      issueActionFixture = {document_revision:beforeAudit.document.document_revision,validation_id:beforeAudit.validation?.validation_id || null,issues:[
         fixture('VALUE_CONFLICT',{origin:'preflight',fact_ids:[linked.fact_ids[0]]}),
         fixture('CONDITION_LOSS',{source_ids:[linked.evidence_refs[0].source_id]}),
         fixture('VALUE_MISMATCH',{block_ids:['removed_block'],fact_ids:[linked.fact_ids[0]]}),

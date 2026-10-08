@@ -1,6 +1,6 @@
 import { previewStorage } from '../services/mockBackend'
 import { useEffect, useRef, useState } from 'react'
-import { publicationApi } from '../api/publication'
+import { publicationApi, canKeepDocumentAndValidate } from '../api/publication'
 import type {
   Action,
   ImpactReview,
@@ -207,7 +207,7 @@ export function usePublication(
         setResult(value.result)
         setIssues(value.issues)
         setProposal(restoredProposal)
-        setBusy(false)
+        if (!lock.current) setBusy(false)
         const restored = read(sid, did)
         if (
           !restored.boundPreflightId &&
@@ -230,7 +230,7 @@ export function usePublication(
       })
       .catch((cause) => {
         if (!cancelled) {
-          setBusy(false)
+          if (!lock.current) setBusy(false)
           setError(failure(cause))
         }
       })
@@ -725,10 +725,11 @@ export function usePublication(
         ]
       })
   }
-  async function createImpact(confirmed: boolean) {
-    const pfid = preflightId || result?.latest_preflight_id
+  async function createImpact(confirmed: boolean, requestedPreflightId?: string) {
+    const pfid = requestedPreflightId || preflightId || result?.latest_preflight_id
     if (
       !confirmed ||
+      lock.current ||
       !pfid ||
       blocked ||
       dirty ||
@@ -780,6 +781,7 @@ export function usePublication(
       setNotice(
         '변경 영향을 확인한 뒤 선택한 수정과 유지 사유를 적용해 주세요.',
       )
+      return currentReview
     } catch (cause) {
       if (active.current) {
         setError(failure(cause))
@@ -796,11 +798,13 @@ export function usePublication(
       if (active.current) setBusy(false)
     }
   }
-  async function applyImpact(reason: string, references: ImpactReferences[]) {
+  async function applyImpact(reason: string, references: ImpactReferences[], suppliedReview?: ImpactReview, requestedPreflightId?: string) {
+    const selectedReview = suppliedReview || impactReview
     if (
       !reason.trim() ||
+      lock.current ||
       blocked ||
-      !impactReview ||
+      !selectedReview ||
       !result ||
       saved.pending ||
       saved.job
@@ -814,7 +818,7 @@ export function usePublication(
       const currentReview = await publicationApi.impactReview(
         sid,
         did,
-        impactReview.review_id,
+        selectedReview.review_id,
       )
       if (!active.current) return false
       if (
@@ -835,7 +839,7 @@ export function usePublication(
         currentReview.status !== 'pending' ||
         currentReview.to_input_revision !== inputRevision ||
         currentReview.preflight_id !==
-          (preflightId || result.latest_preflight_id)
+          (requestedPreflightId || preflightId || result.latest_preflight_id)
       ) {
         setImpactReview(currentReview)
         throw new Error(
@@ -917,6 +921,23 @@ export function usePublication(
       lock.current = false
       if (active.current) setBusy(false)
     }
+  }
+  async function keepDocumentAndValidate(requestedPreflightId?: string) {
+    if (lock.current || blocked || dirty || !result) return false
+    const pfid = requestedPreflightId || preflightId || result.latest_preflight_id
+    if (!pfid) return false
+    const reason = '사용자가 선택 항목 변경을 반영하고 기존 본문을 유지한 채 재검증을 요청했습니다.'
+    if (savedRef.current.impactRecovery && impactReview) {
+      // Reuse the persisted apply key/body; never start a second application.
+      return applyImpact(reason, [], impactReview, pfid)
+    }
+    const review = await createImpact(true, pfid)
+    if (!review) return false
+    if (!canKeepDocumentAndValidate(review)) {
+      setNotice('문장이나 근거에 확인할 변경이 있습니다. 아래 표시된 항목을 선택한 뒤 적용해 주세요.')
+      return false
+    }
+    return applyImpact(reason, [], review, pfid)
   }
   async function requestProposal(
     blockId: string,
@@ -1051,6 +1072,7 @@ export function usePublication(
     impactReview,
     createImpact,
     applyImpact,
+    keepDocumentAndValidate,
     result,
     document,
     issues,

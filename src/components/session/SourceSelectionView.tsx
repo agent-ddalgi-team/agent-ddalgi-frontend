@@ -1495,6 +1495,8 @@ export function SourceSelectionView({
           }
           preflight={ai.preflight}
           onExcludeFacts={(ids) => ai.reviewFact(ids, 'exclude')}
+          reviewError={ai.error}
+          onRetryExclusion={ai.saved?.attempt?.kind === 'review' && ai.pendingResponse ? ai.retryResponse : undefined}
           inputBusy={
             !!work.busy ||
             ai.locked ||

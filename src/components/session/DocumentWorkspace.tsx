@@ -135,6 +135,8 @@ export function DocumentWorkspace({
   inputRevision,
   preflight,
   onExcludeFacts,
+  reviewError,
+  onRetryExclusion,
   inputBusy,
   sources,
   onEditingStateChange,
@@ -147,7 +149,9 @@ export function DocumentWorkspace({
   initial: DraftResult
   inputRevision: number
   preflight: Preflight | null
-  onExcludeFacts: (ids: string[]) => Promise<void> | void
+  onExcludeFacts: (ids: string[]) => Promise<Preflight | undefined> | void
+  reviewError: string
+  onRetryExclusion?: () => Promise<Preflight | undefined> | undefined
   inputBusy: boolean
   sources: WorkSource[]
   onEditingStateChange: (blocked: boolean) => void
@@ -327,6 +331,13 @@ export function DocumentWorkspace({
       className={`${panel} bg-amber-50 text-xs`}
     >
       <h3 className="font-bold text-amber-950">자료 변경 영향 확인</h3>
+      <p className="mt-2 font-semibold">선택 항목 변경을 문서에 반영하면 내용 검증을 이어갈 수 있습니다.</p>
+      <button type="button" className={`${primary} mt-3`} data-keep-and-validate
+        disabled={work.blocked || work.dirty || !preflight}
+        onClick={() => void work.keepDocumentAndValidate().then(applied => { if (applied) onImpactApplied() })}>
+        기존 본문 유지하고 다시 검사
+      </button>
+      <p className="mt-1 text-slate-600">본문에 영향이 없으면 바로 반영·재검증합니다. 수정이 필요하면 아래에 표시합니다.</p>
       <p className="mt-2">
         기존 문구·사진·배치는 적용 전까지 유지됩니다. 최신 점검의 사실과 근거를
         확인하고 아래 변경을 선택해 주세요. 유지 사유만으로 필수 문제가
@@ -541,6 +552,17 @@ export function DocumentWorkspace({
   )
   const statusBlocks = (
     <>
+      {!!reviewError && <Banner tone="error">{reviewError}</Banner>}
+      {onRetryExclusion && (
+        <Banner tone="warn">
+          <p>선택 항목 처리 결과를 확인하지 못했습니다. 저장된 요청을 확인한 뒤 검사를 이어갑니다.</p>
+          <button type="button" className={`${button} mt-2`} data-exclusion-retry disabled={inputBusy || work.busy || work.dirty}
+            onClick={() => void (async () => {
+              const reviewed = await onRetryExclusion()
+              if (reviewed && await work.keepDocumentAndValidate(reviewed.preflight_id)) onImpactApplied()
+            })()}>처리 결과 확인하고 검사 이어가기</button>
+        </Banner>
+      )}
       {impactPanel}
       {(work.busy || work.watch) && (
         <Banner tone="info">
@@ -2223,11 +2245,18 @@ export function DocumentWorkspace({
                       <button
                         type="button"
                         className={`${button} mt-1 self-start`}
-                        disabled={work.actionBlocked}
-                        onClick={run}
+                        disabled={name === '내용 검증' && work.impactRequired
+                          ? work.blocked || work.dirty || !preflight
+                          : work.actionBlocked}
+                        onClick={name === '내용 검증' && work.impactRequired
+                          ? () => void work.keepDocumentAndValidate().then(applied => { if (applied) onImpactApplied() })
+                          : run}
                       >
-                        {action}
+                        {name === '내용 검증' && work.impactRequired ? '변경 반영하고 다시 검사' : action}
                       </button>
+                      {name === '내용 검증' && work.impactRequired && (
+                        <span className="text-[11px] text-amber-800">선택 항목이 바뀌었습니다. 문서에 반영한 뒤 검사를 이어갑니다.</span>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -2241,11 +2270,14 @@ export function DocumentWorkspace({
                 </h3>
                 {!!unusedFacts.length && (
                   <div className="rounded-xl border border-teal-200 bg-teal-50 p-3 text-xs text-teal-900">
-                    <p>본문에 사용하지 않은 선택 항목 {unusedFacts.length}건이 자료 확인을 기다리고 있습니다. 제외하면 원문은 보존되며, 변경 반영 후 내용 검증을 다시 진행합니다.</p>
+                    <p>본문에 사용하지 않은 선택 항목 {unusedFacts.length}건이 자료 확인을 기다리고 있습니다. 제외한 뒤 본문에 영향이 없으면 바로 다시 검사합니다.</p>
                     <button type="button" className={`${button} mt-2`} data-unused-facts-exclude
                       disabled={work.actionBlocked || unusedFacts.length > 50}
-                      onClick={() => void onExcludeFacts(unusedFacts)}>
-                      사용하지 않은 선택 항목 {unusedFacts.length}건 제외
+                      onClick={() => void (async () => {
+                        const reviewed = await onExcludeFacts(unusedFacts)
+                        if (reviewed && await work.keepDocumentAndValidate(reviewed.preflight_id)) onImpactApplied()
+                      })()}>
+                      선택 항목 {unusedFacts.length}건 제외하고 다시 검사
                     </button>
                   </div>
                 )}

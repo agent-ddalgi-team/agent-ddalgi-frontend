@@ -350,7 +350,7 @@ export function useAiWorkflow(session: SourceSession | null) {
               ? '선택 항목을 제외했습니다. 남은 점검 내용을 다시 확인해 주세요.'
               : '제외 항목을 복원했습니다. 원래 근거 상태로 돌아왔습니다.',
         }))
-        return
+        return preflight
       }
       const accepted =
         attempt.kind === 'preflight'

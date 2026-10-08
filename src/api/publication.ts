@@ -105,6 +105,12 @@ export interface ImpactReferences {
   fact_ids: string[]
   evidence_refs: EvidenceRef[]
 }
+
+export function canKeepDocumentAndValidate(review: ImpactReview) {
+  return review.status === 'pending' && review.from_input_revision === review.to_input_revision &&
+    review.items.every(item => item.code === 'INPUT_CHANGED' && !item.requires_change) &&
+    Object.entries(review.fact_rebindings).every(([before, after]) => before === after)
+}
 export interface Proposal {
   proposal_id: string
   document_id: string
