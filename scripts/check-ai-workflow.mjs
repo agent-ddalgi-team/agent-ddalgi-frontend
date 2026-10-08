@@ -3542,6 +3542,49 @@ finally:
       assert.equal(posts('validate').length, 1)
     }
   }
+  if (sessionExpiryTrial) {
+    // Expire only this harness's temporary DB; use the real API for cleanup and 410.
+    await new Promise((resolve, reject) => {
+      const fixture = spawn(join(backendRoot, '.venv/Scripts/python.exe'), ['-B', '-c', `
+import sqlite3,sys
+from pathlib import Path
+p=Path(sys.argv[1]).resolve()
+assert p.parent.name=='runs' and p.parent.parent.name.startswith('ddalgi-ai-ui-')
+assert p.name=='app.sqlite3' and p.is_file()
+c=sqlite3.connect(p)
+assert c.execute('UPDATE sessions SET expires_at=? WHERE session_id=? AND status=?',
+                 ('2000-01-01T00:00:00Z',sys.argv[2],'active')).rowcount==1
+c.commit();c.close()
+`, join(output, 'runs', 'app.sqlite3'), sessionId], {windowsHide:true,stdio:['ignore','pipe','pipe']})
+      let diagnostic = ''
+      fixture.stderr.on('data', data => { diagnostic += data })
+      fixture.on('error', reject)
+      fixture.on('close', code => code === 0 ? resolve() : reject(new Error('Expiry fixture failed: ' + diagnostic)))
+    })
+    await screen(3)
+    const beforeExpiry = calls.length
+    const expiredSessionId = sessionId
+    await click('만료 시각 다시 확인')
+    await idle()
+    await until(() => evaluate(`!![...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='작업 시작 / 이어하기'&&!b.disabled&&b.getClientRects().length)`), 'expired work returns to start')
+    assert.ok(await evaluate(`document.body.innerText.includes('만료')`))
+    assert.equal(await saved(), null)
+    assert.equal(await evaluate(`sessionStorage.getItem('ddalgi.sources.v1.publication')`), null)
+    assert.equal(await has('[data-session-expiry]'), false)
+    assert.equal(await has('[data-testid=draft-result]'), false)
+    assert.ok(calls.slice(beforeExpiry).every(request => request.method === 'GET'), 'Expiry detection must not regenerate or mutate')
+    assert.equal(await evaluate(`fetch('/api/v1/sessions/${expiredSessionId}').then(r=>r.status)`), 410)
+    await screenshot('session-expired-start.png')
+    const beforeRestart = calls.length
+    await click('작업 시작 / 이어하기')
+    await idle()
+    sessionId = await evaluate(`JSON.parse(sessionStorage.getItem('ddalgi.sources.v1')).sessionId`)
+    assert.notEqual(sessionId, expiredSessionId)
+    assert.ok(await has('[data-session-expiry]'))
+    assert.equal(await has('[data-testid=draft-result]'), false)
+    assert.ok(calls.slice(beforeRestart).filter(request => request.method === 'POST').every(request => /\/sessions$/.test(request.path)), 'Restart must only create a session, never AI work')
+    checks.push('real expired session returns 410; stale draft/publication references removed; visible new work starts a distinct session without AI generation')
+  }
   await click('작업 종료')
   await click('종료하고 정리')
   await idle()
