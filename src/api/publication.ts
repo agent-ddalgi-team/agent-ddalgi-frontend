@@ -33,8 +33,19 @@ export function issueEditLocations(issue: Issue, pages: DraftResult['document'][
   const direct = blocks.filter(({ block }) => directIds.has(block.block_id))
   if (direct.length) return direct.map(location => ({ ...location, direct: true }))
   return blocks
-    .filter(({ block }) => block.fact_ids.some(id => factIds.has(id)) || block.evidence_refs.some(ref => sourceIds.has(ref.source_id)))
+    .filter(({ block }) => factIds.size
+      ? block.fact_ids.some(id => factIds.has(id))
+      : block.evidence_refs.some(ref => sourceIds.has(ref.source_id)))
     .map(location => ({ ...location, direct: false }))
+}
+
+// Only an explicit user choice can exclude an optional, unused fact.
+export function unusedReviewFactIds(issues: Issue[], pages: DraftResult['document']['pages'], reviewableIds: string[]) {
+  const used = new Set(pages.flatMap(page => page.blocks.flatMap(block => block.fact_ids)))
+  const allowed = new Set(reviewableIds)
+  return [...new Set(issues.filter(issue => issue.status === 'open' && issue.origin === 'preflight' &&
+    issue.scope === 'content' && issue.code === 'UNSUPPORTED_CLAIM' && !issue.block_ids.length)
+    .flatMap(issue => issue.fact_ids || []))].filter(id => allowed.has(id) && !used.has(id))
 }
 
 export function canReviewIssueEvidence(issue: Issue) {

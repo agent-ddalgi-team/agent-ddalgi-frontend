@@ -29,7 +29,7 @@ import {
 } from 'lucide-react'
 import type { DraftBlock, DraftResult, Preflight } from '../../api/aiWorkflow'
 import { FIELD_LABELS, issueMessageParts } from '../../constants/profileLabels'
-import { canAcknowledge, canReviewIssueEvidence, issueEditLocations } from '../../api/publication'
+import { canAcknowledge, canReviewIssueEvidence, issueEditLocations, unusedReviewFactIds } from '../../api/publication'
 import { Evidence } from './AiWorkflowPanel'
 import type { WorkSource } from '../../api/sources'
 import { usePublication } from '../../hooks/usePublication'
@@ -134,6 +134,7 @@ export function DocumentWorkspace({
   initial,
   inputRevision,
   preflight,
+  onExcludeFacts,
   inputBusy,
   sources,
   onEditingStateChange,
@@ -146,6 +147,7 @@ export function DocumentWorkspace({
   initial: DraftResult
   inputRevision: number
   preflight: Preflight | null
+  onExcludeFacts: (ids: string[]) => Promise<void> | void
   inputBusy: boolean
   sources: WorkSource[]
   onEditingStateChange: (blocked: boolean) => void
@@ -187,6 +189,7 @@ export function DocumentWorkspace({
     setKeepReason('')
   }
   const [reasons, setReasons] = useState<Record<string, string>>({})
+  const [showIssueHistory, setShowIssueHistory] = useState(false)
   const [discard, setDiscard] = useState(false)
   const [pageIndex, setPageIndex] = useState(0)
   const [blockId, setBlockId] = useState('')
@@ -292,6 +295,11 @@ export function DocumentWorkspace({
           CheckCircle2,
         ]
   const SaveIcon = saveBadge[2]
+  const openIssueCount = work.issues.filter(issue => issue.status === 'open').length
+  const historyCount = work.issues.length - openIssueCount
+  const unusedFacts = preflight?.input_revision === inputRevision
+    ? unusedReviewFactIds(work.issues, doc.pages, preflight.reviewable_fact_ids || [])
+    : []
   const reviewBadge = work.approved
     ? [
         `${work.formatLabel} 승인 완료`,
@@ -2229,9 +2237,25 @@ export function DocumentWorkspace({
             {!!work.issues.length && (
               <div className="flex flex-col gap-2">
                 <h3 className="text-xs font-bold text-slate-900">
-                  확인할 문제와 경고 ({work.issues.length})
+                  확인할 문제와 경고 · 미해결 {openIssueCount}건
                 </h3>
-                {work.issues.map((issue) => (
+                {!!unusedFacts.length && (
+                  <div className="rounded-xl border border-teal-200 bg-teal-50 p-3 text-xs text-teal-900">
+                    <p>본문에 사용하지 않은 선택 항목 {unusedFacts.length}건이 자료 확인을 기다리고 있습니다. 제외하면 원문은 보존되며, 변경 반영 후 내용 검증을 다시 진행합니다.</p>
+                    <button type="button" className={`${button} mt-2`} data-unused-facts-exclude
+                      disabled={work.actionBlocked || unusedFacts.length > 50}
+                      onClick={() => void onExcludeFacts(unusedFacts)}>
+                      사용하지 않은 선택 항목 {unusedFacts.length}건 제외
+                    </button>
+                  </div>
+                )}
+                {!!historyCount && (
+                  <button type="button" className={ghost} data-issue-history-toggle
+                    onClick={() => setShowIssueHistory(!showIssueHistory)}>
+                    처리 기록 {historyCount}건 {showIssueHistory ? '접기' : '보기'}
+                  </button>
+                )}
+                {work.issues.filter(issue => showIssueHistory || issue.status === 'open').map((issue) => (
                   <article
                     key={issue.issue_id}
                     data-issue-code={issue.code}
@@ -2241,13 +2265,16 @@ export function DocumentWorkspace({
                       <span
                         className={`rounded px-1.5 py-0.5 text-[10px] ${issue.severity === 'blocker' ? 'bg-red-100 text-red-800' : issue.severity === 'warning' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'}`}
                       >
-                        {issue.severity === 'blocker'
+                        {issue.status !== 'open'
+                          ? '처리됨'
+                          : issue.severity === 'blocker'
                           ? '필수 수정'
                           : issue.severity === 'warning'
                             ? '경고'
                             : '안내'}
                       </span>
                       <span>{stateLabel[issue.status]}</span>
+                      <span className="text-slate-500">{issue.origin === 'preflight' ? '자료 확인' : issue.origin === 'layout' ? '배치 검사' : '내용 검사'}</span>
                       {issue.layout_format && (
                         <span className="text-slate-400">
                           · {issue.layout_format.toUpperCase()}

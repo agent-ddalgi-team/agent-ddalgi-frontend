@@ -1494,6 +1494,7 @@ export function SourceSelectionView({
             work.session?.input_revision || ai.document.document.input_revision
           }
           preflight={ai.preflight}
+          onExcludeFacts={(ids) => ai.reviewFact(ids, 'exclude')}
           inputBusy={
             !!work.busy ||
             ai.locked ||

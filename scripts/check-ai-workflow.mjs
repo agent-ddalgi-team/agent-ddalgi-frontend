@@ -22,6 +22,25 @@ async function reviewRegressions() {
         module: ts.ModuleKind.CommonJS,
       },
     }).outputText
+  const publicationModule = { exports: {} }
+  runInNewContext(transpile(await readFile(new URL('../src/api/publication.ts', import.meta.url), 'utf8')), {
+    exports: publicationModule.exports, require: () => ({}),
+  })
+  const { unusedReviewFactIds, issueEditLocations } = publicationModule.exports
+  const pages = [{ blocks: [
+    { block_id: 'used', fact_ids: ['used'], evidence_refs: [{ source_id: 'shared' }] },
+    { block_id: 'other', fact_ids: ['other'], evidence_refs: [{ source_id: 'shared' }] },
+  ] }]
+  const optional = { status: 'open', origin: 'preflight', scope: 'content', code: 'UNSUPPORTED_CLAIM',
+    block_ids: [], fact_ids: ['unused'], source_ids: ['shared'] }
+  assert.deepEqual(JSON.parse(JSON.stringify(issueEditLocations(optional, pages))), [])
+  assert.deepEqual(JSON.parse(JSON.stringify(unusedReviewFactIds([optional, optional], pages, ['unused']))), ['unused'])
+  for (const change of [{ fact_ids: ['used'] }, { code: 'REQUIRED_MISSING' }, { code: 'MOCK_VALUE' },
+    { code: 'VALUE_CONFLICT' }, { status: 'resolved' }, { origin: 'agent' }, { block_ids: ['used'] }]) {
+    assert.equal(unusedReviewFactIds([{ ...optional, ...change }], pages, ['used', 'unused']).length, 0)
+  }
+  assert.equal(unusedReviewFactIds([optional], pages, []).length, 0)
+  assert.equal(issueEditLocations({ ...optional, fact_ids: [] }, pages).length, 2)
   const config = await readFile(
     new URL('../vite.config.ts', import.meta.url),
     'utf8',
@@ -2659,6 +2678,9 @@ finally:
       await refreshReady()
       await click('문서 상태 새로고침')
       await until(()=>has('[data-issue-code="VALUE_CONFLICT"] [data-issue-evidence-action]'),'conflict evidence action')
+      assert.equal(await has('[data-issue-code="UNSUPPORTED_CLAIM"]'), false)
+      await evaluate(`document.querySelector('[data-issue-history-toggle]').click()`)
+      await until(()=>has('[data-issue-code="UNSUPPORTED_CLAIM"]'), 'resolved issue history expands')
       for (const code of ['VALUE_CONFLICT','CONDITION_LOSS','VALUE_MISMATCH']) {
         assert.ok(await has(`[data-issue-code="${code}"] [data-issue-location-kind="related"]`))
         assert.ok(await evaluate(`document.querySelector('[data-issue-code="${code}"]').textContent.includes('관련 사실·자료가 연결된 위치')`))
