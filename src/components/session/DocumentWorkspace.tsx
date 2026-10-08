@@ -29,7 +29,7 @@ import {
 } from 'lucide-react'
 import type { DraftBlock, DraftResult, Preflight } from '../../api/aiWorkflow'
 import { FIELD_LABELS, issueMessageParts } from '../../constants/profileLabels'
-import { canAcknowledge, canReviewIssueEvidence, issueEditLocations, issueRecoverySteps, missingRequiredFacts, unusedReviewFactIds } from '../../api/publication'
+import { canAcknowledge, canReviewIssueEvidence, issueEditLocations, issueRecoverySteps, missingRequiredFacts, requiredTextRestorations, unusedReviewFactIds } from '../../api/publication'
 import { Evidence } from './AiWorkflowPanel'
 import type { WorkSource } from '../../api/sources'
 import { usePublication } from '../../hooks/usePublication'
@@ -2408,6 +2408,25 @@ export function DocumentWorkspace({
                         </ol>
                       </div>
                     )}
+                    {!!preflight && requiredTextRestorations(issue, preflight, doc.pages).map(({page, pageIndex, block, fact}) => (
+                      <fieldset key={block.block_id} data-required-restore={block.block_id}
+                        disabled={work.actionBlocked || preflight.input_revision !== inputRevision}
+                        className="mt-3 rounded-lg border border-teal-200 bg-white p-3">
+                        <legend className="font-bold text-teal-900">연결된 필수 사실로 문구 복구</legend>
+                        <p>{pageIndex + 1}쪽 · {page.title}</p>
+                        <p className="mt-2 font-bold">현재 문구</p>
+                        <p className="whitespace-pre-wrap break-words">{String(block.content.text || '(빈 문구)')}</p>
+                        <p className="mt-2 font-bold">복구할 문구</p>
+                        <p className="whitespace-pre-wrap break-words">{fact.value}</p>
+                        <Evidence refs={fact.evidence_refs} sources={sources} />
+                        <p className="mt-2">이 블록의 현재 문구 전체를 위 내용으로 바꿉니다. 직접 작성한 문구도 교체되므로 비교 후 선택하세요. 근거 연결과 다른 블록은 유지합니다.</p>
+                        <button type="button" data-required-restore-submit className={`${primary} mt-3`}
+                          onClick={() => void work.restoreRequiredText(issue.issue_id, block.block_id, preflight)}>
+                          이 문구를 복구하고 내용 검사
+                        </button>
+                        {work.actionBlocked && <p className="mt-2">미저장 문구·자료 변경 반영·진행 중인 작업을 먼저 마쳐 주세요.</p>}
+                      </fieldset>
+                    ))}
                     {!!preflight && !!missingRequiredFacts(issue, preflight, doc.pages).length && (
                       <fieldset data-required-insert={issue.issue_id} disabled={work.actionBlocked || preflight.input_revision !== inputRevision}
                         className="mt-3 rounded-lg border border-teal-200 bg-white p-3">

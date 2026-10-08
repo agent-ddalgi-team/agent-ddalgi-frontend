@@ -88,6 +88,22 @@ export function missingRequiredFacts(issue: Issue, preflight: Preflight | null, 
     fact.status === 'supported' && !!fact.value?.trim() && fact.evidence_refs.length > 0 && !used.has(fact.fact_id))
 }
 
+// Multi-fact text needs manual editing: never overwrite unrelated claims.
+export function requiredTextRestorations(issue: Issue, preflight: Preflight | null, pages: DraftResult['document']['pages']) {
+  if (issue.status !== 'open' || issue.code !== 'REQUIRED_MISSING' ||
+      issue.origin !== 'server' || issue.scope !== 'content') return []
+  return pages.flatMap((page, pageIndex) => page.blocks.flatMap(block => {
+    if (block.type !== 'paragraph' || block.fact_ids.length !== 1) return []
+    const fact = preflight?.facts.find(item => item.fact_id === block.fact_ids[0] &&
+      issue.fact_ids?.includes(item.fact_id) && item.status === 'supported' && item.value?.trim() && item.evidence_refs.length)
+    if (!fact || block.content.text === fact.value || !fact.evidence_refs.every(ref => block.evidence_refs.some(existing =>
+      existing.source_id === ref.source_id && existing.source_version === ref.source_version &&
+      existing.segment_id === ref.segment_id && existing.excerpt === ref.excerpt &&
+      JSON.stringify(existing.locator) === JSON.stringify(ref.locator)))) return []
+    return [{ page, pageIndex, block, fact }]
+  }))
+}
+
 export interface Layout {
   layout_check_id: string
   document_revision: number

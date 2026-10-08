@@ -1,6 +1,6 @@
 import { previewStorage } from '../services/mockBackend'
 import { useEffect, useRef, useState } from 'react'
-import { publicationApi, canKeepDocumentAndValidate, missingRequiredFacts } from '../api/publication'
+import { publicationApi, canKeepDocumentAndValidate, missingRequiredFacts, requiredTextRestorations } from '../api/publication'
 import type {
   Action,
   ImpactReview,
@@ -1161,6 +1161,17 @@ export function usePublication(
         old.includes(id) ? old.filter((i) => i !== id) : [...old, id],
       )
       setConfirmed(false)
+    },
+    restoreRequiredText: (issueId: string, blockId: string, preflight: Preflight) => {
+      if (lock.current || actionBlocked || preflight.preflight_id !== preflightId || preflight.input_revision !== inputRevision) return
+      const issue = issues.find(item => item.issue_id === issueId)
+      const candidate = issue && requiredTextRestorations(issue, preflight, document.pages).find(item => item.block.block_id === blockId)
+      if (!candidate) return
+      return perform({ kind: 'save', key: crypto.randomUUID(), validateAfterSave: true, body: {
+        expected_revision: document.document_revision,
+        operations: [{ op: 'replace_block_content', block_id: blockId,
+          content: { ...candidate.block.content, text: candidate.fact.value } }],
+      } })
     },
     insertRequiredFact: (issueId: string, factId: string, pageId: string, preflight: Preflight) => {
       if (lock.current || actionBlocked || preflight.preflight_id !== preflightId || preflight.input_revision !== inputRevision) return

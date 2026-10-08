@@ -26,7 +26,7 @@ async function reviewRegressions() {
   runInNewContext(transpile(await readFile(new URL('../src/api/publication.ts', import.meta.url), 'utf8')), {
     exports: publicationModule.exports, require: () => ({}),
   })
-  const { unusedReviewFactIds, issueEditLocations, canKeepDocumentAndValidate, issueRecoverySteps, canAcknowledge, missingRequiredFacts } = publicationModule.exports
+  const { unusedReviewFactIds, issueEditLocations, canKeepDocumentAndValidate, issueRecoverySteps, canAcknowledge, missingRequiredFacts, requiredTextRestorations } = publicationModule.exports
   const missingIssue = {code:'REQUIRED_MISSING',status:'open',origin:'server',scope:'content',block_ids:[],fact_ids:['required']}
   const requiredFact = {fact_id:'required',status:'supported',value:'확인된 사실',evidence_refs:[{segment_id:'segment'}]}
   assert.equal(missingRequiredFacts(missingIssue,{facts:[requiredFact]},[]).length,1)
@@ -35,6 +35,13 @@ async function reviewRegressions() {
   for (const patch of [{status:'needs_confirmation'},{status:'conflict'},{value:' '},{evidence_refs:[]}])
     assert.equal(missingRequiredFacts(missingIssue,{facts:[{...requiredFact,...patch}]},[]).length,0)
   assert.equal(missingRequiredFacts(missingIssue,{facts:[requiredFact]},[{blocks:[{fact_ids:['required']}]}]).length,0)
+  const restoreBlock={block_id:'restore',type:'paragraph',fact_ids:['required'],content:{text:'축약된 내용'},evidence_refs:requiredFact.evidence_refs}
+  assert.equal(requiredTextRestorations(missingIssue,{facts:[requiredFact]},[{blocks:[restoreBlock]}]).length,1)
+  for (const patch of [{type:'image'},{type:'list'},{fact_ids:['required','other']},{evidence_refs:[]},{content:{text:requiredFact.value}}])
+    assert.equal(requiredTextRestorations(missingIssue,{facts:[requiredFact]},[{blocks:[{...restoreBlock,...patch}]}]).length,0)
+  for (const patch of [{status:'resolved'},{origin:'preflight'},{code:'VALUE_MISMATCH'}])
+    assert.equal(requiredTextRestorations({...missingIssue,...patch},{facts:[requiredFact]},[{blocks:[restoreBlock]}]).length,0)
+  assert.equal(requiredTextRestorations(missingIssue,{facts:[{...requiredFact,status:'needs_confirmation'}]},[{blocks:[restoreBlock]}]).length,0)
   for (const code of ['IMAGE_MISMATCH', 'IMAGE_UNVERIFIABLE', 'PHOTO_CONTENT_REVIEW', 'BROKEN_IMAGE', 'PLACEHOLDER_REMAINING', 'REQUIRED_MISSING']) {
     const issue = { code, status: 'open', severity: 'warning', origin: 'agent', scope: 'content' }
     assert.ok(issueRecoverySteps(issue).length >= 2)
@@ -2864,6 +2871,42 @@ finally:
         const currentIssues=await evaluate(`fetch(${JSON.stringify(route)}+'/issues').then(r=>r.json())`)
         assert.equal(currentIssues.issues.some(i=>i.status==='open'&&i.code==='REQUIRED_MISSING'&&i.fact_ids?.includes(company.fact_id)),false)
         checks.push('real missing company inserted on selected page with original evidence; explicit choices; lost save retries same key once; saved revision validated; other blocks preserved; reload prevents duplicate; no extraction or draft generation')
+        const beforeShorten=await documentState()
+        const shortened='회사 정보'
+        assert.equal(await evaluate(`fetch(${JSON.stringify(route)},{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(${JSON.stringify({expected_revision:beforeShorten.document.document_revision,operations:[{op:'replace_block_content',block_id:inserted[0].block_id,content:{text:shortened}}]})})}).then(r=>r.status)`),200)
+        await refreshReady()
+        await click('문서 상태 새로고침')
+        await until(()=>evaluate(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='내용 검증 실행'&&!b.disabled)`),'shortened fact validation ready')
+        await click('내용 검증 실행')
+        await until(()=>has(`[data-required-restore="${inserted[0].block_id}"]`),'linked missing text exposes restoration')
+        await idle()
+        assert.equal(await has(`[data-required-fact="${company.fact_id}"]`),false)
+        assert.ok(await evaluate(`document.querySelector('[data-required-restore]').textContent.includes('${shortened}')`))
+        assert.ok(await evaluate(`document.querySelector('[data-required-restore]').textContent.includes(${JSON.stringify(company.value)})`))
+        const beforeRestore=await documentState()
+        dropSave=true
+        dropped=false
+        await evaluate(`document.querySelector('[data-required-restore-submit]').click()`)
+        await until(()=>dropped,'restore save response lost')
+        await until(()=>evaluate(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='같은 문서 요청 다시 확인'&&!b.disabled)`),'restore retry ready')
+        await click('같은 문서 요청 다시 확인')
+        await until(async()=>{const out=await documentState();return out.document.document_revision===beforeRestore.document.document_revision+1&&out.validation?.document_revision===out.document.document_revision&&out.validation.status!=='pending'},'restored text saved once and validated')
+        await idle()
+        const restored=await documentState()
+        for(const page of beforeRestore.document.pages) {
+          const expected=page.blocks.map(b=>b.block_id===inserted[0].block_id?{...b,content:{...b.content,text:company.value}}:b)
+          assert.deepEqual(restored.document.pages.find(p=>p.page_id===page.page_id).blocks,expected)
+        }
+        const restorePatches=calls.filter(c=>c.method==='PATCH'&&c.path===route)
+        assert.equal(restorePatches.at(-1).key,restorePatches.at(-2).key)
+        await reload()
+        await screen(3)
+        await until(()=>has('[data-testid=draft-result]'),'restored text reload')
+        const restoredIssues=await evaluate(`fetch(${JSON.stringify(route)}+'/issues').then(r=>r.json())`)
+        assert.equal(restoredIssues.issues.some(i=>i.status==='open'&&i.code==='REQUIRED_MISSING'&&i.fact_ids?.includes(company.fact_id)),false)
+        assert.equal(await has('[data-required-restore]'),false)
+        assert.equal(posts('preflights').length+posts('drafts').length,generationCalls)
+        checks.push('linked required paragraph restored after explicit before/after comparison; lost save applies once; refs and other content preserved; revalidation clears real missing issue; reload and no regeneration')
       }
       const beforeAudit = await documentState()
       const originalSnapshotPosts = calls.filter(c=>c.method==='POST').length
