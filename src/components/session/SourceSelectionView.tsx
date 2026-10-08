@@ -198,6 +198,24 @@ export function SourceSelectionView({
   const [sourceChangeBlocked, setSourceChangeBlocked] = useState(true)
   const work = useSources(sourceEditing && !sourceChangeBlocked)
   const ai = useAiWorkflow(work.session)
+  const [evidenceTarget, setEvidenceTarget] = useState<{ sessionId: string; factIds: string[] } | null>(null)
+  const focusedFactIds = evidenceTarget?.sessionId === work.session?.session_id ? evidenceTarget?.factIds ?? [] : []
+  useEffect(() => {
+    if (step !== 1 || !evidenceTarget || evidenceTarget.sessionId !== work.session?.session_id) return
+    const target = Array.from(document.querySelectorAll<HTMLElement>('[data-preflight-fact]'))
+      .find((element) => evidenceTarget.factIds.includes(element.dataset.preflightFact || ''))
+    const panel = document.getElementById('ai-workflow')
+    if (target) {
+      const details = target.closest('details')
+      if (details) details.open = true
+      target.focus({ preventScroll: true })
+      target.scrollIntoView({ block: 'center' })
+    } else if (panel) {
+      panel.setAttribute('tabindex', '-1')
+      panel.focus({ preventScroll: true })
+      panel.scrollIntoView({ block: 'start' })
+    }
+  }, [step, evidenceTarget, work.session?.session_id, ai.preflight?.preflight_id])
   const fileInput = useRef<HTMLInputElement>(null)
   const purposeControl = useRef<HTMLDivElement>(null)
   const purposeInput = useRef<HTMLInputElement>(null)
@@ -1381,6 +1399,7 @@ export function SourceSelectionView({
             </button>
             <AiWorkflowPanel
               ai={enrichedAi}
+              focusedFactIds={focusedFactIds}
               sources={work.sources}
               session={work.session}
               selectedCount={selected.size}
@@ -1495,6 +1514,10 @@ export function SourceSelectionView({
           }
           preflight={ai.preflight}
           onExcludeFacts={(ids) => ai.reviewFact(ids, 'exclude')}
+          onReviewEvidence={(factIds) => {
+            setEvidenceTarget({ sessionId: work.session!.session_id, factIds })
+            setInspectorOpen(true)
+          }}
           reviewError={ai.error}
           onRetryExclusion={ai.saved?.attempt?.kind === 'review' && ai.pendingResponse ? ai.retryResponse : undefined}
           inputBusy={

@@ -135,6 +135,7 @@ export function DocumentWorkspace({
   inputRevision,
   preflight,
   onExcludeFacts,
+  onReviewEvidence,
   reviewError,
   onRetryExclusion,
   inputBusy,
@@ -150,6 +151,7 @@ export function DocumentWorkspace({
   inputRevision: number
   preflight: Preflight | null
   onExcludeFacts: (ids: string[]) => Promise<Preflight | undefined> | void
+  onReviewEvidence: (ids: string[]) => void
   reviewError: string
   onRetryExclusion?: () => Promise<Preflight | undefined> | undefined
   inputBusy: boolean
@@ -2382,7 +2384,10 @@ export function DocumentWorkspace({
                           type="button"
                           className={button}
                           data-issue-evidence-action
-                          onClick={() => navigate(1)}
+                          onClick={() => {
+                            onReviewEvidence(issue.fact_ids ?? [])
+                            navigate(1)
+                          }}
                         >
                           자료 점검에서 근거 확인하기 →
                         </button>

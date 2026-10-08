@@ -282,6 +282,7 @@ const draftEntry = process.argv.includes('--draft-entry')
 assert(!draftEntry || !live, 'Draft entry uses isolated mock responses only')
 let preflightBlockMessage = ''
 let issueActionFixture = null
+let preflightGuidanceFixture = null
 let mismatchedIssueReads = 0, injectedIssueReads = 0
 const draftRecovery = process.argv.includes('--draft-recovery')
 assert(!draftRecovery || !live, 'Draft recovery uses mock responses only')
@@ -778,6 +779,15 @@ finally:
           intercept('Fetch.fulfillRequest',{requestId:p.requestId,responseCode:200,
             responseHeaders:[{name:'Content-Type',value:'application/json'}],body:Buffer.from(JSON.stringify(result)).toString('base64')})
         }).catch(cause=>errors.push('issue snapshot interception: '+cause.message))
+        return
+      }
+      if (preflightGuidanceFixture && p.request.method === 'GET' &&
+          new URL(p.request.url).pathname.endsWith('/preflights/' + preflightGuidanceFixture.preflight_id) && p.responseStatusCode === 200) {
+        intercept('Fetch.fulfillRequest', {
+          requestId: p.requestId, responseCode: 200,
+          responseHeaders: [{name: 'Content-Type', value: 'application/json'}],
+          body: Buffer.from(JSON.stringify(preflightGuidanceFixture)).toString('base64'),
+        })
         return
       }
       if (issueActionFixture && p.request.method === 'GET' &&
@@ -1279,6 +1289,39 @@ finally:
     assert.ok(optional, 'optional fact available for review')
     const company = original.facts.find(f => f.field_key === 'company_name')
     assert.equal(await has(`[data-review-exclude="${company.fact_id}"]`), false)
+    const beforeGuidancePosts = calls.filter(c => c.method === 'POST').length
+    const ref = original.facts.flatMap(f => f.evidence_refs)[0]
+    assert.ok(ref)
+    preflightGuidanceFixture = { ...original, can_generate: false,
+      facts: [
+        {...company, value: null, status: 'missing', evidence_refs: []},
+        {...optional, field_key: 'technology', value: null, status: 'conflict', alternatives: [
+          {value: '후보 성능 120시간', evidence_refs: [{...ref, excerpt: '첫 번째 후보의 시험 원문'}]},
+          {value: '후보 성능 168시간', evidence_refs: [{...ref, excerpt: '두 번째 후보의 시험 원문'}]},
+          {value: '근거 미연결 후보', evidence_refs: []},
+        ]},
+      ],
+      reviewable_fact_ids: [optional.fact_id],
+      issues: [{issue_id: 'guidance_missing', code: 'REQUIRED_MISSING', severity: 'blocker', status: 'open', message: '회사명 근거 없음', fact_ids: [company.fact_id]},
+        {issue_id: 'guidance_conflict', code: 'VALUE_CONFLICT', severity: 'blocker', status: 'open', message: '기술 자료 상충', fact_ids: [optional.fact_id]}],
+    }
+    await reload()
+    await until(() => has('[data-fact-alternative]'), 'candidate evidence guidance loaded')
+    assert.ok(await evaluate(`document.querySelector('[data-preflight-fact="${company.fact_id}"] [data-fact-guidance]').textContent.includes('법인 식별 정보')`))
+    assert.ok(await evaluate(`document.querySelector('[data-preflight-fact="${company.fact_id}"] [data-fact-guidance]').textContent.includes('현재 제외할 수 없습니다')`))
+    assert.equal(await has(`[data-review-exclude="${company.fact_id}"]`), false)
+    assert.ok(await has(`[data-review-exclude="${optional.fact_id}"]`))
+    assert.ok(await evaluate(`document.querySelector('[data-preflight-fact="${optional.fact_id}"] [data-fact-guidance]').textContent.includes('시험 기준')`))
+    const candidates = await evaluate(`Array.from(document.querySelectorAll('[data-preflight-fact="${optional.fact_id}"] [data-fact-alternative]')).map(e=>e.textContent)`)
+    assert.ok(candidates[0].includes('첫 번째 후보의 시험 원문') && !candidates[0].includes('두 번째 후보의 시험 원문'))
+    assert.ok(candidates[1].includes('두 번째 후보의 시험 원문') && !candidates[1].includes('첫 번째 후보의 시험 원문'))
+    assert.ok(candidates[2].includes('연결된 원문 근거가 없습니다'))
+    assert.equal(await draftDisabled(), true)
+    assert.equal(calls.filter(c => c.method === 'POST').length, beforeGuidancePosts)
+    preflightGuidanceFixture = null
+    await reload()
+    await until(() => has(`[data-review-exclude="${optional.fact_id}"]`), 'actual preflight restored')
+    checks.push('missing/conflicting facts show specific evidence guidance, separate candidate sources and missing-source notice; required exclusion remains unavailable; no mutation or AI call')
     const analyses = posts('preflights').length
     await evaluate(`document.querySelectorAll('[data-testid=preflight-result] details').forEach(d=>d.open=true)`)
     dropped = false
@@ -2782,8 +2825,14 @@ finally:
       assert.ok(await evaluate(`document.querySelector('[data-editor-issues]').textContent.includes('화면 처리 경로 검사')`))
       assert.ok(await evaluate(`document.querySelector('[data-editor-issues] summary').textContent.includes('원문 근거')`))
       await screen(3)
+      await evaluate(`document.querySelector('[data-issue-code="VALUE_CONFLICT"] [data-issue-evidence-action]').click()`)
+      await until(()=>evaluate(`document.activeElement?.dataset.preflightFact === '${linked.fact_ids[0]}'`),'issue focuses its exact fact')
+      assert.ok(await evaluate(`document.activeElement.closest('details').open`))
+      assert.ok(await evaluate(`document.activeElement.classList.contains('border-teal-600')`))
+      await screen(3)
       await evaluate(`document.querySelector('[data-issue-code="REQUIRED_MISSING"] [data-issue-evidence-action]').click()`)
       await until(()=>evaluate(`!!document.querySelector('[data-screen="S01"]:not([hidden])')`),'whole document issue opens preflight')
+      await until(()=>evaluate(`document.activeElement?.id === 'ai-workflow'`),'unknown fact focuses preflight panel')
       assert.deepEqual((await documentState()).document,beforeAudit.document)
       assert.equal(calls.filter(c=>c.method==='POST').length,originalPosts)
       issueActionFixture = null
