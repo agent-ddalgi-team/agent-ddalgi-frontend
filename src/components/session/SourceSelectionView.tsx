@@ -1136,8 +1136,10 @@ export function SourceSelectionView({
                 </button>
               </div>
               <p className="mt-2 text-slate-600">
-                {work.publicStatus?.message || '공개 연동 설정 확인 중'} 실제로
-                등록된 공개 자료 {counts.public}건
+                {work.session
+                  ? work.publicStatus?.message || '공개 자료 연결 상태 확인 중'
+                  : '작업을 시작하면 DART 연결 상태를 확인합니다.'}
+                {' · '}실제로 등록된 공개 자료 {counts.public}건
               </p>
             </div>
             <div
@@ -1275,12 +1277,8 @@ export function SourceSelectionView({
             ) : (
               <ul className="flex flex-col gap-2.5">
                 {(tab === 'public'
-                  ? work.sources.filter(
-                      (s) =>
-                        s.source_id.startsWith('src-pub-') ||
-                        s.warnings?.some((w) =>
-                          w.message.includes('공개 데이터'),
-                        ),
+                  ? work.sources.filter((s) =>
+                      s.warnings?.some((w) => w.code === 'PUBLIC_OPEN_DATA'),
                     )
                   : tab === 'registered'
                     ? work.sources.filter((s) => s.scope === 'registered')
@@ -1439,7 +1437,8 @@ export function SourceSelectionView({
               {!!work.session && !readable && (
                 <p className="mt-3 flex items-start gap-1.5 rounded-xl bg-amber-50 p-3 leading-relaxed text-amber-900">
                   <AlertTriangle size={14} className="mt-0.5 shrink-0" />
-                  초안을 만들려면 텍스트를 읽을 수 있는 문서를 선택해야 합니다.
+                  등록 자료 없이도 공개 연동 자료나 이번 작업 첨부의 읽기 완료된
+                  텍스트를 선택하면 AI 자료 점검을 실행할 수 있습니다.
                   사진만으로는 회사 내용을 작성할 수 없습니다.
                 </p>
               )}
@@ -1566,6 +1565,7 @@ export function SourceSelectionView({
         key={currentCompany + String(companyModalOpen)}
         isOpen={companyModalOpen}
         currentCompany={currentCompany}
+        currentCorpCode={work.brief.dart_corp_code || undefined}
         onClose={onCompanyModalClose}
         onConfirm={work.changeCompany}
         disabled={locked}
