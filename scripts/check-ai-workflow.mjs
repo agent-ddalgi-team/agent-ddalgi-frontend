@@ -271,6 +271,8 @@ assert(
   '--docx requires isolated mock --publication',
 )
 const impactTrial = process.argv.includes('--impact')
+const supplementRequiredTrial = process.argv.includes('--supplement-required')
+assert(!supplementRequiredTrial || impactTrial, '--supplement-required requires --impact')
 assert(
   !impactTrial || (publication && !live),
   '--impact requires isolated mock --publication',
@@ -324,7 +326,16 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms))
 async function until(check, label, timeout = 25000) {
   const end = Date.now() + timeout
   while (Date.now() < end) {
-    if (await check()) return
+    try {
+      if (await check()) return
+    } catch (cause) {
+      // A reload can destroy the context while a readiness read is pending.
+      // Only polling retries; clicks, POSTs and unrelated CDP errors still fail.
+      if (
+        cause?.code !== -32000 ||
+        !/^(Inspected target navigated or closed|Execution context was destroyed|Cannot find context with specified id)/i.test(cause.message || '')
+      ) throw cause
+    }
     await delay(120)
   }
   throw new Error(`Timeout: ${label}`)
@@ -1624,7 +1635,8 @@ finally:
         'source changes enabled after saved edits',
       )
       await click('자료 변경 시작')
-      await upload('impact-replacement.txt', fixture)
+      await upload('impact-replacement.txt', fixture + (supplementRequiredTrial
+        ? '대응 범위: 알루미늄 시험시편의 최대 가공 길이는 200mm입니다.\n' : ''))
       await until(
         () =>
           has('input[aria-label="impact-replacement.txt 선택"]:not(:disabled)'),
@@ -1655,6 +1667,25 @@ finally:
         async () => !(await has('[data-testid=preflight-result]')),
         'previous preflight invalidated',
       )
+      if (supplementRequiredTrial) {
+        // Test setup only: require the newly supplied field through the real inputs API.
+        // Reanalysis, C-05 choices, insertion and validation below use the actual UI.
+        const session = await evaluate(`fetch('/api/v1/sessions/${sessionId}').then(r=>r.json())`)
+        assert.equal(await evaluate(`fetch('/api/v1/sessions/${sessionId}/inputs', {
+          method:'PATCH',headers:{'Content-Type':'application/json','Idempotency-Key':crypto.randomUUID()},
+          body:JSON.stringify(${JSON.stringify({expected_input_revision:session.input_revision,brief:{...session.brief,required_fields:['capabilities']}})})
+        }).then(r=>r.status)`),200)
+        await reload()
+        await until(()=>has('[data-testid=impact-review]'),'supplement document restored after setup')
+        await screen(1)
+        await evaluate("[...document.querySelectorAll('[role=\"tab\"]')].find(t=>t.textContent.includes(\"이번 작업 첨부\")).click()")
+        await until(()=>has('input[aria-label="impact-replacement.txt 선택"]'),'supplement session restored after setup')
+        await screen(2)
+        await until(()=>has(`textarea[data-edit-block="${paragraph.block_id}"]`),'supplement manuscript restored after setup')
+        await screen(1)
+        await until(()=>evaluate(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='자료 변경 시작'&&!b.disabled)`),'supplement source editing restored after setup')
+        await click('자료 변경 시작')
+      }
       assert.equal(
         await evaluate(
           `document.querySelector('textarea[data-edit-block="${paragraph.block_id}"]').value`,
@@ -1886,7 +1917,7 @@ finally:
           )),
         'applied review restored by GET',
       )
-      const afterImpact = await documentState()
+      let afterImpact = await documentState()
       assert.equal(
         afterImpact.document.document_revision,
         beforeImpact.document.document_revision + 1,
@@ -1925,7 +1956,7 @@ finally:
       prepared = afterImpact
       await until(async () => {
         const checked = (await documentState()).validation
-        return checked && ['passed', 'needs_review'].includes(checked.status)
+        return checked && ['passed', 'needs_review', ...(supplementRequiredTrial ? ['failed'] : [])].includes(checked.status)
       }, 'impact full validation')
       const impactValidation = (await documentState()).validation
       assert.equal(
@@ -1944,6 +1975,40 @@ finally:
             .map((b) => b.block_id),
         ),
       )
+      if (supplementRequiredTrial) {
+        const added = latest.facts.find(f=>f.field_key==='capabilities'&&f.status==='supported')
+        assert.ok(added)
+        assert.ok(!oldPf.facts.some(f=>f.field_key==='capabilities'&&f.status==='supported'))
+        assert.equal(impactValidation.status,'failed')
+        await screen(3)
+        await until(()=>has(`[data-required-fact="${added.fact_id}"]`),'supplement required fact available in validation UI')
+        const before = await documentState()
+        const generationCalls = posts('preflights').length + posts('drafts').length
+        await evaluate(`document.querySelector('[data-required-fact="${added.fact_id}"]').click()`)
+        assert.ok(await evaluate(`document.querySelector('[data-required-insert-submit]').disabled`))
+        const selectedPage = before.document.pages[1]
+        await evaluate(`(()=>{const s=document.querySelector('[data-required-page]');s.value='${selectedPage.page_id}';s.dispatchEvent(new Event('change',{bubbles:true}))})()`)
+        await until(()=>has('[data-required-insert-submit]:enabled'),'supplement explicit insertion ready')
+        await evaluate(`document.querySelector('[data-required-insert-submit]').click()`)
+        await until(async()=>{const out=await documentState();return out.document.document_revision===before.document.document_revision+1&&out.validation?.document_revision===out.document.document_revision&&['passed','needs_review'].includes(out.validation.status)},'supplement inserted and actual server blocker cleared')
+        await idle()
+        afterImpact = await documentState()
+        const inserted = afterImpact.document.pages.flatMap(p=>p.blocks).filter(b=>b.fact_ids.includes(added.fact_id))
+        assert.equal(inserted.length,1)
+        assert.equal(inserted[0].content.text,added.value)
+        assert.deepEqual(inserted[0].evidence_refs,added.evidence_refs)
+        assert.equal(afterImpact.document.document_id,before.document.document_id)
+        const addedIssues = await evaluate(`fetch(${JSON.stringify(route)}+'/issues').then(r=>r.json())`)
+        assert.equal(addedIssues.issues.some(i=>i.status==='open'&&i.severity==='blocker'),false)
+        for (const page of before.document.pages)
+          assert.deepEqual(afterImpact.document.pages.find(p=>p.page_id===page.page_id).blocks.filter(b=>b.block_id!==inserted[0].block_id),page.blocks)
+        assert.equal(posts('preflights').length+posts('drafts').length,generationCalls)
+        await reload()
+        await screen(3)
+        await until(()=>has('[data-testid=draft-result]'),'supplement insertion reload')
+        assert.equal(await has(`[data-required-fact="${added.fact_id}"]`),false)
+        checks.push('new required scope from supplemental source: C-05 preserves manuscript and binds current evidence; real missing blocker exposes explicit fact/page insertion; one saved revision clears server blocker and preserves warnings; reload prevents duplicate; no re-extraction or regeneration')
+      }
       await click('문서 상태 새로고침')
       // Normal apply responses must also connect and poll their returned full-validation job.
       const lastValidation = impactValidation.validation_id

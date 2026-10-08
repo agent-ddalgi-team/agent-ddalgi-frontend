@@ -1,11 +1,11 @@
 # agent-ddalgi-frontend
 
-## 현재 PC의 연동·인계 상태 (2026-10-06)
+## 현재 PC의 연동·인계 상태 (2026-10-08)
 
-현재 작업본은 `C:\frontend`의 `develop`이며 백엔드는 `C:\backend`의 `test`다. 백엔드 API 계약1.9·데이터 형식1.0·DB v11·출력 template_v10을 기준으로 사용한다. 계약 원본은 `C:\backend\contracts.md`, 검사 근거는 `C:\backend\task_backend.md`다. 이 프론트 저장소에 계약 문서 사본을 새로 생성하지 않았으며 원격 공유·병합은 별도다.
+현재 작업본은 `C:\final\frontend`의 `test/supplement-required-ui-20261008`이며 백엔드는 `C:\final\backend`의 `eval/customer-purpose-quality-20261008`이다. 백엔드 API 계약1.9·데이터 형식1.0·DB v11·출력 template_v11을 기준으로 사용한다. 계약 원본은 `C:\final\backend\contracts.md`, 검사 근거는 `C:\final\backend\task_backend.md`다. 이 프론트 저장소에 계약 문서 사본을 새로 생성하지 않았으며 현재 작업 브랜치의 원격 공유·병합은 별도다.
 
 ```powershell
-Set-Location C:\frontend
+Set-Location C:\final\frontend
 npm run dev -- --host 127.0.0.1
 ```
 
@@ -14,11 +14,19 @@ npm run dev -- --host 127.0.0.1
 - 출력/승인: PDF·DOCX를 지원한다. `approvals_by_format`이 있으면 선택 형식의 active 승인을 조회하며 없는 구버전 응답은 기존 `approval`을 사용한다. 문서·입력·검증·배치 버전이 맞아야 승인/출력 가능하다. DOCX 실제 배치는 백엔드 LibreOffice 기준이며 Word의 글꼴/쪽 나눔은 다를 수 있다.
 - 자료 변경 후 복귀(C-05): 최신 점검과 사용자 확인 후 영향 목록을 조회한다. 사용자가 지정한 편집/삭제와 최신 근거, 유지 사유를 적용하고 반환된 전체 검증Job을 확인한다. 입력 변경만으로 기존 본문을 자동 재생성하지 않는다.
 
-현재 백엔드 시연 DB 실행과40만자 검증 기본값은 `C:\backend\README.md`의 실행 안내를 따른다. 고객용8쪽·품질용9쪽의 실제 시연 검수 결과와 유효기간은 백엔드 기록을 따른다. 다른 PC에 시연 DB나 승인 파일이 자동 전달되지는 않는다.
+현재 백엔드 시연 DB 실행과40만자 검증 기본값은 `C:\final\backend\README.md`의 실행 안내를 따른다. 고객용8쪽·품질용9쪽의 실제 시연 검수 결과와 유효기간은 백엔드 기록을 따른다. 다른 PC에 시연 DB나 승인 파일이 자동 전달되지는 않는다.
 
-이번 인계 확인에서 `npm run build`(TypeScript/Vite)와 `AI_CHECK_LIVE=0`의 `node scripts/check-ai-workflow.mjs --screen-preview`가 통과했다. 후자는 세 화면·편집/저장·새로고침 보존·가상 검사/승인·출력 제한·백엔드 API 호출0·일반 저장 공간 보존을 확인했다. 이번 검사는 새 실제 AI/PDF/DOCX 화면 검수를 뜻하지 않는다.
+2026-10-06 인계 확인에서 `npm run build`(TypeScript/Vite)와 `AI_CHECK_LIVE=0`의 `node scripts/check-ai-workflow.mjs --screen-preview`가 통과했다. 후자는 세 화면·편집/저장·새로고침 보존·가상 검사/승인·출력 제한·백엔드 API 호출0·일반 저장 공간 보존을 확인했다. 그 검사는 새 실제 AI/PDF/DOCX 화면 검수를 뜻하지 않는다.
 
 가상 미리보기 관련 코드10개는 후속 요청으로 검토·검사한 뒤 로컬 커밋으로 정리했다. `.claude/`는 포함하지 않았다. 변경 TypeScript 파일9개 ESLint와 검사 스크립트 구문 검사 통과. 기존 일반 저장값4개를 미리 넣은 미리보기 검사는 해당 값의 보존과 백엔드 API 호출0을 확인했다. 별도 임시DB/mock AI의 `--publication --photos --impact --docx` 검사도 통과했다(실제 LibreOffice DOCX4쪽·52,542바이트). 넘침 승인 차단·사진 제거 후 정상 배치·C-05 복귀·형식별 동의·잘못된 MIME 거부·동일 바이트 재다운로드·편집 후 옛 승인 차단·종료 정리를 확인했다. 최신150ppi 사진 크기 정책에 맞게 DOCX 넘침용 가상 사진만1600×1000픽셀로 보완했으며 제품의 차단 조건은 유지했다. 유료 AI나 기존 시연DB는 사용하지 않았다. 로컬 커밋과 원격 공유·릴리스 완료는 구분한다. 아래 날짜별 설명은 당시 구현/검사 기록이며 현재 사용법은 이 절을 따른다.
+
+### 현재 작업 브랜치의 오류 복구 최종 확인 (2026-10-08)
+
+`AI_CHECK_BACKEND=C:/final/backend`, `AI_CHECK_LIVE=0`에서 `node scripts/check-ai-workflow.mjs --publication --impact --supplement-required --photos --required-insert`와 같은 명령의 `--docx`를 확인했다. 격리 DB·실제 브라우저/API·가상 AI의 PDF36묶음/DOCX39묶음이 각각 통과했다. 응답 유실·새로고침·멱등 복구, 편집 보존, 보완 근거 적용/필수 내용 추가, 사진 수정, 버전 충돌, 넘침 승인 차단, 승인 후 편집에 따른 무효화, 동일 파일 재다운로드·세션 정리를 포함한다. 최종 PDF4쪽/27,426바이트, 실제 LibreOffice DOCX4쪽/2,410,968바이트다. 공통 시나리오는 중복 합산하지 않으며 이 가상 AI 검사는 실제 모델 의미 품질 시험과 구분한다.
+
+첫 PDF 검사는 새로고침 중 CDP 읽기 요청의 `Inspected target navigated or closed`로 중단됐다. 검사 도구의 상태 대기만 해당 오류/실행 컨텍스트 소멸을 기존 제한 시간 안에서 다시 확인하도록 보완했다. 클릭·POST를 재실행하지 않으며 다른 CDP 오류는 실패한다. 일시 읽기 복구/다른 오류 즉시 실패/다른 오류 코드 실패/지속 오류 시간 제한의4조건도 별도 확인했다. 제품 코드·환경 파일·시연 DB는 변경하지 않았다. TypeScript/Vite build·검사 스크립트 ESLint/구문 검사를 통과했고 기존 JS507.48kB 청크 경고는 유지된다.
+
+실제 사용에서는 필수 누락은 원문과 연결된 사실을 확인해 본문에 추가하거나 자료를 보완한다. 실제 충돌은 후보 근거를 비교해 자료를 명시 선택·재점검하고 기존 문서의 변경 영향 반영을 마친다. 의미상 반복 경고는 편집 화면에서 문구를 정리·저장한 뒤 내용 검증을 다시 실행한다. 진행 결과가 끊겼으면 상태 확인/표시된 재시도 버튼을 사용하며 새 AI 점검을 무조건 반복하지 않는다. 필수 문제를 단순 확인·제외로 통과시키거나 미확인 회사 사실을 자동 확정하지 않는다. 실제 AI 결과의 문장/추가 인용과 새로운 자료의 품질 변동은 남으며, 원문 사실 자체가 부족한 경우에는 사용자 자료 보완이 필요하다.
 
 
 ## 실제 백엔드 연결 고정 (2026-10-01)
@@ -277,3 +285,11 @@ build·ESLint·격리 --publication --required-insert 28묶음/PDF4쪽 통과. �
 통합 후 build·전체 ESLint 및 백엔드 내용검증 98건 통과. 최종 PDF 통합 36묶음/4쪽 승인·다운로드 통과(Temp ddalgi-ai-ui-kCq9Ef). 기존 500kB 청크 경고는 유지한다. 원본 시연 DB·API 키는 변경하거나 커밋하지 않았다.
 
 최종 DOCX도 실제 API 우회 없이 35묶음/4쪽 승인·다운로드 통과(Temp ddalgi-ai-ui-liz3Ok). 중간 실행의 화면 복원 실패는 최종 통과와 구분하며, 재실행에서는 소스 변경 없이 완료했다.
+
+### 2026-10-08 보완 적용 후 필수 사실 추가 잠금 복구
+
+자료 변경이 서버에 적용됐지만 응답이 유실되어 새로고침한 경우, 이전 boundPreflightId가 남아 추가·검사 버튼을 잠그는 문제를 수정했다. 조회한 영향 검토가 applied일 때 그 검토의 점검 ID도 복원한다. 같은 화면에서 이미 적용된 요청을 다시 확인하는 경로에도 동일하게 반영한다. 이후 새 점검이 있으면 ID 불일치 차단을 유지하며 사실 판정이나 승인을 자동 확정하지 않는다.
+
+`AI_CHECK_BACKEND=C:/final/backend`, `AI_CHECK_LIVE=0`에서 `node scripts/check-ai-workflow.mjs --publication --impact --supplement-required --photos --required-insert`와 같은 명령의 `--docx` 조합이 각각 실제 4쪽 승인·다운로드까지 통과했다. PDF는 Temp ddalgi-ai-ui-RpGeUm, DOCX는 ddalgi-ai-ui-z49PIe에 있다. build·변경 파일 ESLint·diff 검사 통과, 기존 500kB 청크 경고는 유지한다.
+
+새 검사는 격리 세션의 작성 조건에 대응 범위를 필수로 지정하는 준비 요청만 실제 inputs API로 수행한다. 보완 자료 선택·재점검·최신 근거 선택·적용 응답 유실·새로고침·누락 사실/페이지 선택·저장/재검증은 실제 화면에서 수행한다. 필수 오류 해소, 다른 경고 유지, 기존 문서ID/다른 블록/원문 근거 보존, 추가 단계의 재추출·재생성 없음과 중복 방지를 확인했다. 각 실행의 초안 요청은 1회다. 가상 AI의 화면/API 회귀이며 실제 LLM 의미 판단 품질 검사는 아니다. 원본 시연 DB·환경 설정·백엔드 API는 변경하지 않았다.
