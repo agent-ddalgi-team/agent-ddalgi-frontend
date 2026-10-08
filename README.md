@@ -258,3 +258,14 @@ build·ESLint·격리 --publication --required-insert 27묶음/PDF4쪽 통과. �
 서버 필수 누락 항목에서 확인된 단일 사실과 원문 근거가 연결된 본문은 현재/복구 문구를 비교하고 명시적으로 교체할 수 있다. 블록 전체 문구가 교체됨을 표시하며 근거와 다른 블록은 보존한다. 여러 사실·미확인 사실·사진·목록은 자동 교체 후보로 제공하지 않는다.
 
 build·ESLint·격리 --publication --required-insert 28묶음/PDF4쪽 통과. 실제 임시 문서의 본문을 축약한 뒤 화면 복구·동일 키 저장 재시도·1회 적용·재검증 문제 해소·다른 문구/근거 보존·새로고침을 확인했다. 실제 모델 품질·운영 DB 시험은 아니며 기존 청크 크기 경고는 유지된다.
+
+### 2026-10-08 복구 흐름 통합 회귀
+
+격리 mock 서버에서 PDF 전체 조합36묶음과 DOCX35묶음이 각각4쪽 승인/다운로드까지 통과했다. 자료 교체·제외·사진·저장 후 검사·필수 사실 추가/복구의 기존 회귀를 함께 실행했다. 넘침 fixture는 앞선 본문 변경량에 의존하지 않도록 선택 사진 반복 블록을 추가한 뒤 편집 UI로 삭제한다. 최초 통합 실패는 기존 넘침 가정과 시험 함수 범위 문제였으며 제품 판정 기준은 바꾸지 않았다.
+
+재현: AI_CHECK_BACKEND=C:/final/backend, AI_CHECK_LIVE=0 환경에서 다음 명령을 각각 실행한다. 임시 DB만 사용하며 실제 모델 품질 시험은 아니다.
+
+- PDF: node scripts/check-ai-workflow.mjs --publication --impact --photos --unused-review --unused-review-lost --save-review --save-review-lost-validate --required-insert
+- DOCX: node scripts/check-ai-workflow.mjs --publication --photos --required-insert --docx
+
+백엔드 선택 회귀7건도 통과했다. 중복 검사 수를 합산하지 않는다. 남은 범위는 실제 자료/LLM 품질과 다중 사실·제목·목록의 직접 편집 경로이며 모든 오류가 자동 해결된다는 뜻은 아니다.

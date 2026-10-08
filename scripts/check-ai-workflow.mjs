@@ -3075,8 +3075,18 @@ finally:
     }
     assert.equal((await documentState()).validation.status, 'passed')
     if (photoTrial) {
-      // The earlier photo-proposal scenario leaves two tall images on the cover.
-      // Verify overflow blocks approval, then explicitly remove the old image.
+      // Make overflow independent of earlier text deletion/insertion scenarios.
+      // Repeat a valid selected image, then remove these test blocks through the UI.
+      const beforeOverflow = await documentState()
+      const overflowPage = beforeOverflow.document.pages.find(p=>p.blocks.some(b=>b.type==='image'))
+      const overflowImage = overflowPage.blocks.find(b=>b.type==='image')
+      const overflowIds = ['overflow_fixture_1','overflow_fixture_2','overflow_fixture_3']
+      const overflowOps = overflowIds.map(block_id=>({op:'insert_block',page_id:overflowPage.page_id,
+        after_block_id:overflowImage.block_id,block:{...overflowImage,block_id}}))
+      assert.equal(await evaluate(`fetch(${JSON.stringify(route)},{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(${JSON.stringify({expected_revision:beforeOverflow.document.document_revision,operations:overflowOps})})}).then(r=>r.status)`),200)
+      await until(()=>evaluate(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='문서 상태 새로고침'&&!b.disabled)`),'overflow refresh ready')
+      await click('문서 상태 새로고침')
+      await until(()=>evaluate(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='PDF 배치 검사'&&!b.disabled)`),'overflow document ready')
       if (docxTrial)
         await evaluate(
           `document.querySelector('button[aria-label="DOCX 출력 선택"]').click()`,
@@ -3101,10 +3111,12 @@ finally:
         .flatMap((p) => p.blocks)
         .filter((b) => b.type === 'image')
       assert.ok(images.length >= 2)
-      await editorPage(images[0].block_id)
-      await evaluate(
-        `(()=>{const b=[...document.querySelectorAll('[data-block-id="${images[0].block_id}"] button')].find(b=>b.textContent.includes('삭제'));b.click()})()`,
-      )
+      for (const blockId of [images[0].block_id, ...overflowIds]) {
+        await editorPage(blockId)
+        await evaluate(
+          `(()=>{const b=[...document.querySelectorAll('[data-block-id="${blockId}"] button')].find(b=>b.textContent.includes('삭제'));b.click()})()`,
+        )
+      }
       await click('문구 저장')
       await idle()
       await screen(3)
