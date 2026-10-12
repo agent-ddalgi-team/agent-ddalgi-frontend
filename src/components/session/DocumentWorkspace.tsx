@@ -79,6 +79,38 @@ const isText = (block: DraftBlock | undefined) =>
 const isPhoto = (block: DraftBlock | undefined) =>
   !!block && ['image', 'image_placeholder'].includes(block.type)
 
+function getWarningReasonTemplates(code: string): string[] {
+  switch (code) {
+    case 'PHOTO_SHORTAGE':
+      return [
+        '기본 이미지로 대체 확인',
+        '발행 후 별도 보완 예정',
+        '원자료 내 실사 사진 부재 확인',
+      ]
+    case 'REPETITION':
+      return [
+        '강조 목적의 의도적 반복 확인',
+        '문맥 흐름상 자연스러움 확인',
+      ]
+    case 'PLACEHOLDER_TEXT':
+      return [
+        '의도된 안내 문구 확인',
+        '내용 검토 완료 후 유지',
+      ]
+    case 'DEMO_VALUE':
+      return [
+        '시연용 예시 데이터 확인',
+        '실제 값 대체 전 임시 승인',
+      ]
+    default:
+      return [
+        '내용 검토 완료 및 이상 없음',
+        '현행 유지 확인',
+      ]
+  }
+}
+
+
 function ManuscriptInput(props: ComponentProps<'textarea'>) {
   const ref = useRef<HTMLTextAreaElement>(null)
   useLayoutEffect(() => {
@@ -261,6 +293,48 @@ export function DocumentWorkspace({
     })
   }
 
+  const [editsCopied, setEditsCopied] = useState(false)
+  const copyMyEdits = () => {
+    const editedBlockIds = Object.keys(work.edits)
+    if (editedBlockIds.length === 0) {
+      const fullText = doc.pages
+        .map(
+          (p, pIdx) =>
+            `[${pIdx + 1}쪽: ${p.title}]\n` +
+            p.blocks.map((b) => blockText(b)).join('\n'),
+        )
+        .join('\n\n')
+      void navigator.clipboard
+        .writeText(`=== 내 작성 문서 전체 텍스트 백업 ===\n\n${fullText}`)
+        .then(() => {
+          setEditsCopied(true)
+          setTimeout(() => setEditsCopied(false), 3000)
+        })
+      return
+    }
+
+    const lines = [
+      `=== 내가 수정한 블록 문구 백업 (총 ${editedBlockIds.length}개 블록) ===`,
+      ...editedBlockIds.map((bId) => {
+        const pageIdx = doc.pages.findIndex((p) =>
+          p.blocks.some((b) => b.block_id === bId),
+        )
+        const block = doc.pages
+          .flatMap((p) => p.blocks)
+          .find((b) => b.block_id === bId)
+        return `\n[${pageIdx >= 0 ? `${pageIdx + 1}쪽 ` : ''}${block ? blockLabel[block.type] : '블록'}]\n${work.edits[bId]}`
+      }),
+    ]
+    if (work.removed.length > 0) {
+      lines.push(`\n[삭제 표시한 블록 ID]: ${work.removed.join(', ')}`)
+    }
+
+    void navigator.clipboard.writeText(lines.join('\n')).then(() => {
+      setEditsCopied(true)
+      setTimeout(() => setEditsCopied(false), 3000)
+    })
+  }
+
   const assetUrl = (id: string) => screenAssetUrl(doc.session_id, id)
   const selectPage = (index: number) => {
     setPageIndex(index)
@@ -292,6 +366,58 @@ export function DocumentWorkspace({
         doc.pages[index]?.blocks.some((b) => b.block_id === id),
       ),
     )
+
+  // 🌟 발표 시연 및 편집 편의 단축키 리스너 (Ctrl+S 저장, Arrow 좌우 넘김, ESC 닫기)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // 1. Ctrl+S 또는 Cmd+S: 초안 저장
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault()
+        if (step === 2 && work.dirty && !work.blocked && !work.impactRequired) {
+          void work.save()
+        }
+        return
+      }
+
+      // 2. ESC: 모달/인스펙터 닫기
+      if (e.key === 'Escape') {
+        if (discard) {
+          setDiscard(false)
+          return
+        }
+        if (inspector) {
+          setInspector(false)
+          return
+        }
+      }
+
+      // 3. 텍스트 입력창 포커스 중일 때는 방향키 넘김 무시
+      const activeEl = document.activeElement
+      const isInput =
+        activeEl instanceof HTMLInputElement ||
+        activeEl instanceof HTMLTextAreaElement ||
+        activeEl?.getAttribute('contenteditable') === 'true'
+
+      if (isInput) return
+
+      // 4. 좌/우 방향키: 페이지 넘기기
+      if (step === 2 || step === 3) {
+        if (e.key === 'ArrowLeft') {
+          if (pageIndex > 0) {
+            selectPage(pageIndex - 1)
+          }
+        } else if (e.key === 'ArrowRight') {
+          if (pageIndex < doc.pages.length - 1) {
+            selectPage(pageIndex + 1)
+          }
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [step, work.dirty, work.blocked, work.impactRequired, discard, inspector, pageIndex, doc.pages.length])
+
   const proposalStatus = {
     proposed: '검토 대기',
     applied: '적용됨',
@@ -694,13 +820,23 @@ export function DocumentWorkspace({
                 </p>
               ))}
           </details>
-          <button
-            type="button"
-            className={`${button} mt-3`}
-            onClick={() => setDiscard(true)}
-          >
-            내 편집을 버리고 최신 저장본 불러오기
-          </button>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              className={button}
+              onClick={copyMyEdits}
+            >
+              <Copy className="h-3.5 w-3.5 text-[#007A78]" />
+              {editsCopied ? '내 편집 내용 복사됨!' : '내 편집 내용 클립보드 복사'}
+            </button>
+            <button
+              type="button"
+              className={button}
+              onClick={() => setDiscard(true)}
+            >
+              내 편집을 버리고 최신 저장본 불러오기
+            </button>
+          </div>
         </Banner>
       )}
     </>
@@ -911,6 +1047,11 @@ export function DocumentWorkspace({
                 </h2>
                 <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700">
                   {doc.pages.length}쪽 중 {currentIndex + 1}쪽
+                  {doc.pages.length !== doc.target_pages && (
+                    <span className="ml-1 text-[10px] font-normal text-blue-500">
+                      (목표 {doc.target_pages}쪽)
+                    </span>
+                  )}
                 </span>
               </div>
             </div>
@@ -1708,19 +1849,34 @@ export function DocumentWorkspace({
                 </p>
               </section>
             )}
+
+            {!selectedBlock && (
+              <section className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-200 bg-slate-50/60 p-6 text-center text-xs text-slate-500">
+                <FileText className="h-6 w-6 text-slate-400" />
+                <p className="font-semibold text-slate-700">선택된 블록이 없습니다</p>
+                <p className="text-[11px] text-slate-400">
+                  본문에서 편집하거나 원문 근거를 확인할 문장·사진을 클릭해 주세요.
+                </p>
+              </section>
+            )}
           </aside>
         </div>
+
 
         <footer className="screen-dock">
           <button type="button" className={ghost} onClick={() => navigate(1)}>
             <ArrowLeft size={16} />
             자료 선택
           </button>
-          <p className="dock-hint flex items-center justify-center gap-1.5">
-            <Lightbulb className="h-4 w-4 text-[#007A78]" />
-            AI 제안은 적용 버튼을 눌러야 본문에 반영돼요. 편집 내용은 직접
-            저장해 주세요.
+          <p className="dock-hint flex flex-wrap items-center justify-center gap-1.5 text-[11px] sm:text-xs">
+            <Lightbulb className="h-4 w-4 text-[#007A78] shrink-0" />
+            <span>AI 제안은 적용 버튼을 눌러야 반영돼요.</span>
+            <span className="hidden lg:inline text-slate-400">·</span>
+            <span className="hidden lg:inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-mono text-slate-600">
+              단축키: Ctrl+S 저장 · ←/→ 페이지
+            </span>
           </p>
+
           {work.emptyPageCount > 0 && (
             <button
               type="button"
@@ -1839,11 +1995,20 @@ export function DocumentWorkspace({
                   추천
                 </span>
               </div>
-              <div className="flex items-center gap-2 text-[11px] text-slate-500">
-                <span>
+              <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                <span className="flex items-center gap-1.5 font-medium">
                   {previews.length
                     ? `검사한 ${work.formatLabel} · ${layout?.actual_pages ?? previews.length}쪽`
                     : `구성 미리보기 · ${doc.pages.length}쪽 · ${work.formatLabel} 배치 검사 전`}
+                  {(layout?.actual_pages ?? doc.pages.length) !== doc.target_pages && (
+                    <span
+                      className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-800"
+                      title={`목표 ${doc.target_pages}쪽 대비 내용 분량과 사진 배치 기준에 맞추어 실제 쪽수가 자동 조정되었습니다.`}
+                    >
+                      <Info className="h-3 w-3 text-amber-600" />
+                      목표 {doc.target_pages}쪽과 다름
+                    </span>
+                  )}
                 </span>
                 <button
                   type="button"
@@ -1863,6 +2028,25 @@ export function DocumentWorkspace({
                 </button>
               </div>
             </div>
+
+            {(layout?.actual_pages ?? doc.pages.length) !== doc.target_pages && (
+              <div className="mb-3 flex items-start justify-between gap-3 rounded-xl border border-teal-200 bg-teal-50/70 p-3 text-xs text-teal-950 shadow-2xs">
+                <div className="flex items-start gap-2">
+                  <Info className="mt-0.5 h-4 w-4 shrink-0 text-[#007A78]" />
+                  <div>
+                    <p className="font-bold text-[#007A78]">
+                      페이지 수 자동 최적화 안내 (목표 {doc.target_pages}쪽 → 실제 {layout?.actual_pages ?? doc.pages.length}쪽)
+                    </p>
+                    <p className="mt-0.5 text-[11px] leading-relaxed text-slate-600">
+                      원자료의 필수 기술·공정 내용과 사진 배치가 겹치거나 축소 왜곡되지 않도록 AI 레이아웃 엔진이 가독성을 최우선으로 고려하여 분량을 안전하게 자동 분할했습니다.
+                    </p>
+                  </div>
+                </div>
+                <span className="shrink-0 rounded-full border border-teal-100 bg-white px-2 py-0.5 text-[10px] font-bold text-[#007A78] shadow-2xs">
+                  자동 분할 적용됨
+                </span>
+              </div>
+            )}
 
             {view === 'cards' ? (
               <div className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -2475,38 +2659,65 @@ export function DocumentWorkspace({
                       </p>
                     )}
                     {canAcknowledge(issue, initial.demo) && (
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        <input
-                          className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs"
-                          aria-label={`경고 확인 사유 ${issue.issue_id}`}
-                          placeholder="경고를 확인한 사유를 입력하세요"
-                          value={reasons[issue.issue_id] || ''}
-                          disabled={work.actionBlocked}
-                          onChange={(e) =>
-                            setReasons((old) => ({
-                              ...old,
-                              [issue.issue_id]: e.target.value,
-                            }))
-                          }
-                        />
-                        <button
-                          type="button"
-                          className={button}
-                          disabled={
-                            work.actionBlocked ||
-                            !validation ||
-                            ['pending', 'failed'].includes(validation.status) ||
-                            !reasons[issue.issue_id]?.trim()
-                          }
-                          onClick={() =>
-                            void work.acknowledge(
-                              issue,
-                              reasons[issue.issue_id],
-                            )
-                          }
-                        >
-                          경고 확인 기록
-                        </button>
+                      <div className="mt-2.5 flex flex-col gap-2 rounded-xl border border-slate-200 bg-slate-50/80 p-2.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-[11px] font-semibold text-slate-500">
+                            빠른 사유 선택:
+                          </span>
+                          {getWarningReasonTemplates(issue.code).map((tmpl) => (
+                            <button
+                              key={tmpl}
+                              type="button"
+                              disabled={work.actionBlocked}
+                              className={`rounded-lg border px-2 py-0.5 text-[11px] font-medium transition-all ${
+                                reasons[issue.issue_id] === tmpl
+                                  ? 'border-[#007A78] bg-teal-100 text-[#007A78] shadow-xs'
+                                  : 'border-slate-200 bg-white text-slate-700 hover:border-teal-300 hover:bg-teal-50 hover:text-[#007A78]'
+                              } disabled:cursor-not-allowed disabled:opacity-50`}
+                              onClick={() =>
+                                setReasons((old) => ({
+                                  ...old,
+                                  [issue.issue_id]: tmpl,
+                                }))
+                              }
+                            >
+                              {tmpl}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <input
+                            className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 placeholder:text-slate-400 focus:border-[#007A78] focus:outline-none"
+                            aria-label={`경고 확인 사유 ${issue.issue_id}`}
+                            placeholder="사유를 직접 입력하거나 위 추천 사유를 선택하세요"
+                            value={reasons[issue.issue_id] || ''}
+                            disabled={work.actionBlocked}
+                            onChange={(e) =>
+                              setReasons((old) => ({
+                                ...old,
+                                [issue.issue_id]: e.target.value,
+                              }))
+                            }
+                          />
+                          <button
+                            type="button"
+                            className={button}
+                            disabled={
+                              work.actionBlocked ||
+                              !validation ||
+                              ['pending', 'failed'].includes(validation.status) ||
+                              !reasons[issue.issue_id]?.trim()
+                            }
+                            onClick={() =>
+                              void work.acknowledge(
+                                issue,
+                                reasons[issue.issue_id],
+                              )
+                            }
+                          >
+                            경고 확인 기록
+                          </button>
+                        </div>
                       </div>
                     )}
                   </article>
@@ -2644,11 +2855,20 @@ export function DocumentWorkspace({
             aria-label="미저장 편집 취소"
             className="max-w-md rounded-2xl bg-white p-6 shadow-xl"
           >
-            <h3 className="font-bold">작성 중인 문구를 버릴까요?</h3>
+            <h3 className="font-bold text-slate-900">작성 중인 문구를 버릴까요?</h3>
             <p className="mt-3 text-sm text-slate-600">
-              현재 편집란의 미저장 변경을 지우고 최신 서버 문서를 불러옵니다.
+              현재 편집란의 미저장 변경({Object.keys(work.edits).length}개 블록)을 지우고 최신 서버 문서를 불러옵니다.
+              불러오기 전에 작성 중이던 문구를 클립보드에 복사해 두시면 안전하게 다시 활용할 수 있습니다.
             </p>
-            <div className="mt-5 flex justify-end gap-2">
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                className={button}
+                onClick={copyMyEdits}
+              >
+                <Copy className="h-3.5 w-3.5 text-[#007A78]" />
+                {editsCopied ? '내 편집 복사됨!' : '내 편집 내용 먼저 복사'}
+              </button>
               <button
                 type="button"
                 className={button}

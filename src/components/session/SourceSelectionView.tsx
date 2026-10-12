@@ -363,7 +363,63 @@ export function SourceSelectionView({
     setTag('')
     setTagOpen(false)
   }
+  const [activePreset, setActivePreset] = useState<string | null>(null)
+  const applyDemoPreset = (type: 'quality' | 'process' | 'customer') => {
+    if (locked) return
+    setActivePreset(type)
+
+    let targetSources: WorkSource[] = []
+    let patchBrief: Partial<SourceBrief> = {}
+
+    if (type === 'quality') {
+      targetSources = work.sources.filter((s) =>
+        /인증|AS9100|ISO|품질|성적서|개요|소개/i.test(s.name),
+      )
+      if (targetSources.length < 3) {
+        targetSources = work.sources.slice(0, 4)
+      }
+      patchBrief = {
+        purpose: '회사 역량 및 품질 소개',
+        direction: 'quality_process',
+        target_pages: 4,
+        photo_preference: 'balanced',
+      }
+    } else if (type === 'process') {
+      targetSources = work.sources.filter((s) =>
+        /공정|설비|카다로그|카달로그|기술|사진|소재|FACILITY|LAB/i.test(s.name),
+      )
+      if (targetSources.length < 3) {
+        targetSources = work.sources.slice(0, 4)
+      }
+      patchBrief = {
+        purpose: '신규 고객 소개 (표준 제안용)',
+        direction: 'balanced',
+        target_pages: 4,
+        photo_preference: 'many',
+      }
+    } else {
+      targetSources = work.sources.filter((s) =>
+        /개요|소개|납품|실적|사례|납기|FAQ|브로셔/i.test(s.name),
+      )
+      if (targetSources.length < 3) {
+        targetSources = work.sources.slice(0, 4)
+      }
+      patchBrief = {
+        purpose: '협력사 등록 및 제휴 제안',
+        direction: 'customer_response',
+        target_pages: 4,
+        photo_preference: 'balanced',
+      }
+    }
+
+    setBrief(patchBrief)
+    if (targetSources.length > 0) {
+      void work.selectMultiple(targetSources, true)
+    }
+  }
+
   const suggestedPages = enrichedPreflight?.recommendations.suggested_pages
+
   const dockLabel = enrichedAi.preflight
     ? enrichedAi.confirmed
       ? '확인하고 초안 만들기'
@@ -385,9 +441,71 @@ export function SourceSelectionView({
       {work.error && (
         <div
           role="alert"
-          className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"
+          className="mb-6 rounded-2xl border border-rose-200/90 bg-gradient-to-br from-rose-50/95 via-white to-rose-50/80 p-5 text-rose-950 shadow-md shadow-rose-900/5 backdrop-blur-md"
         >
-          {work.error}
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex items-start gap-3.5">
+              <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-rose-500 to-rose-600 text-white shadow-xs shadow-rose-500/20">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-rose-950 sm:text-base">
+                    서버 연결 확인 필요
+                  </h3>
+                  <span className="rounded-md bg-rose-200/70 px-1.5 py-0.5 text-[10px] font-bold text-rose-900">
+                    오프라인
+                  </span>
+                </div>
+                <p className="mt-1 text-xs leading-relaxed text-rose-800">
+                  {work.error}
+                </p>
+                <div className="mt-2.5 rounded-xl border border-rose-200/60 bg-white/80 p-3 text-xs text-slate-700 shadow-2xs">
+                  <p className="font-semibold text-slate-900 flex items-center gap-1.5">
+                    <Sparkles className="h-3.5 w-3.5 text-[#007A78]" />
+                    시연 모드로 즉시 실행 가능합니다
+                  </p>
+                  <p className="mt-1 text-[11px] leading-relaxed text-slate-600">
+                    백엔드 서버(포트 8000)가 켜져 있지 않아도, 아래 <strong>[시연 모드로 즉시 전환]</strong> 버튼을 누르면 브라우저 자체 시연 엔진으로 자료 선택부터 초안 편집, 최종 승인 및 출력까지 모든 기능을 100% 끊김 없이 시연하실 수 있습니다.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex shrink-0 flex-wrap items-center gap-2 self-end sm:self-center">
+              <button
+                type="button"
+                onClick={() => {
+                  const url = new URL(window.location.href)
+                  url.searchParams.set('preview', '1')
+                  window.location.href = url.toString()
+                }}
+                className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-gradient-to-r from-[#007A78] to-[#0F766E] px-4 py-2.5 text-xs font-bold text-white shadow-sm transition-all hover:brightness-105 active:scale-[0.99]"
+              >
+                <Sparkles className="h-3.5 w-3.5 text-teal-200" />
+                시연 모드로 즉시 전환
+              </button>
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-700 shadow-2xs transition-colors hover:bg-slate-50"
+              >
+                <RefreshCw className="h-3.5 w-3.5 text-slate-600" />
+                다시 연결
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  sessionStorage.clear()
+                  window.location.reload()
+                }}
+                className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-500 shadow-2xs transition-colors hover:bg-slate-50"
+                title="로컬 세션 캐시 정리 후 새로고침"
+              >
+                캐시 초기화
+              </button>
+            </div>
+          </div>
         </div>
       )}
       <div
@@ -497,6 +615,104 @@ export function SourceSelectionView({
             )}
           </div>
         </div>
+
+        {/* 🌟 발표 시연용 원클릭 페르소나 프리셋 바 */}
+        <div className="flex flex-col gap-2.5 rounded-2xl border border-teal-200/80 bg-gradient-to-r from-slate-50 via-teal-50/50 to-slate-50 p-4 shadow-2xs backdrop-blur-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[#007A78] text-white shadow-2xs">
+                <Sparkles className="h-3.5 w-3.5" />
+              </span>
+              <span className="text-xs font-bold text-slate-900">
+                발표 시연 원클릭 프리셋
+              </span>
+              <span className="rounded-full bg-teal-100/90 px-2 py-0.5 text-[10px] font-bold text-[#007A78]">
+                Live Demo Presets
+              </span>
+            </div>
+            <span className="text-[11px] text-slate-500 hidden sm:inline">
+              클릭 한 번으로 최적의 자료 묶음과 작성 조건을 자동 설정합니다
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            {/* 프리셋 1: 품질 담당자 */}
+            <button
+              type="button"
+              onClick={() => applyDemoPreset('quality')}
+              disabled={locked}
+              className={`flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 text-left transition-all active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 ${
+                activePreset === 'quality'
+                  ? 'border-[#007A78] bg-white ring-2 ring-teal-200 shadow-xs'
+                  : 'border-slate-200 bg-white/90 hover:border-[#007A78]/50 hover:bg-white hover:shadow-2xs'
+              }`}
+            >
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 text-sm">
+                🏆
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-slate-900 truncate">품질 담당자 시나리오</p>
+                  <span className="text-[9px] font-bold rounded bg-emerald-100/70 text-emerald-800 px-1 py-0.2">인증·성적서</span>
+                </div>
+                <p className="mt-0.5 text-[10px] text-slate-500 truncate">
+                  AS9100/ISO 인증서 + 시험 규격 중심
+                </p>
+              </div>
+            </button>
+
+            {/* 프리셋 2: 생산기술 담당자 */}
+            <button
+              type="button"
+              onClick={() => applyDemoPreset('process')}
+              disabled={locked}
+              className={`flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 text-left transition-all active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 ${
+                activePreset === 'process'
+                  ? 'border-[#007A78] bg-white ring-2 ring-teal-200 shadow-xs'
+                  : 'border-slate-200 bg-white/90 hover:border-[#007A78]/50 hover:bg-white hover:shadow-2xs'
+              }`}
+            >
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-700 text-sm">
+                ⚙️
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-slate-900 truncate">생산기술 시나리오</p>
+                  <span className="text-[9px] font-bold rounded bg-blue-100/70 text-blue-800 px-1 py-0.2">공정·설비</span>
+                </div>
+                <p className="mt-0.5 text-[10px] text-slate-500 truncate">
+                  제품 카탈로그 + 7단계 공정 + 설비 사진
+                </p>
+              </div>
+            </button>
+
+            {/* 프리셋 3: 신규 고객 제안 */}
+            <button
+              type="button"
+              onClick={() => applyDemoPreset('customer')}
+              disabled={locked}
+              className={`flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 text-left transition-all active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 ${
+                activePreset === 'customer'
+                  ? 'border-[#007A78] bg-white ring-2 ring-teal-200 shadow-xs'
+                  : 'border-slate-200 bg-white/90 hover:border-[#007A78]/50 hover:bg-white hover:shadow-2xs'
+              }`}
+            >
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-700 text-sm">
+                🤝
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-slate-900 truncate">신규 고객 제안 시나리오</p>
+                  <span className="text-[9px] font-bold rounded bg-amber-100/70 text-amber-800 px-1 py-0.2">실적·브로셔</span>
+                </div>
+                <p className="mt-0.5 text-[10px] text-slate-500 truncate">
+                  기업개요 + 납품실적(납기 4~6일) + 표준 4쪽
+                </p>
+              </div>
+            </button>
+          </div>
+        </div>
+
 
         {/* 작업 종류·상태 줄 */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
