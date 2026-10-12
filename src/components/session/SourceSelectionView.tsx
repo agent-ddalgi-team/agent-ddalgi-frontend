@@ -385,8 +385,8 @@ export function SourceSelectionView({
     if (locked) return
     setActivePreset(type)
 
-    let targetSources: WorkSource[] = []
-    let patchBrief: Partial<SourceBrief> = {}
+    let targetSources: WorkSource[]
+    let patchBrief: Partial<SourceBrief>
 
     if (type === 'quality') {
       targetSources = work.sources.filter((s) =>
@@ -436,8 +436,24 @@ export function SourceSelectionView({
   }
 
   const suggestedPages = enrichedPreflight?.recommendations.suggested_pages
+  const currentPreflight = !!ai.preflight && ai.preflight.input_revision === work.session?.input_revision
+  const canReturnToDocument = !!ai.document && currentPreflight && !aiBlocked && !ai.locked && !ai.pendingResponse
+  const openDocumentReview = () => {
+    flushSync(() => onNavigate(2))
+    const target = document.querySelector<HTMLElement>('[data-screen="S02"] [data-testid="impact-review"]')
+    if (target) {
+      target.setAttribute('tabindex', '-1')
+      target.focus({ preventScroll: true })
+      target.scrollIntoView({ block: 'start' })
+    }
+  }
+  const documentDockLabel = ai.pendingResponse
+    ? '점검 요청 처리 결과 확인'
+    : canReturnToDocument ? '점검 결과 확인 · 기존 문서로 이동'
+    : !sourceEditing ? '자료 변경 시작'
+    : '변경 자료 AI 점검'
 
-  const dockLabel = enrichedAi.preflight
+  const dockLabel = hasDocument ? documentDockLabel : enrichedAi.preflight
     ? enrichedAi.confirmed
       ? '확인하고 초안 만들기'
       : '점검 결과 확인 · 초안 만들기'

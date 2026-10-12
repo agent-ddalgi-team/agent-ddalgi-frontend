@@ -186,7 +186,7 @@ export function CompanyChangeModal({
             )}
           </div>
 
-          {/* 추천/대표 기업 빠른 선택 */}
+          {/* 서버에서 받은 기업 검색 결과 */}
           <div>
             <div className="flex items-center gap-1.5 mb-2">
               <Sparkles className="h-3.5 w-3.5 text-amber-500" />
@@ -194,14 +194,22 @@ export function CompanyChangeModal({
                 빠른 기업 선택 (DART 검색 결과)
               </span>
             </div>
+            <div className="mb-2 text-xs text-slate-600" aria-live="polite">
+              {searching
+                ? '기업 검색 중…'
+                : searchError || (inputName.trim().length < 2
+                  ? '검색할 기업명을 두 글자 이상 입력해 주세요.'
+                  : results.length === 0 ? '검색 결과가 없습니다. 기업명을 직접 입력할 수 있습니다.' : '')}
+            </div>
             <div className="grid grid-cols-2 gap-2">
-              {PRESET_COMPANIES.map((item) => {
-                const isSelected = inputName.trim() === item.name
+              {results.map((item) => {
+                const isSelected = selectedCode === item.corp_code
                 return (
                   <button
-                    key={item.name}
+                    key={item.corp_code}
                     type="button"
-                    onClick={() => handleSelectPreset(item.name)}
+                    disabled={disabled || saving}
+                    onClick={() => updateName(item.corp_name, item.corp_code)}
                     className={`flex flex-col items-start p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
                       isSelected
                         ? 'border-slate-800 bg-slate-100/90 shadow-xs'
@@ -210,14 +218,14 @@ export function CompanyChangeModal({
                   >
                     <div className="flex w-full items-center justify-between">
                       <span className="text-xs font-bold text-slate-900">
-                        {item.name}
+                        {item.display_name || item.corp_name}
                       </span>
                       {isSelected && (
                         <Check className="h-3.5 w-3.5 text-slate-900" />
                       )}
                     </div>
                     <span className="text-[10px] text-slate-500 mt-0.5 truncate w-full">
-                      {item.category}
+                      DART 고유번호 {item.corp_code}
                     </span>
                   </button>
                 )

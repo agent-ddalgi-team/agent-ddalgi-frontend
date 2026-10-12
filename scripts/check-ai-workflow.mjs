@@ -1036,9 +1036,16 @@ finally:
     )
     assert.ok(
       await evaluate(
-        "document.body.innerText.includes('가상 데이터 화면 시연')",
+        "document.body.innerText.includes('가상 시연 모드') && document.body.innerText.includes('실제 백엔드/AI 호출 없이')",
       ),
     )
+    await screen(1)
+    await evaluate("document.querySelector('button[title=\"소속 기업/기관 변경\"]').click()")
+    await until(() => has('input[aria-label="대상 회사명"]'), 'company dialog renders with an existing draft')
+    await evaluate("document.querySelector('[role=\"dialog\"] button[aria-label=\"닫기\"]').click()")
+    await until(() => has('[data-source-review-continue]'), 'existing draft return action')
+    await evaluate("document.querySelector('[data-source-review-continue]').click()")
+    await until(() => has('textarea[data-edit-block="screen-text-0"]'), 'existing draft return opens editor')
     await screen(1)
     await screenshot('screen-preview-1.png')
     await screen(2)

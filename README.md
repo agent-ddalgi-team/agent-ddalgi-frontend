@@ -282,6 +282,14 @@ build·ESLint·격리 --publication --required-insert 28묶음/PDF4쪽 통과. �
 
 백엔드 선택 회귀7건도 통과했다. 중복 검사 수를 합산하지 않는다. 남은 범위는 실제 자료/LLM 품질과 다중 사실·제목·목록의 직접 편집 경로이며 모든 오류가 자동 해결된다는 뜻은 아니다.
 
+### 2026-10-12 생성된 초안 화면의 ReferenceError 복구
+
+`develop`에서 초안 생성 Job은 성공했지만 `SourceSelectionView`의 `canReturnToDocument`, `openDocumentReview`, `currentPreflight` 선언이 빠져 문서 조회 후 화면 렌더링이 중단됐다. 기존 점검 버전·진행 중 요청 검사와 초안 복귀 동작 및 버튼 문구를 복원했다. `CompanyChangeModal`의 미정의 preset 참조도 실제 DART 검색 결과·기업 코드 선택 및 검색 상태 표시로 연결했다. API·원자료·저장 문서·AI 검증 규칙은 변경하지 않는다.
+
+검증: TypeScript/Vite build 통과(기존 500kB 청크 경고 유지), 수정 TSX/검사 스크립트 ESLint·diff 확인. `AI_CHECK_BACKEND=C:/final/backend`, `AI_CHECK_LIVE=0`의 `node scripts/check-ai-workflow.mjs --screen-preview` 통과: 기존 초안이 있는 회사 변경 창, S01 초안 복귀 버튼, S01/S02/S03, 편집·저장·새로고침 복원, 가상 검사/승인·실제 출력 차단, 백엔드 호출 0 및 일반 작업 저장소 보존. 검사 도구의 옛 시연 안내 문구도 현재 UI에 맞췄다. 진단은 Temp/ddalgi-ai-ui-qFvIzq에 있다.
+
+한계: `--draft-recovery` 전체 검사는 새 자료 선택 모달에 맞지 않는 기존 선택자로 `file parsed` 대기에서 중단됐다(브라우저 오류 0). 따라서 실제 API 생성·복구 전체 회귀 통과로 보고하지 않는다. 사용자가 실행한 실제 초안 Job과 문서 저장 성공은 실행용 DB를 읽어서 별도로 확인했으며 이번 수정에서 유료 AI 재호출·원본 DB/.env 변경은 없다. 프론트 로컬 커밋까지만 진행하며 백엔드 test 변경/병합·원격 push는 하지 않는다.
+
 ### 2026-10-08 develop 통합 시 요청 복구 보존
 
 최신 develop의 세션 자료 선택·충족도 변경을 포함했다. 공개자료 가져오기에서 빠진 멱등 키와 응답 유실 복구, 완료/실패 Job 안내를 복원하여 TypeScript 호출 계약을 맞췄다. 격리 검사 서버에서 제외 API를 가짜 성공 응답으로 가로채던 middleware를 제거했다. 제외/복원은 실제 서버에 저장되며 같은 요청 재전송·C-05·재검증까지 실제 API로 검사한다.
