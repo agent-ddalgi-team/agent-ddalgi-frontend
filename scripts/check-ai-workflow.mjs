@@ -1066,6 +1066,51 @@ finally:
       () => has('textarea[data-edit-block="screen-text-0"]'),
       'offline editor',
     )
+    // A short sticky TOC must scroll instead of shrinking its sections onto the help text.
+    const tocOriginal = await evaluate("sessionStorage.getItem('ddalgi.screen-preview.state.v1')")
+    await evaluate(`(() => {
+      const key = 'ddalgi.screen-preview.state.v1';
+      const state = JSON.parse(sessionStorage.getItem(key));
+      const first = state.document.document.pages[0];
+      state.document.document.pages = Array.from({length: 12}, (_, i) => ({
+        ...first, page_id: 'toc-page-' + i,
+        title: '긴 페이지 제목과 공정 설명을 확인하는 목차 표시 검사 ' + (i + 1),
+        blocks: Array.from({length: 15}, (_, j) => ({
+          ...first.blocks[0], block_id: 'toc-block-' + i + '-' + j,
+          content: {text: '전해연마 방식과 긴 제목의 표시를 확인합니다 '.repeat(4)}
+        }))
+      }));
+      sessionStorage.setItem(key, JSON.stringify(state));
+    })()`)
+    await reload(); await screen(2)
+    for (const width of [1440, 1100, 390]) {
+      await command('Emulation.setDeviceMetricsOverride', {width, height: 800, deviceScaleFactor: 1, mobile: false})
+      await until(() => has('[data-block-select="toc-block-0-0"]'), 'long TOC ready')
+      const layout = await evaluate(`(() => {
+        const nav = document.querySelector('nav[aria-label="문서 목차"]');
+        const parts = [...nav.children].map(el => ({top: el.getBoundingClientRect().top, bottom: el.getBoundingClientRect().bottom}));
+        const list = nav.querySelector('.toc-contents');
+        return {parts, listBottom: list.getBoundingClientRect().bottom,
+          sectionBottom: list.parentElement.getBoundingClientRect().bottom,
+          scrollable: nav.scrollHeight > nav.clientHeight,
+          pageOverflow: document.documentElement.scrollWidth > innerWidth};
+      })()`)
+      assert.ok(layout.parts.every((part, i) => !i || part.top >= layout.parts[i - 1].bottom - 1), `TOC sections overlap at ${width}px: ${JSON.stringify(layout)}`)
+      assert.ok(layout.listBottom <= layout.sectionBottom + 1, `TOC list overlaps help at ${width}px`)
+      assert.ok(layout.scrollable, `Long TOC must scroll at ${width}px`)
+      assert.equal(layout.pageOverflow, false, `Page overflows at ${width}px`)
+      await evaluate(`(() => {
+        const nav = document.querySelector('nav[aria-label="문서 목차"]');
+        nav.scrollIntoView({block: 'start'});
+        window.scrollBy(0, -100);
+        nav.scrollTop = nav.scrollHeight;
+      })()`)
+      await screenshot(`toc-no-overlap-${width}.png`)
+    }
+    await command('Emulation.setDeviceMetricsOverride', {width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false})
+    await evaluate(`sessionStorage.setItem('ddalgi.screen-preview.state.v1', ${JSON.stringify(tocOriginal)})`)
+    await reload(); await screen(2)
+    await until(() => has('textarea[data-edit-block="screen-text-0"]'), 'original preview restored')
     await evaluate(
       `(()=>{const t=document.querySelector('textarea[data-edit-block="screen-text-0"]');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(t,'가상 데이터 편집 저장 확인');t.dispatchEvent(new Event('input',{bubbles:true}));})()`,
     )
@@ -1152,6 +1197,7 @@ finally:
         result: 'PASS',
         checks: [
           'three screens',
+          'long TOC sections and help do not overlap at 1440/1100/390px',
           'edit/save',
           'reload persistence',
           'simulated content/layout/approval',

@@ -2,6 +2,8 @@
 
 ## 폴더·문서 찾아가기
 
+삭제 여부를 확인하려면 [폴더·파일 삭제 판단과 전체 파일 목록](#file-retention)을 참고한다.
+
 일반 문서는 `docs/`, 실행·검증 도구는 `scripts/`, 화면 코드는 `src/`에 둔다. 아래 경로는 프론트 저장소 루트 기준이며 개발/빌드 명령은 루트에서 실행한다. 이 구조는 `codex/frontend-folder-organization-20261012` 정리 브랜치 기준이다.
 
 ```text
@@ -48,6 +50,187 @@ frontend/
 VS Code 탐색기에서는 실행·환경 설정을 `package.json` 아래로 접어 표시한다. 왼쪽 화살표를 펼치면 모든 파일을 볼 수 있으며 실제 경로·Git 추적·실행에는 영향이 없다. 프론트 폴더만 열면 이 저장소의 `.vscode/settings.json`이 적용된다. 상위 `final` 폴더를 열 때는 `final/.vscode/settings.json`의 같은 표시 설정을 사용한다.
 
 가상 자료의 화면 렌더링 검사는 복사 없이 `node scripts/checks/run_ssr.mjs`로 실행한다. 폴더를 매번 직접 지정할 필요는 없으며, 검사 도구의 백엔드 위치 등 환경에 따라 달라지는 경로만 별도 지정한다.
+
+<a id="file-retention"></a>
+
+## 폴더·파일 삭제 판단 (2026-10-12 현재 정리 브랜치)
+
+**용량을 비우려면 생성물부터 확인한다. 소스·설정·자료를 단순히 안 보인다는 이유로 삭제하지 않는다.** 아래의 ‘유지’는 영구 삭제 금지가 아니라 현재 기능·개발 방식을 유지할 때 필요한 파일이라는 뜻이다. 이번 점검에서는 실제 파일을 삭제하지 않았다.
+
+| 구분 | 대상 | 삭제 전 조건·영향 |
+|---|---|---|
+| 재생성 가능 | `dist/`와 내부 모든 파일 | 빌드 산출물. 여기서 배포/미리보기를 제공 중이면 중단되므로 사용 종료 후 정리하고 `npm run build`로 복구 |
+| 재생성 가능 | `node_modules/.vite/`, `.vite-temp/`, `.tmp/` | 개발 서버/빌드 캐시. 관련 프로세스를 종료한 뒤 정리; 다음 실행에서 재생성 |
+| 재설치 필요 | `node_modules/`와 내부 라이브러리 파일 전체 | 설치된 의존성. 없으면 개발·빌드가 안 됨. 서버 종료 후 폴더 단위로 정리하고 lock 파일 기준 재설치; 내부 파일을 골라 지우지 않음 |
+| 유지 | `src/` 전체 | 앱 코드·타입·스타일. 일부 옛 시안이 있어도 import·테스트·팀 사용 여부를 함께 확인하기 전 삭제 불가 |
+| 유지 | `public/` 전체 | 아이콘·사진이 URL로 참조됨. 대체 파일/참조 수정 없이 삭제하면 깨짐 |
+| 유지 | `.git/`와 내부 모든 파일 | 로컬 커밋·브랜치·설정·복구 이력. 캐시가 아니므로 청소 대상으로 삼지 않음 |
+| 유지 | `.env` | 개인 실행 설정. Git에 없으므로 삭제하면 Git으로 복구되지 않음. 내용은 공개하지 않음 |
+| 유지 | 루트 실행·검사·Git 설정 | 아래 개별 표 참조. 삭제 대신 필요 시 설정 변경과 검증을 함께 진행 |
+| 확인 후 선택 | `.vscode/` | 앱 실행에는 불필요하지만 삭제하면 파일 접기·포맷·확장 안내가 사라짐. 현재 요청한 표시를 유지하려면 보존 |
+| 확인 후 선택 | `.agents/` | 앱 실행에는 불필요하지만 AI 작업 규칙이 사라짐. 팀 규칙으로 사용 중이므로 기본 보존 |
+| 확인 후 선택 | `.claude/launch.json` 및 `.claude/` | 개인 Claude 실행 설정, 현재 미추적. 소유자의 사용 여부·백업 확인 후 판단; 자동 재생성을 보장하지 않음 |
+| 보관 후 선택 | `docs/`와 내부 문서·HTML·PNG | 앱 실행에는 직접 필요하지 않으나 설계/보안/작업 근거와 링크를 잃음. 폐기할 문서만 팀 합의·보관·링크 수정 후 정리 |
+| 검사 기능 유지 시 필요 | `scripts/`와 `scripts/fixtures/` | 제품 배포에는 보통 포함되지 않지만 개발 검증·재현에 필요. 도구 폐기를 결정할 때 관련 안내·참조도 함께 정리 |
+
+`node_modules/`·`dist/`·`.git/` 내부 파일은 위 폴더 정책을 전부 적용한다. 자동으로 바뀌는 수천 개 라이브러리/산출물/Git 내부 파일을 개별 삭제 목록으로 관리하지 않는다. 추적하는 프로젝트 파일은 아래에 빠짐없이 나열했다. `.env`와 `.claude/launch.json`은 미추적/제외 파일이므로 위 표에서 별도로 다룬다.
+
+기존 `DraftEditorView.tsx`, `ApprovalExportView.tsx` 등은 현재 주 화면과 별도로 남아 있는 시안이고, `components/profile/` 일부는 SSR 검수에서 사용한다. 이름에 mock 또는 old 역할이 있다고 삭제 가능한 것은 아니다. `mockBackend.ts`는 현재 명시적 시연 모드에서 사용한다. 별도 미사용 코드 분석 없이 안전 삭제 대상으로 확정하지 않는다.
+
+<details>
+<summary>현재 프로젝트 파일 전체: 역할과 삭제 판단 펼치기</summary>
+
+### 루트·도구 설정
+
+| 파일 | 역할 | 삭제 판단 |
+|---|---|---|
+| `.agents/rules/work_history.md` | AI 작업 기록 위치와 작성 규칙 | 현재 도구 설정 유지 시 보존 |
+| `.env.example` | 공유 환경변수 예시; 새 PC 설정 기준 | 유지 |
+| `.gitattributes` | 줄바꿈 등 Git 파일 처리 규칙 | 유지 |
+| `.gitignore` | 비밀값·의존성·빌드 결과의 Git 제외 | 유지 |
+| `.prettierignore` | 자동 포맷에서 제외할 경로 | 유지 |
+| `.prettierrc` | 팀 코드 포맷 규칙 | 유지 |
+| `.vscode/extensions.json` | 팀 권장 VS Code 확장 목록 | 현재 도구 설정 유지 시 보존 |
+| `.vscode/settings.json` | 포맷과 탐색기 파일 접기 설정 | 현재 도구 설정 유지 시 보존 |
+| `README.md` | 실행·폴더·사용 안내 | 유지 |
+| `eslint.config.js` | 코드 검사 규칙 | 유지 |
+| `index.html` | 브라우저 앱 진입 HTML | 유지 |
+| `package-lock.json` | 팀이 재현할 의존성 버전 | 유지 |
+| `package.json` | 의존성·개발/빌드 명령 | 유지 |
+| `tsconfig.app.json` | 화면 TypeScript 검사 설정 | 유지 |
+| `tsconfig.json` | TypeScript 프로젝트 연결 | 유지 |
+| `tsconfig.node.json` | Vite 설정 코드의 TypeScript 검사 | 유지 |
+| `vite.config.ts` | 개발 서버·빌드·API 프록시·사진 수집 연결 | 유지 |
+
+### 화면·API·타입 코드
+
+| 파일 | 역할 | 삭제 판단 |
+|---|---|---|
+| `src/App.tsx` | 앱 공통 화면과 단계 이동 | 유지 |
+| `src/api/aiWorkflow.ts` | 자료 점검·초안 API | 유지 |
+| `src/api/client.ts` | 공통 HTTP 처리 | 유지 |
+| `src/api/profiles.ts` | 초기 회사정보 API | 유지 |
+| `src/api/publication.ts` | 문서 편집·검증·승인·출력 API | 유지 |
+| `src/api/sessions.ts` | 작업 세션 API | 유지 |
+| `src/api/sources.ts` | 자료·근거·원본 API | 유지 |
+| `src/components/common/Confetti.tsx` | 생성 완료 화면 효과 | 유지 |
+| `src/components/common/ErrorBoundary.tsx` | 화면 오류 경계 | 유지 |
+| `src/components/common/FloatingToast.tsx` | 작업 결과 알림 | 유지 |
+| `src/components/profile/CompanyInfoList.tsx` | 회사정보 항목 표시 | 유지 |
+| `src/components/profile/ConfirmationList.tsx` | 확인 질문 표시 | 유지 |
+| `src/components/profile/DocumentButtons.tsx` | 문서 저장 버튼 | 유지 |
+| `src/components/profile/DraftSectionsView.tsx` | 초기 초안 섹션 표시 | 유지 |
+| `src/components/profile/FileUploadPanel.tsx` | 초기 자료 업로드 화면 | 유지 |
+| `src/components/profile/GeneratePanel.tsx` | 초기 생성 요청 화면 | 유지 |
+| `src/components/profile/MockLoaderPanel.tsx` | 가상 JSON 수동 로더 | 유지 |
+| `src/components/profile/ResultPanel.tsx` | 회사정보 결과 표시·SSR 검수 대상 | 유지 |
+| `src/components/profile/Section.tsx` | 초기 화면 섹션 틀 | 유지 |
+| `src/components/profile/SourcesPanel.tsx` | 초기 출처 표시 | 유지 |
+| `src/components/profile/StatusPanel.tsx` | 작업 상태/오류 표시·SSR 검수 대상 | 유지 |
+| `src/components/session/AiSidecar.tsx` | 문서 편집 보조 패널 | 유지 |
+| `src/components/session/AiWorkflowPanel.tsx` | 사전 점검·근거 조회 패널 | 유지 |
+| `src/components/session/ApprovalExportView.tsx` | 기존 승인/출력 시안 | 유지 |
+| `src/components/session/CompanyChangeModal.tsx` | 대상 회사 변경 창 | 유지 |
+| `src/components/session/DocumentExportBar.tsx` | 기존 문서 출력 바 | 유지 |
+| `src/components/session/DocumentWorkspace.tsx` | 현재 편집·검증·승인·정정 작업 화면 | 유지 |
+| `src/components/session/DraftEditorPanel.tsx` | 기존 초안 편집 패널 | 유지 |
+| `src/components/session/DraftEditorView.tsx` | 기존 초안 화면 시안 | 유지 |
+| `src/components/session/ParagraphEditor.tsx` | 기존 문단 편집기 | 유지 |
+| `src/components/session/PrecheckPanel.tsx` | 기존 점검 패널 | 유지 |
+| `src/components/session/SessionMockLoader.tsx` | 기존 가상 세션 로더 | 유지 |
+| `src/components/session/SessionUploadPanel.tsx` | 기존 세션 업로드 화면 | 유지 |
+| `src/components/session/SourceSelectModal.tsx` | 자료 선택 창 | 유지 |
+| `src/components/session/SourceSelectionView.tsx` | 현재 자료 선택·작업 시작 화면 | 유지 |
+| `src/components/session/StepIndicator.tsx` | 작업 단계 표시 | 유지 |
+| `src/components/session/SystemStatusModal.tsx` | 상태 안내 창 | 유지 |
+| `src/components/session/WebPhotoCollector.tsx` | 웹 사진 선택 화면 | 유지 |
+| `src/constants/profileLabels.ts` | 회사정보/상태 한글 표시명 | 유지 |
+| `src/hooks/useAiWorkflow.ts` | 사전 점검·초안 Job 상태 관리 | 유지 |
+| `src/hooks/useProfileJob.ts` | 초기 회사정보 Job 상태 관리 | 유지 |
+| `src/hooks/usePublication.ts` | 문서 저장·검증·승인·출력 상태 관리 | 유지 |
+| `src/hooks/useSession.ts` | 기존 세션 상태 처리 | 유지 |
+| `src/hooks/useSources.ts` | 자료 업로드·선택·복구 상태 관리 | 유지 |
+| `src/index.css` | 전체 화면 스타일·반응형 배치 | 유지 |
+| `src/main.tsx` | React 앱 시작·전역 스타일·오류 경계 | 유지 |
+| `src/services/mockBackend.ts` | 명시적 가상 시연 모드 | 유지 |
+| `src/services/webPhotoCrawler.ts` | 웹 사진 수집 요청 | 유지 |
+| `src/types/profile.ts` | 초기 회사정보 데이터 타입 | 유지 |
+| `src/types/session.ts` | 세션·문서 타입 | 유지 |
+| `src/utils/documentExport.ts` | 문서 파일 생성 유틸리티 | 유지 |
+| `src/utils/pdfExport.ts` | 브라우저 PDF 생성 유틸리티 | 유지 |
+| `src/vite-env.d.ts` | Vite 환경 타입 선언 | 유지 |
+
+### 공개 정적 파일
+
+| 파일 | 역할 | 삭제 판단 |
+|---|---|---|
+| `public/assets/photos/geosan_catalytic_reactor_process.jpg` | PDF/화면에서 URL로 참조하는 정적 사진 | 유지 |
+| `public/assets/photos/geosan_cleanroom_automated_pipes.jpg` | PDF/화면에서 URL로 참조하는 정적 사진 | 유지 |
+| `public/assets/photos/geosan_distillation_lab.jpg` | PDF/화면에서 URL로 참조하는 정적 사진 | 유지 |
+| `public/assets/photos/geosan_headquarters_facade.jpg` | PDF/화면에서 URL로 참조하는 정적 사진 | 유지 |
+| `public/assets/photos/geosan_quality_testing_chamber.jpg` | PDF/화면에서 URL로 참조하는 정적 사진 | 유지 |
+| `public/favicon.svg` | 브라우저 탭 아이콘 | 유지 |
+
+### 실행·검사·가상 자료
+
+| 파일 | 역할 | 삭제 판단 |
+|---|---|---|
+| `scripts/check-ai-workflow.mjs` | 격리 브라우저의 작업·편집·검증·출력 회귀 검사 | 검증 사용 중 유지 |
+| `scripts/check-sources.mjs` | 자료 선택/업로드 API 화면 검사 | 검증 사용 중 유지 |
+| `scripts/checks/render_check.tsx` | 가상 응답의 화면 렌더링 대조 | 검증 사용 중 유지 |
+| `scripts/checks/run_ssr.mjs` | 렌더링 검사 실행기 | 검증 사용 중 유지 |
+| `scripts/create_pr.js` | 과거 PR 생성 보조 도구 | 도구 폐기 확인 후 선택 |
+| `scripts/fixtures/agent_input_mock.json` | 검사/재현용 가상 입력·응답 | 검증 사용 중 유지 |
+| `scripts/fixtures/day2_draft_supported_example.json` | 검사/재현용 가상 입력·응답 | 검증 사용 중 유지 |
+| `scripts/fixtures/day2_supported_facts.json` | 검사/재현용 가상 입력·응답 | 검증 사용 중 유지 |
+| `scripts/fixtures/day2_variant_source_a.txt` | 검사/재현용 가상 입력·응답 | 검증 사용 중 유지 |
+| `scripts/fixtures/day2_variant_source_b.txt` | 검사/재현용 가상 입력·응답 | 검증 사용 중 유지 |
+| `scripts/fixtures/day2_테스트데이터_사용법.md` | 가상 테스트 자료 사용 설명 | 검증 사용 중 유지 |
+| `scripts/fixtures/mock_job_error.json` | 검사/재현용 가상 입력·응답 | 검증 사용 중 유지 |
+| `scripts/fixtures/mock_job_ready.json` | 검사/재현용 가상 입력·응답 | 검증 사용 중 유지 |
+| `scripts/fixtures/mock_profile.json` | 검사/재현용 가상 입력·응답 | 검증 사용 중 유지 |
+| `scripts/fixtures/mock_source_a.txt` | 검사/재현용 가상 입력·응답 | 검증 사용 중 유지 |
+| `scripts/fixtures/mock_source_b.txt` | 검사/재현용 가상 입력·응답 | 검증 사용 중 유지 |
+| `scripts/update_pr.js` | 과거 PR 본문 수정 보조 도구 | 도구 폐기 확인 후 선택 |
+| `scripts/verify-sufficiency.mjs` | 자료 충족도 화면 검사 도구 | 검증 사용 중 유지 |
+
+### 문서·작업 기록·시안
+
+| 파일 | 역할 | 삭제 판단 |
+|---|---|---|
+| `docs/BACKEND_SECURITY_REQUIRED.md` | 프로젝트 설명·검수·작업 문서 | 보관·팀 확인·참조 수정 후 선택 |
+| `docs/B_프론트엔드_검증기록_0918.md` | 프로젝트 설명·검수·작업 문서 | 보관·팀 확인·참조 수정 후 선택 |
+| `docs/B_프론트엔드_일일요약_0918.md` | 프로젝트 설명·검수·작업 문서 | 보관·팀 확인·참조 수정 후 선택 |
+| `docs/B_프론트엔드_작업기록_0918.md` | 프로젝트 설명·검수·작업 문서 | 보관·팀 확인·참조 수정 후 선택 |
+| `docs/DEMO_PRESENTATION_SCRIPT.md` | 프로젝트 설명·검수·작업 문서 | 보관·팀 확인·참조 수정 후 선택 |
+| `docs/DEPLOYMENT_SECURITY_REQUIRED.md` | 프로젝트 설명·검수·작업 문서 | 보관·팀 확인·참조 수정 후 선택 |
+| `docs/FRONTEND_REFINEMENT_REPORT.md` | 프로젝트 설명·검수·작업 문서 | 보관·팀 확인·참조 수정 후 선택 |
+| `docs/NOTION_SUMMARY.md` | 프로젝트 설명·검수·작업 문서 | 보관·팀 확인·참조 수정 후 선택 |
+| `docs/SECURITY_HARDENING_REPORT.md` | 프로젝트 설명·검수·작업 문서 | 보관·팀 확인·참조 수정 후 선택 |
+| `docs/WORK_SUMMARY.md` | 프로젝트 설명·검수·작업 문서 | 보관·팀 확인·참조 수정 후 선택 |
+| `docs/history/00_프론트엔드_작업.md` | 기존 번호별 작업 이력 | 보관·팀 확인·참조 수정 후 선택 |
+| `docs/history/01_깃허브_브랜치_비교_분석.md` | 기존 번호별 작업 이력 | 보관·팀 확인·참조 수정 후 선택 |
+| `docs/history/02_프론트엔드_작업.md` | 기존 번호별 작업 이력 | 보관·팀 확인·참조 수정 후 선택 |
+| `docs/history/03_프론트엔드_작업.md` | 기존 번호별 작업 이력 | 보관·팀 확인·참조 수정 후 선택 |
+| `docs/history/04_프론트엔드_작업.md` | 기존 번호별 작업 이력 | 보관·팀 확인·참조 수정 후 선택 |
+| `docs/history/05_프론트엔드_작업.md` | 기존 번호별 작업 이력 | 보관·팀 확인·참조 수정 후 선택 |
+| `docs/prototype/executive_slate_teal/DESIGN.md` | 화면 설계 시안 | 보관·팀 확인·참조 수정 후 선택 |
+| `docs/prototype/s01/code.html` | 화면 설계 시안 | 보관·팀 확인·참조 수정 후 선택 |
+| `docs/prototype/s01/screen.png` | 화면 설계 시안 | 보관·팀 확인·참조 수정 후 선택 |
+| `docs/prototype/s02/code.html` | 화면 설계 시안 | 보관·팀 확인·참조 수정 후 선택 |
+| `docs/prototype/s02/screen.png` | 화면 설계 시안 | 보관·팀 확인·참조 수정 후 선택 |
+| `docs/prototype/s03/code.html` | 화면 설계 시안 | 보관·팀 확인·참조 수정 후 선택 |
+| `docs/prototype/s03/screen.png` | 화면 설계 시안 | 보관·팀 확인·참조 수정 후 선택 |
+| `docs/prototype/s03_2/code.html` | 화면 설계 시안 | 보관·팀 확인·참조 수정 후 선택 |
+| `docs/prototype/s03_2/screen.png` | 화면 설계 시안 | 보관·팀 확인·참조 수정 후 선택 |
+| `docs/prototype/states_recovery_actions/code.html` | 화면 설계 시안 | 보관·팀 확인·참조 수정 후 선택 |
+| `docs/prototype/states_recovery_actions/screen.png` | 화면 설계 시안 | 보관·팀 확인·참조 수정 후 선택 |
+| `docs/샘플문서/회사소개서_초안_mock-job-001.md` | 가상 출력 예시 | 보관·팀 확인·참조 수정 후 선택 |
+| `docs/프론트엔드_작업내역_종합정리.md` | 프로젝트 설명·검수·작업 문서 | 보관·팀 확인·참조 수정 후 선택 |
+
+점검한 Git 추적 파일: 123개. 이후 새 파일이 생기면 역할에 맞는 폴더와 삭제 정책을 적용한다.
+
+</details>
 
 ## 원문 오타 정정 (2026-10-12)
 

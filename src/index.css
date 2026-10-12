@@ -253,6 +253,10 @@
   overflow-y: auto;
   scrollbar-gutter: stable;
 }
+.document-toc > * {
+  /* Keep the contents section above the help text when the panel is short. */
+  flex-shrink: 0;
+}
 .toc-contents {
   max-height: min(36dvh, 320px);
   overflow-y: auto;
