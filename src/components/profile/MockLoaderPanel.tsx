@@ -7,7 +7,7 @@ interface MockLoaderPanelProps {
   onParseError: (message: string) => void
 }
 
-// 서버 연결 전 시험용. fixtures/mock_job_ready.json, mock_job_error.json을 그대로 읽어
+// 서버 연결 전 시험용. scripts/fixtures/mock_job_ready.json, mock_job_error.json을 그대로 읽어
 // 실제 GET 응답과 같은 형태({job_id, status, result, error})로 renderProfile 경로를 시험한다.
 export function MockLoaderPanel({
   onLoad,
@@ -39,7 +39,7 @@ export function MockLoaderPanel({
         htmlFor="mockInput"
         className="mb-1.5 block text-[13px] text-gray-600"
       >
-        fixtures/mock_job_ready.json 또는 fixtures/mock_job_error.json 선택
+        scripts/fixtures/mock_job_ready.json 또는 scripts/fixtures/mock_job_error.json 선택
       </label>
       <input
         id="mockInput"

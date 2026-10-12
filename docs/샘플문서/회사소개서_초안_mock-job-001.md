@@ -108,6 +108,6 @@
 
 ## 문서 정보 (이 파일의 출처, 화면에는 표시되지 않는 메타 정보)
 
-- **원본 데이터:** `fixtures/mock_job_ready.json` (job_id `mock-job-001`, schema_version `1.0`, is_mock `true`)
+- **원본 데이터:** `scripts/fixtures/mock_job_ready.json` (job_id `mock-job-001`, schema_version `1.0`, is_mock `true`)
 - **교차 확인:** 2026-09-18 로컬 백엔드(`AGENT_MODE=mock`)에 `mock_source_a.txt`+`mock_source_b.txt`를 업로드해 받은 실제 응답(job_id `73b25530-5218-4942-8113-e133966bb466`)과 위 fixture가 바이트 단위로 동일함을 확인 (검증기록 6-1절)
 - **작성 방식:** 백엔드의 문서 생성 API(`POST /api/profiles/{job_id}/document`)는 이 시점까지 항상 `409 DOCUMENT_FAILED`(미구현)를 반환했으므로, 이 파일은 그 API의 산출물이 아니라 위 JSON을 팀 공통 문서 규격(본문 순서·문장 그대로, 테스트 표시·확인 질문·출처+인용 부록)에 맞춰 수작업으로 조립한 것입니다. 실제 문서 생성 기능이 구현되면 그 결과와 이 파일을 대조해야 합니다.

@@ -1,5 +1,52 @@
 # agent-ddalgi-frontend
 
+## 폴더·문서 찾아가기
+
+일반 문서는 `docs/`, 실행·검증 도구는 `scripts/`, 화면 코드는 `src/`에 둔다. 아래 경로는 프론트 저장소 루트 기준이며 개발/빌드 명령은 루트에서 실행한다. 이 구조는 `codex/frontend-folder-organization-20261012` 정리 브랜치 기준이다.
+
+```text
+frontend/
+├─ src/                    화면·API 연결·상태·타입·스타일
+├─ public/                 웹에서 그대로 제공할 정적 파일
+├─ docs/                   설명서·보고서·설계·작업 기록
+│  ├─ history/             기존 AI AGENT 작업 기록
+│  ├─ prototype/           화면 설계 시안
+│  └─ 샘플문서/            가상 출력 예시
+├─ scripts/                실행·검사·관리 도구
+│  ├─ checks/              Mock 화면 렌더링 검사
+│  └─ fixtures/            가상 테스트 입력·응답·사용법
+├─ .agents/                기존 AI 도구 작업 규칙
+├─ .claude/                개인 Claude 설정·자료 (기존 미추적)
+├─ .vscode/                VS Code 설정
+├─ node_modules/           npm이 설치한 라이브러리 (자동 생성)
+├─ dist/                   빌드 결과 (자동 생성)
+├─ .git/                   Git 이력
+├─ README.md               실행·폴더 안내
+└─ 실행·환경 설정 파일
+```
+
+- 작업 현황: [종합 작업 기록](docs/WORK_SUMMARY.md), [기존 번호별 기록](docs/history/), [노션 요약](docs/NOTION_SUMMARY.md)
+- 보안·배포: [백엔드 요구사항](docs/BACKEND_SECURITY_REQUIRED.md), [배포 설정](docs/DEPLOYMENT_SECURITY_REQUIRED.md), [보안 검수](docs/SECURITY_HARDENING_REPORT.md)
+- 화면·시연: [화면 개선 보고서](docs/FRONTEND_REFINEMENT_REPORT.md), [시연 대본](docs/DEMO_PRESENTATION_SCRIPT.md), [설계 시안](docs/prototype/)
+- 가상 자료: [테스트 자료](scripts/fixtures/), [자료 사용법](scripts/fixtures/day2_테스트데이터_사용법.md)
+- AI 작업 기록 경로: [.agents/rules/work_history.md](.agents/rules/work_history.md). 새 기록 위치는 `docs/history/`이며 예전 루트 `AI AGENT/`를 다시 만들지 않는다. MD가 프로그램을 설정하거나 모든 도구에서 자동으로 읽히는 것은 아니다.
+
+| 작업 후 생기는 것 | 위치·관리 방법 |
+|---|---|
+| 새 화면·로직 | `src/components/`, `src/hooks/`, `src/api/`, `src/types/`, `src/utils/` 등 해당 역할 폴더 |
+| 보고서·설계·작업 기록 | `docs/`와 `docs/history/`; 루트에 일반 MD를 쌓지 않는다 |
+| 검증 도구·가상 자료 | `scripts/`와 `scripts/fixtures/`; 가상 자료 설명 MD는 자료와 함께 둔다 |
+| 설치 라이브러리·빌드 산출물 | npm이 `node_modules/`, Vite가 `dist/`에 자동 생성; Git 제외 |
+| 업로드·AI 결과·세션 자료 | 백엔드가 관리하며 프론트 소스 폴더에 저장하지 않는다 |
+| 내려받은 PDF/DOCX | 브라우저 다운로드 위치; 사용자가 보관 위치를 선택한다 |
+| 브라우저 검수 캡처·임시 DB | 검사 도구가 시스템 임시 폴더를 사용한다 |
+
+`package.json`·`package-lock.json`, `index.html`, `vite.config.ts`, `tsconfig*.json`, `eslint.config.js`, `.prettierrc`·`.prettierignore`, `.gitignore`·`.gitattributes`, `.env`·`.env.example`은 도구가 찾는 루트에 유지한다. `.env`와 개인 도구 자료는 이동하지 않는다. `public/`은 웹에 공개되는 폴더이므로 보고서·테스트 입력·실회사 원문을 넣지 않는다. 숨김 설정이나 파일 삭제로 정리하지 않는다.
+
+팀원은 이 정리 커밋이 공유 브랜치에 반영된 뒤 pull하면 파일 이동·경로 수정·README 안내를 함께 받는다. 이미 옛 경로를 수정 중이면 병합 충돌을 확인해야 한다. 개인 PC 경로를 지정하는 대신 저장소 안의 상대경로를 사용한다.
+
+가상 자료의 화면 렌더링 검사는 복사 없이 `node scripts/checks/run_ssr.mjs`로 실행한다. 폴더를 매번 직접 지정할 필요는 없으며, 검사 도구의 백엔드 위치 등 환경에 따라 달라지는 경로만 별도 지정한다.
+
 ## 원문 오타 정정 (2026-10-12)
 
 3단계 내용 검증의 값 불일치 카드에서 **원문 오타 정정**을 누른다. 연결된 원문을 고르고 원문 표기·정정 표기·사유·근거를 입력한 뒤 **정정 기록 후 재검증**을 실행한다. 정정할 표기가 문서에 없으면 먼저 편집·저장한다. 미저장 편집이나 검증 진행 중에는 제출할 수 없다. 근거 설명에 적은 URL은 자동 조회하지 않는다.
