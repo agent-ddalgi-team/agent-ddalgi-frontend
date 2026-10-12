@@ -78,7 +78,7 @@ function App() {
               <span>
                 {isScreenPreview
                   ? '가상 데이터 · 이 탭에서만 보관'
-                  : '저장한 내용은 서버에 보관'}
+                  : '현재 작업 안에 임시 저장'}
               </span>
             </div>
             <button
