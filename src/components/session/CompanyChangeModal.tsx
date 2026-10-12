@@ -1,27 +1,21 @@
 import { Building2, Check, Sparkles, X } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { sourceApi, type CompanySearchItem } from '../../api/sources'
 
 export interface CompanyChangeModalProps {
   isOpen: boolean
   currentCompany: string
+  currentCorpCode?: string
   onClose: () => void
-  onConfirm: (newCompanyName: string) => Promise<boolean>
+  onConfirm: (newCompanyName: string, corpCode?: string) => Promise<boolean>
   disabled?: boolean
   hasSession?: boolean
 }
 
-const PRESET_COMPANIES = [
-  { name: '(주)거산케미칼', category: '화학소재 · 반도체 세정제' },
-  { name: '(주)테크솔루션', category: '소프트웨어 · AI 자동화' },
-  { name: '한국바이오팜(주)', category: '제약 · 바이오헬스 케어' },
-  { name: '에이치디현대', category: '중공업 · 조선 · 친환경에너지' },
-  { name: '(주)그린에너지', category: '신재생에너지 · 차세대 배터리' },
-  { name: '(주)미래소재', category: '이차전지 전구체 · 나노신소재' },
-]
-
 export function CompanyChangeModal({
   isOpen,
   currentCompany,
+  currentCorpCode,
   onClose,
   onConfirm,
   disabled = false,
@@ -31,12 +25,54 @@ export function CompanyChangeModal({
   const [errorMsg, setErrorMsg] = useState('')
   const [saving, setSaving] = useState(false)
 
-  if (!isOpen) return null
+  const [selectedCode, setSelectedCode] = useState(currentCorpCode)
+  const [results, setResults] = useState<CompanySearchItem[]>([])
+  const [searchError, setSearchError] = useState('')
+  const [searching, setSearching] = useState(inputName.trim().length >= 2)
 
-  const handleSelectPreset = (name: string) => {
+  useEffect(() => {
+    if (!isOpen || inputName.trim().length < 2) return
+    const controller = new AbortController()
+    const timer = setTimeout(async () => {
+      try {
+        const response = await sourceApi.searchCompanies(
+          inputName.trim(),
+          controller.signal,
+        )
+        if (!controller.signal.aborted) {
+          setResults(response.items)
+          setSearchError('')
+        }
+      } catch (cause) {
+        if (!controller.signal.aborted) {
+          setResults([])
+          setSearchError(
+            cause instanceof Error
+              ? cause.message
+              : '기업 검색을 완료하지 못했습니다.',
+          )
+        }
+      } finally {
+        if (!controller.signal.aborted) setSearching(false)
+      }
+    }, 300)
+    return () => {
+      clearTimeout(timer)
+      controller.abort()
+    }
+  }, [inputName, isOpen])
+
+  const updateName = (name: string, code?: string) => {
+    setSelectedCode(code)
+    if (name === inputName) return
     setInputName(name)
     setErrorMsg('')
+    setResults([])
+    setSearchError('')
+    setSearching(name.trim().length >= 2)
   }
+
+  if (!isOpen) return null
 
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault()
@@ -53,7 +89,7 @@ export function CompanyChangeModal({
 
     setSaving(true)
     try {
-      if (await onConfirm(trimmed)) onClose()
+      if (await onConfirm(trimmed, selectedCode)) onClose()
       else
         setErrorMsg(
           '변경을 저장하지 못했습니다. 작업 상태와 오류 안내를 확인해 주세요.',
@@ -69,7 +105,7 @@ export function CompanyChangeModal({
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl transition-all"
+        className="relative max-h-[90vh] overflow-y-auto w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl transition-all"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -115,9 +151,9 @@ export function CompanyChangeModal({
                 type="text"
                 aria-label="대상 회사명"
                 value={inputName}
+                disabled={disabled || saving}
                 onChange={(e) => {
-                  setInputName(e.target.value)
-                  if (errorMsg) setErrorMsg('')
+                  updateName(e.target.value)
                 }}
                 maxLength={50}
                 placeholder="예: (주)한국첨단소재"
@@ -131,7 +167,7 @@ export function CompanyChangeModal({
               {inputName && (
                 <button
                   type="button"
-                  onClick={() => setInputName('')}
+                  onClick={() => updateName('')}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-slate-400 hover:text-slate-600 cursor-pointer"
                 >
                   지우기
@@ -150,22 +186,30 @@ export function CompanyChangeModal({
             )}
           </div>
 
-          {/* 추천/대표 기업 빠른 선택 */}
+          {/* 서버에서 받은 기업 검색 결과 */}
           <div>
             <div className="flex items-center gap-1.5 mb-2">
               <Sparkles className="h-3.5 w-3.5 text-amber-500" />
               <span className="text-xs font-bold text-slate-700">
-                빠른 기업 선택 (예시)
+                빠른 기업 선택 (DART 검색 결과)
               </span>
             </div>
+            <div className="mb-2 text-xs text-slate-600" aria-live="polite">
+              {searching
+                ? '기업 검색 중…'
+                : searchError || (inputName.trim().length < 2
+                  ? '검색할 기업명을 두 글자 이상 입력해 주세요.'
+                  : results.length === 0 ? '검색 결과가 없습니다. 기업명을 직접 입력할 수 있습니다.' : '')}
+            </div>
             <div className="grid grid-cols-2 gap-2">
-              {PRESET_COMPANIES.map((item) => {
-                const isSelected = inputName.trim() === item.name
+              {results.map((item) => {
+                const isSelected = selectedCode === item.corp_code
                 return (
                   <button
-                    key={item.name}
+                    key={item.corp_code}
                     type="button"
-                    onClick={() => handleSelectPreset(item.name)}
+                    disabled={disabled || saving}
+                    onClick={() => updateName(item.corp_name, item.corp_code)}
                     className={`flex flex-col items-start p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
                       isSelected
                         ? 'border-slate-800 bg-slate-100/90 shadow-xs'
@@ -174,14 +218,14 @@ export function CompanyChangeModal({
                   >
                     <div className="flex w-full items-center justify-between">
                       <span className="text-xs font-bold text-slate-900">
-                        {item.name}
+                        {item.display_name || item.corp_name}
                       </span>
                       {isSelected && (
                         <Check className="h-3.5 w-3.5 text-slate-900" />
                       )}
                     </div>
                     <span className="text-[10px] text-slate-500 mt-0.5 truncate w-full">
-                      {item.category}
+                      DART 고유번호 {item.corp_code}
                     </span>
                   </button>
                 )

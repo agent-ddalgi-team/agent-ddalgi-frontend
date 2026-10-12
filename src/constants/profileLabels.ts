@@ -20,6 +20,29 @@ export const FIELD_LABELS: Record<CompanyInfoKey, string> = {
 
 export const FIELD_ORDER = Object.keys(FIELD_LABELS) as CompanyInfoKey[]
 
+// Evidence guidance only: this must not change a fact's status or exclusion rights.
+export function factSupplementGuidance(field: string, status: string, canExclude: boolean): string {
+  const examples: Record<string, string> = {
+    company_name: '대상 회사명과 사업자·법인 식별 정보가 함께 적힌 회사 공식 자료',
+    history: '사건 내용과 발생 연도가 함께 적힌 연혁 자료',
+    certifications: '인증명·발급기관·인증 대상·유효기간이 표시된 인증서 또는 공식 조회 자료',
+    technology: '기술명과 성능 수치의 단위·시험 기준·적용 조건이 함께 적힌 기술 자료',
+    process_count: '공정 이름과 집계 기준을 확인할 수 있는 공정 목록',
+    processes: '공정명과 설명이 적힌 공정 소개 자료',
+    lead_time: '납기 기간과 수량·제품·거래 조건이 함께 적힌 자료',
+    capabilities: '설비·생산 능력의 수치, 단위와 적용 조건이 적힌 자료',
+  }
+  const label = FIELD_LABELS[field as CompanyInfoKey] || '해당 내용'
+  const evidence = examples[field] || `${label}을 확인할 수 있는 회사 공식 설명·실적 자료`
+  const comparison = status === 'conflict'
+    ? '후보별 원문의 작성 시점과 적용 대상을 비교하세요. 맞는 내용을 확인할 수 있는 자료를 추가하고, 잘못 선택한 자료는 선택을 해제하세요. '
+    : status === 'missing' ? '선택한 자료에서 이 항목을 찾지 못했습니다. ' : ''
+  const exclusion = canExclude
+    ? '이번 문서에 필요 없는 내용이면 ‘이 항목 제외’를 선택할 수 있습니다.'
+    : '이 항목은 현재 제외할 수 없습니다. 근거를 보완해야 합니다.'
+  return `${comparison}보완 자료 예시: ${evidence}. 글자를 읽을 수 있는 파일을 첨부·선택한 뒤 AI 자료 점검을 다시 실행하세요. ${exclusion}`
+}
+
 export const STATUS_LABELS: Record<FieldStatus, string> = {
   supported: '근거 있음',
   conflict: '상충',

@@ -5,6 +5,7 @@ import { apiClient } from './client'
 export interface SourceBrief {
   purpose: string
   target_company?: string | null
+  dart_corp_code?: string | null
   emphasis: string[]
   direction: 'balanced' | 'quality_process' | 'customer_response'
   target_pages: 1 | 4 | 6 | 8 | 10
@@ -37,6 +38,19 @@ export interface WorkSource {
   use_as_company_evidence: boolean
   origin_kind: 'real' | 'mock' | 'demo'
   warnings: { code: string; message: string; action?: string | null }[]
+}
+
+export interface CompanySearchItem {
+  corp_code: string
+  corp_name: string
+  display_name?: string
+}
+
+export interface PublicDataStatus {
+  status: 'not_configured' | 'ready'
+  providers: string[]
+  configured_providers?: string[]
+  message: string
 }
 
 export interface ReadingJob {
@@ -93,6 +107,14 @@ const sessionPath = (id: string) => `/api/v1/sessions/${encodeURIComponent(id)}`
 const options = { timeout: 30_000 }
 
 export const sourceApi = {
+  searchCompanies: (query: string, signal?: AbortSignal) =>
+    request<{ items: CompanySearchItem[] }>(() =>
+      apiClient.get('/api/v1/companies', {
+        ...options,
+        params: { query },
+        signal,
+      }),
+    ),
   create: (brief: SourceBrief, key: string, demo: boolean) =>
     request<SourceSession>(() =>
       apiClient.post(
@@ -155,15 +177,15 @@ export const sourceApi = {
       ),
     ),
   publicStatus: (id: string) =>
-    request<{ status: string; message: string }>(() =>
+    request<PublicDataStatus>(() =>
       apiClient.get(sessionPath(id) + '/public-data', options),
     ),
-  importPublic: (session: SourceSession) =>
+  importPublic: (session: SourceSession, key: string) =>
     request<{ job_id: string }>(() =>
       apiClient.post(
         sessionPath(session.session_id) + '/public-data/import',
         { expected_input_revision: session.input_revision },
-        options,
+        { ...options, headers: { 'Idempotency-Key': key } },
       ),
     ),
   close: (id: string) =>
