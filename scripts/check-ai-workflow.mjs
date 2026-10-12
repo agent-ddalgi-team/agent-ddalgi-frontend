@@ -243,7 +243,9 @@ await reviewRegressions()
 if (process.argv.includes('--review-regressions-only')) process.exit(0)
 
 const screenPreview = process.argv.includes('--screen-preview')
+const sourceCorrectionTrial = process.argv.includes('--source-correction')
 const paid = process.env.AI_CHECK_LIVE === '1'
+assert(!sourceCorrectionTrial || (!paid && !screenPreview), 'Source correction uses an isolated mock backend')
 const reviewReplay = process.argv.includes('--review-replay')
 const replayInput = reviewReplay ? process.env.AI_CHECK_REVIEW_INPUT : null
 assert(
@@ -686,6 +688,16 @@ if os.environ.get('AI_UI_REVIEW_INPUT'):
    raise AgentError('UNSUPPORTED_PROPOSAL','Replay does not generate new proposals',False)
  replay_bridge=ReplayBridge()
  ai_jobs.get_bridge=lambda config: replay_bridge
+if os.environ.get('AI_UI_SOURCE_CORRECTION') == '1':
+ from app.agent_bridge import ValidateResult
+ from app.models import Issue
+ def correction_review(self, request):
+  target=next(b for p in request.document.pages for b in p.blocks if b.type == 'paragraph' and '충청남도' in b.content.get('text',''))
+  findings=[Issue(issue_id='other',scope='content',code='CONDITION_LOSS',severity='blocker',message='별도의 가상 조건 확인 필요',block_ids=[target.block_id])]
+  if not request.source_corrections:
+   findings.append(Issue(issue_id='typo',scope='content',code='VALUE_MISMATCH',severity='blocker',message='원문 도명 표기의 오타 확인 필요',block_ids=[target.block_id]))
+  return ValidateResult(issues=findings)
+ MockAgent.validate=correction_review
 sock=socket.socket();sock.bind(('127.0.0.1',0))
 print('READY_PORT='+str(sock.getsockname()[1]),flush=True)
 server=uvicorn.Server(uvicorn.Config(app,log_level='warning'))
@@ -706,6 +718,7 @@ finally:
         env: {
           ...process.env,
           AI_UI_TEMP: output,
+          AI_UI_SOURCE_CORRECTION: sourceCorrectionTrial ? '1' : '0',
           AI_UI_LIBREOFFICE: docxTrial
             ? 'C:/Program Files/LibreOffice/program/soffice.com'
             : '',
@@ -1149,6 +1162,70 @@ finally:
         diagnostics: output,
       }),
     )
+  } else if (sourceCorrectionTrial) {
+    await until(() => has('button[title="소속 기업/기관 변경"]'), 'app ready')
+    const fixture = await evaluate(`(async () => {
+      const api = async (path, method='GET', body) => {
+        const r = await fetch('/api/v1'+path, {method, headers: body instanceof FormData ? {} : {'Content-Type':'application/json'}, body: body ? body instanceof FormData ? body : JSON.stringify(body) : undefined});
+        const value = await r.json(); if (!r.ok) throw new Error(JSON.stringify(value)); return value;
+      };
+      const session = await api('/sessions','POST',{brief:{purpose:'오타 정정 검사',target_company:'예시 회사',emphasis:[],direction:'balanced',target_pages:4,photo_preference:'none'}});
+      const root='/sessions/'+session.session_id;
+      const poll=async job=>{for(let i=0;i<100;i++){const j=await api(root+'/jobs/'+job.job_id);if(j.status==='succeeded')return j.result_ref;if(j.status==='failed')throw new Error(JSON.stringify(j.error));await new Promise(r=>setTimeout(r,100));}throw new Error('Job timeout');};
+      const form=new FormData(); form.append('files',new File(['회사명: 예시 회사\\n회사 개요: 예시 회사는 충정남도 소재 테스트 기업입니다.\\n사업 분야: 부품 제조\\n'],'typo.txt',{type:'text/plain'}));
+      const uploaded=await api(root+'/sources','POST',form);
+      if(uploaded.job_id) await poll(uploaded);
+      for(let i=0;i<100;i++){const sources=await api(root+'/sources');if(sources.items.every(s=>['complete','partial'].includes(s.parse_status)))break;await new Promise(r=>setTimeout(r,100));}
+      const selected=await api(root+'/inputs','PATCH',{expected_input_revision:1,selected_source_ids:uploaded.items.map(s=>s.source_id)});
+      const pf=await poll(await api(root+'/preflights','POST',{expected_input_revision:selected.input_revision}));
+      const drafted=await poll(await api(root+'/drafts','POST',{preflight_id:pf.preflight_id,input_revision:selected.input_revision,confirmed:true}));
+      const path=root+'/documents/'+drafted.document_id;
+      let result=await api(path);
+      const block=result.document.pages.flatMap(p=>p.blocks).find(b=>b.type==='paragraph'&&b.content.text.includes('충정남도'));
+      await api(path,'PATCH',{expected_revision:result.document.document_revision,operations:[{op:'replace_block_content',block_id:block.block_id,content:{...block.content,text:block.content.text.replace('충정남도','충청남도')}}]});
+      result=await api(path);
+      await poll(await api(path+'/validate','POST',{expected_revision:result.document.document_revision,input_revision:selected.input_revision}));
+      result=await api(path);
+      sessionStorage.setItem('ddalgi.sources.v1',JSON.stringify({sessionId:session.session_id,jobs:[]}));
+      sessionStorage.setItem('ddalgi.sources.v1.ai',JSON.stringify({sessionId:session.session_id,revision:selected.input_revision,preflightId:pf.preflight_id}));
+      return {sid:session.session_id,path,document:result.document};
+    })()`)
+    sessionId = fixture.sid
+    await reload()
+    await screen(3)
+    await until(() => has('[data-source-correction] button'), 'source typo correction button')
+    await click('원문 오타 정정')
+    assert.ok(await evaluate("document.querySelector('[data-source-correction-submit]').disabled"))
+    const fillCorrection = async (label, value) => evaluate(`(()=>{const e=document.querySelector('[aria-label="'+${JSON.stringify(label)}+'"]');Object.getOwnPropertyDescriptor(e.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype,'value').set.call(e,${JSON.stringify(value)});e.dispatchEvent(new Event('input',{bubbles:true}));})()`)
+    await fillCorrection('원문의 오타 구절', '충정남도')
+    await fillCorrection('정정 내용', '충청남도')
+    await fillCorrection('정정 사유', '도명 표기의 오타')
+    await fillCorrection('정정 확인 근거', '가상 회사 담당자가 확인한 도명: 충청남도. 테스트용 근거.')
+    await until(() => evaluate("!document.querySelector('[data-source-correction-submit]').disabled"), 'correction form valid')
+    await evaluate("document.querySelector('[data-source-correction]').scrollIntoView({block:'center'})")
+    await screenshot('source-correction-form.png')
+    const beforeRequests = calls.length
+    await click('정정 기록 후 재검증')
+    await until(() => has('[data-issue-history-toggle]'), 'correction reviewed')
+    await evaluate("document.querySelector('[data-issue-history-toggle]').click()")
+    await until(() => has('[data-source-correction-history]'), 'correction audit history')
+    await evaluate("document.querySelector('[data-source-correction-history]').open=true")
+    assert.ok(await evaluate("document.querySelector('[data-source-correction-history]').innerText.includes('도명 표기의 오타')"))
+    const current = await evaluate(`fetch('/api/v1'+${JSON.stringify(fixture.path)}).then(r=>r.json())`)
+    assert.deepEqual(current.document, fixture.document)
+    assert.equal(current.validation.status, 'failed', 'Unrelated blocker remains')
+    const issues = await evaluate(`fetch('/api/v1'+${JSON.stringify(fixture.path)}+'/issues').then(r=>r.json())`)
+    assert.equal(issues.issues.find(i=>i.code==='VALUE_MISMATCH').status, 'resolved')
+    assert.equal(issues.issues.find(i=>i.code==='CONDITION_LOSS').status, 'open')
+    assert.equal(calls.slice(beforeRequests).filter(r=>r.method==='POST'&&r.path.endsWith('/source-corrections')).length,1)
+    await evaluate("document.querySelector('[data-source-correction-history]').scrollIntoView({block:'center'})")
+    await screenshot('source-correction-history.png')
+    await reload(); await screen(3)
+    await until(() => has('[data-issue-history-toggle]'), 'history after reload')
+    await evaluate("document.querySelector('[data-issue-history-toggle]').click()")
+    await until(() => has('[data-source-correction-history]'), 'saved correction survives reload')
+    assert.deepEqual(errors, [])
+    console.log(JSON.stringify({result:'PASS',checks:['real HTTP correction and revalidation','required fields','source excerpt','unchanged manuscript','other blocker retained','history after reload','no paid AI'],diagnostics:output}))
   } else {
   await until(
     () =>
