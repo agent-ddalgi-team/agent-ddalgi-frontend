@@ -1,5 +1,15 @@
 # agent-ddalgi-frontend
 
+## 원문 오타 정정 (2026-10-12)
+
+3단계 내용 검증의 값 불일치 카드에서 **원문 오타 정정**을 누른다. 연결된 원문을 고르고 원문 표기·정정 표기·사유·근거를 입력한 뒤 **정정 기록 후 재검증**을 실행한다. 정정할 표기가 문서에 없으면 먼저 편집·저장한다. 미저장 편집이나 검증 진행 중에는 제출할 수 없다. 근거 설명에 적은 URL은 자동 조회하지 않는다.
+
+원문과 문서를 덮어쓰지 않으며 기록만으로 통과하지 않는다. 해결된 문제의 기록은 처리 이력 표시를 켜서 확인한다. 문서/자료/점검 변경 후에는 과거 기록을 자동 적용하지 않는다. API 실패 뒤 일반 내용 검증을 다시 실행할 수 있다. 종료·만료 때 정정 내용도 정리된다.
+
+백엔드 계약1.13의 `POST /sessions/{sid}/issues/{iid}/source-corrections`와 `Issue.source_corrections`를 사용한다. 계약 원본은 [백엔드 문서](../backend/docs/contracts.md#source-typo-correction)이며 이 저장소의 타입·화면을 갱신했고 별도 계약 사본은 만들지 않았다. 새 백엔드 코드가 실행되어야 사용할 수 있다.
+
+격리 확인: `AI_CHECK_BACKEND=C:/final/backend`, `AI_CHECK_LIVE=0`에서 `node scripts/check-ai-workflow.mjs --source-correction`. 임시 DB·가상 AI와 실제 HTTP/브라우저로 입력 검증·기록·재검증·다른 blocker 유지·새로고침 이력을 확인한다. 유료 AI 판단 품질 평가는 포함하지 않는다.
+
 ## 현재 PC의 연동·인계 상태 (2026-10-08)
 
 오류 복구 작업은 백엔드 PR44(`test`), 프론트 PR24(`develop`)에 병합됐다. 현재 안내 보완 작업본은 `C:\final\frontend`의 `fix/session-expiry-guidance-20261008`이며 검수 기록은 `C:\final\backend`의 `qa/demo-format-parity-20261008`에 있다. 백엔드 API 계약1.9·데이터 형식1.0·DB v11·출력 template_v11을 기준으로 사용한다. 계약 원본은 `C:\final\backend\contracts.md`, 검사 근거는 `C:\final\backend\task_backend.md`다. 이 프론트 저장소에 계약 문서 사본을 새로 생성하지 않았으며 이번 안내 보완의 원격 공유·병합은 별도다.

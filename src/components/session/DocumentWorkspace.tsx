@@ -30,7 +30,8 @@ import {
 } from 'lucide-react'
 import type { DraftBlock, DraftResult, Preflight } from '../../api/aiWorkflow'
 import { FIELD_LABELS, issueMessageParts } from '../../constants/profileLabels'
-import { canAcknowledge, canReviewIssueEvidence, issueEditLocations, issueRecoverySteps, missingRequiredFacts, requiredTextRestorations, unusedReviewFactIds } from '../../api/publication'
+import { canAcknowledge, canReviewIssueEvidence, issueEditLocations, issueRecoverySteps, missingRequiredFacts, requiredTextRestorations, unusedReviewFactIds, sourceCorrectionTargets } from '../../api/publication'
+import type { Issue, SourceCorrectionInput } from '../../api/publication'
 import { Evidence } from './AiWorkflowPanel'
 import type { WorkSource } from '../../api/sources'
 import { usePublication } from '../../hooks/usePublication'
@@ -113,6 +114,61 @@ function getWarningReasonTemplates(code: string): string[] {
   }
 }
 
+
+function SourceCorrectionEditor({ issue, pages, disabled, onSubmit }: {
+  issue: Issue
+  pages: DraftResult['document']['pages']
+  disabled: boolean
+  onSubmit: (input: SourceCorrectionInput) => void | Promise<void>
+}) {
+  const [open, setOpen] = useState(false)
+  const [targetIndex, setTargetIndex] = useState(0)
+  const [original, setOriginal] = useState('')
+  const [corrected, setCorrected] = useState('')
+  const [reason, setReason] = useState('')
+  const [basis, setBasis] = useState('')
+  const targets = sourceCorrectionTargets(issue, pages)
+  const target = targets[targetIndex]
+  if (!target) return null
+  const valid = original.trim() && corrected.trim() && reason.trim() && basis.trim() &&
+    original.trim() !== corrected.trim() && target.ref.excerpt.includes(original) && blockText(target.block).includes(corrected)
+  const field = 'mt-1 w-full min-w-0 rounded-lg border border-slate-300 bg-white p-2 text-sm text-slate-900'
+  return <section className="mt-3" data-source-correction>
+    <button type="button" className={button} aria-expanded={open} onClick={() => setOpen(!open)}>원문 오타 정정</button>
+    {open && <form className="mt-2 space-y-3 rounded-xl border border-teal-200 bg-white p-3"
+      onSubmit={event => {
+        event.preventDefault()
+        if (!disabled && valid) void onSubmit({ block_id: target.block.block_id, evidence_ref: target.ref,
+          original_text: original, corrected_text: corrected, reason, basis })
+      }}>
+      <p>원본과 현재 문서는 바꾸지 않습니다. 문서에 사용할 표기를 먼저 저장한 뒤, 오타 정정 사유와 확인 근거를 기록하세요. 기록 후 내용 검증이 다시 실행되며 통과 여부는 검증 결과에 따릅니다.</p>
+      <fieldset disabled={disabled} className="space-y-3">
+        <label className="block">정정할 원문 위치
+          <select className={field} aria-label="정정할 원문 위치" value={targetIndex}
+            onChange={event => { setTargetIndex(Number(event.target.value)); setOriginal('') }}>
+            {targets.map((item, index) => <option key={`${item.block.block_id}-${index}`} value={index}>
+              문서 {item.pageIndex + 1}쪽 · 근거 {index + 1}: {item.ref.excerpt.slice(0, 45)}
+            </option>)}
+          </select>
+        </label>
+        <blockquote className="whitespace-pre-wrap break-words rounded-lg bg-slate-50 p-2" data-correction-excerpt>{target.ref.excerpt}</blockquote>
+        <label className="block">원문의 오타 구절<input className={field} aria-label="원문의 오타 구절" required maxLength={200}
+          value={original} onChange={event => setOriginal(event.target.value)} /></label>
+        <label className="block">정정 내용<input className={field} aria-label="정정 내용" required maxLength={200}
+          value={corrected} onChange={event => setCorrected(event.target.value)} /></label>
+        <label className="block">정정 사유<textarea className={field} aria-label="정정 사유" required maxLength={1000} rows={2}
+          value={reason} onChange={event => setReason(event.target.value)} /></label>
+        <label className="block">확인 근거<textarea className={field} aria-label="정정 확인 근거" required maxLength={2000} rows={3}
+          placeholder="확인한 자료의 이름·위치와 해당 내용을 입력하세요. 링크는 자동으로 열거나 검증하지 않습니다."
+          value={basis} onChange={event => setBasis(event.target.value)} /></label>
+        {!!original && !target.ref.excerpt.includes(original) && <p role="alert">오타 구절은 위 원문에 있는 그대로 입력하세요.</p>}
+        {!!corrected && !blockText(target.block).includes(corrected) && <p role="alert">정정할 표기를 해당 문서 블록에 먼저 입력하고 저장해 주세요.</p>}
+        <button type="submit" className={primary} disabled={!valid} data-source-correction-submit>정정 기록 후 재검증</button>
+      </fieldset>
+      {disabled && <p>미저장 편집·자료 변경·진행 중 작업을 먼저 마치고 최신 검증 결과에서 기록해 주세요.</p>}
+    </form>}
+  </section>
+}
 
 function ManuscriptInput(props: ComponentProps<'textarea'>) {
   const ref = useRef<HTMLTextAreaElement>(null)
@@ -2878,6 +2934,21 @@ export function DocumentWorkspace({
                         확인 사유: {issue.resolution.reason}
                       </p>
                     )}
+                    <SourceCorrectionEditor key={`${issue.issue_id}-${doc.document_revision}-${inputRevision}-${validation?.validation_id}`}
+                      issue={issue} pages={doc.pages}
+                      disabled={work.actionBlocked || !validation || validation.status === 'pending' || isScreenPreview}
+                      onSubmit={input => work.correctSource(issue, input)} />
+                    {!!issue.source_corrections?.length && <details className="mt-3 rounded-lg bg-slate-50 p-3" data-source-correction-history>
+                      <summary className="cursor-pointer font-bold">사용자 원문 정정 기록 {issue.source_corrections.length}건</summary>
+                      {issue.source_corrections.map(record => <div key={record.correction_id} className="mt-3 space-y-1 whitespace-pre-wrap break-words">
+                        <p>{record.original_text} → {record.corrected_text}</p>
+                        <p>사유: {record.reason}</p><p>확인 근거: {record.basis}</p>
+                        <p>문서 버전 {record.expected_revision} · 자료 버전 {record.input_revision} · {record.at}</p>
+                        <p>{record.expected_revision !== doc.document_revision || record.input_revision !== inputRevision || record.preflight_id !== preflight?.preflight_id
+                          ? '이전 버전의 기록입니다. 현재 검증에 자동 적용되지 않습니다.'
+                          : '사용자 제공 정정 기록이며 검증 통과를 의미하지 않습니다.'}</p>
+                      </div>)}
+                    </details>}
                     {canAcknowledge(issue, initial.demo) && (
                       <div className="mt-2.5 flex flex-col gap-2 rounded-xl border border-slate-200 bg-slate-50/80 p-2.5">
                         <div className="flex flex-wrap items-center gap-1.5">

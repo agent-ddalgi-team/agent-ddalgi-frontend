@@ -10,6 +10,7 @@ import type {
   PublicationDocument,
   PublicationJob,
   Proposal,
+  SourceCorrectionInput,
 } from '../api/publication'
 import type { DraftResult, Preflight } from '../api/aiWorkflow'
 import { SourceApiError } from '../api/sources'
@@ -478,7 +479,7 @@ export function usePublication(
       if (response.job_id && response.export?.status !== 'ready') {
         next.job = {
           id: response.job_id,
-          kind: action.kind,
+          kind: action.kind === 'sourceCorrection' ? 'validate' : action.kind,
           revision: action.kind === 'validate' ? Number(action.body.expected_revision) : result!.document.document_revision,
         }
         remember(next)
@@ -1275,6 +1276,15 @@ export function usePublication(
         },
         issue.issue_id,
       )
+    },
+    correctSource: (issue: Issue, correction: SourceCorrectionInput) => {
+      if (actionBlocked || !validation || validation.status === 'pending') return
+      return run('sourceCorrection', {
+        expected_revision: document.document_revision,
+        input_revision: document.input_revision,
+        validation_id: validation.validation_id,
+        ...correction,
+      }, issue.issue_id)
     },
     approve: () =>
       canApprove &&

@@ -23,6 +23,28 @@ export interface Issue {
   fact_ids?: string[]
   source_ids?: string[]
   resolution: { reason?: string } | null
+  source_corrections?: SourceCorrectionRecord[]
+}
+export interface SourceCorrectionInput {
+  block_id: string
+  evidence_ref: EvidenceRef
+  original_text: string
+  corrected_text: string
+  reason: string
+  basis: string
+}
+export interface SourceCorrectionRecord extends SourceCorrectionInput {
+  correction_id: string
+  expected_revision: number
+  input_revision: number
+  preflight_id: string
+  at: string
+}
+export function sourceCorrectionTargets(issue: Issue, pages: DraftResult['document']['pages']) {
+  if (issue.status !== 'open' || issue.origin !== 'agent' || issue.scope !== 'content' || issue.code !== 'VALUE_MISMATCH') return []
+  return pages.flatMap((page, pageIndex) => page.blocks
+    .filter(block => issue.block_ids.includes(block.block_id) && ['heading', 'paragraph', 'list'].includes(block.type))
+    .flatMap(block => block.evidence_refs.map(ref => ({ pageIndex, block, ref }))))
 }
 // A linked block is a place to inspect; it is not an AI finding against that sentence.
 export function issueEditLocations(issue: Issue, pages: DraftResult['document']['pages']) {
@@ -195,6 +217,7 @@ export type ActionKind =
   | 'validate'
   | 'layout'
   | 'acknowledge'
+  | 'sourceCorrection'
   | 'approve'
   | 'export'
   | 'propose'
@@ -289,6 +312,7 @@ export const publicationApi = {
       validate: `${path(sid, did)}/validate`,
       layout: `${path(sid, did)}/layout-checks`,
       acknowledge: `${root(sid)}/issues/${encodeURIComponent(action.issueId || '')}/resolve`,
+      sourceCorrection: `${root(sid)}/issues/${encodeURIComponent(action.issueId || '')}/source-corrections`,
       approve: `${path(sid, did)}/approvals`,
       export: `${root(sid)}/exports`,
     }
