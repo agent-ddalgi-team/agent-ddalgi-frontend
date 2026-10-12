@@ -14,7 +14,7 @@ frontend/
 │  ├─ WORK_SUMMARY.md       현재 상태·남은 일·누적 작업 기록
 │  ├─ security/            현재 보안 구현·배포 확인표
 │  ├─ reference/           발표 대본·화면 시안·샘플
-│  └─ archive/             과거 보고서·통합 이력·번호별 기록
+│  └─ history/             통합 이력·개선 제안·구형 검증 기록 (MD 3개)
 ├─ scripts/                실행·검사·관리 도구
 │  ├─ checks/              Mock 화면 렌더링 검사
 │  └─ fixtures/            가상 테스트 입력·응답·사용법
@@ -29,17 +29,19 @@ frontend/
 ```
 
 - 현재 기준: [작업 현황·남은 일](docs/WORK_SUMMARY.md), [보안 구현 대조](docs/security/BACKEND_SECURITY_REQUIRED.md), [배포 확인표](docs/security/DEPLOYMENT_SECURITY_REQUIRED.md)
-- 과거 보관: [통합 작업 이력](docs/archive/WORK_HISTORY.md), [번호별 기록](docs/archive/history/), [당시 보안 보고서](docs/archive/SECURITY_HARDENING_REPORT.md), [당시 개선 제안](docs/archive/FRONTEND_REFINEMENT_REPORT.md)
+- 과거 보관: [통합 작업 이력](docs/history/WORK_HISTORY.md), [개선 제안](docs/history/FRONTEND_REFINEMENT_REPORT.md), [구형 SSR 검증 기록](docs/history/B_프론트엔드_검증기록_0918.md)
 - 선택 참고: [시연 대본](docs/reference/DEMO_PRESENTATION_SCRIPT.md), [설계 시안](docs/reference/prototype/), [가상 출력 샘플](docs/reference/샘플문서/)
 - 가상 자료: [테스트 자료](scripts/fixtures/), [자료 사용법](scripts/fixtures/day2_테스트데이터_사용법.md)
 - AI 작업 기록 규칙: [.agents/rules/work_history.md](.agents/rules/work_history.md). 새 번호 MD를 자동 생성하지 않고 `docs/WORK_SUMMARY.md` 4절에 누적한다. 과거 기록의 옛 생성 지침은 적용하지 않는다. MD가 프로그램을 설정하거나 모든 도구에서 자동으로 읽히는 것은 아니다.
 
-**현재 설명과 과거 기록을 구분한다.** 보안 문서는 프론트·백엔드 코드를 대조한 현재 기준이며 archive/발표 대본은 당시 기록이다. 편집 내용의 sessionStorage 보관은 암호화가 아니고, ‘즉시 PDF’는 현재 문서의 서버 승인 출력과 별개다. 자세한 근거와 남은 과제는 위 보안 문서를 따른다. 중복 노션 요약은 WORK_SUMMARY에, 옛 종합정리·이전 상세 작업 내용은 WORK_HISTORY로 통합했다.
+**현재 설명과 과거 기록을 구분한다.** 보안 문서는 프론트·백엔드 코드를 대조한 현재 기준이며 history/발표 대본은 당시 기록이다. 편집 내용의 sessionStorage 보관은 암호화가 아니고, ‘즉시 PDF’는 현재 문서의 서버 승인 출력과 별개다. 자세한 근거와 남은 과제는 위 보안 문서를 따른다. 중복 노션 요약은 WORK_SUMMARY에, 번호별 기록 등 7개 문서의 핵심은 WORK_HISTORY에 통합했다. 일일요약·옛 브랜치 비교는 제거했다. history에는 MD 3개만 유지하고 새 작업마다 별도 파일을 만들지 않는다.
+
+**현재 코드의 제한:** 충족도 표시에는 파일명·개수 추정이 섞이며, 백엔드 추출문/원본 API를 호출하는 프론트 연결은 현재 없다. 발췌문 표시·오타 정정과 구분한다. [FE-DOC-01/02](docs/WORK_SUMMARY.md#3-남은-일)에 후속으로 기록했으며 이번 문서 정리에서 제품 코드를 수정하지 않았다.
 
 | 작업 후 생기는 것 | 위치·관리 방법 |
 |---|---|
 | 새 화면·로직 | `src/components/`, `src/hooks/`, `src/api/`, `src/types/`, `src/utils/` 등 해당 역할 폴더 |
-| 보고서·설계·작업 기록 | 현재 상태/새 작업은 `docs/WORK_SUMMARY.md`; 기존 보안·참고 문서를 갱신하고 과거 완료 기록만 `archive/`에 보관 |
+| 보고서·설계·작업 기록 | 현재 상태/새 작업은 `docs/WORK_SUMMARY.md`; 기존 보안·참고 문서를 갱신하고 과거 완료 기록만 `history/`에 보관 |
 | 검증 도구·가상 자료 | `scripts/`와 `scripts/fixtures/`; 가상 자료 설명 MD는 자료와 함께 둔다 |
 | 설치 라이브러리·빌드 산출물 | npm이 `node_modules/`, Vite가 `dist/`에 자동 생성; Git 제외 |
 | 업로드·AI 결과·세션 자료 | 백엔드가 관리하며 프론트 소스 폴더에 저장하지 않는다 |
@@ -58,7 +60,7 @@ VS Code 탐색기에서는 실행·환경 설정을 `package.json` 아래로 접
 
 ## 폴더·파일 삭제 판단 (2026-10-12 현재 정리 브랜치)
 
-**용량을 비우려면 생성물부터 확인한다. 소스·설정·자료를 단순히 안 보인다는 이유로 삭제하지 않는다.** 아래의 ‘유지’는 영구 삭제 금지가 아니라 현재 기능·개발 방식을 유지할 때 필요한 파일이라는 뜻이다. 코드·설정·회사 자료는 삭제하지 않았다. 문서 정리에서 중복 NOTION_SUMMARY.md만 통합 후 제거했고 원문은 Git 이력에 남는다.
+**용량을 비우려면 생성물부터 확인한다. 소스·설정·자료를 단순히 안 보인다는 이유로 삭제하지 않는다.** 아래의 ‘유지’는 영구 삭제 금지가 아니라 현재 기능·개발 방식을 유지할 때 필요한 파일이라는 뜻이다. 코드·설정·회사 자료는 삭제하지 않았다. 문서 정리에서 중복 NOTION_SUMMARY.md에 이어 history의 7개 문서를 핵심 통합 후 제거하고 일일요약·옛 브랜치 비교 2개를 제거했다. 원문은 Git 이력에 남는다.
 
 | 구분 | 대상 | 삭제 전 조건·영향 |
 |---|---|---|
@@ -201,18 +203,9 @@ VS Code 탐색기에서는 실행·환경 설정을 `package.json` 아래로 접
 
 | 파일 | 역할 | 삭제 판단 |
 |---|---|---|
-| `docs/archive/B_프론트엔드_검증기록_0918.md` | 작성 시점을 명시한 과거 기록/통합 이력 | 고유 정보·연결 확인 후 보관 판단 |
-| `docs/archive/B_프론트엔드_일일요약_0918.md` | 작성 시점을 명시한 과거 기록/통합 이력 | 고유 정보·연결 확인 후 보관 판단 |
-| `docs/archive/B_프론트엔드_작업기록_0918.md` | 작성 시점을 명시한 과거 기록/통합 이력 | 고유 정보·연결 확인 후 보관 판단 |
-| `docs/archive/FRONTEND_REFINEMENT_REPORT.md` | 작성 시점을 명시한 과거 기록/통합 이력 | 고유 정보·연결 확인 후 보관 판단 |
-| `docs/archive/history/00_프론트엔드_작업.md` | 작성 시점을 명시한 과거 기록/통합 이력 | 고유 정보·연결 확인 후 보관 판단 |
-| `docs/archive/history/01_깃허브_브랜치_비교_분석.md` | 작성 시점을 명시한 과거 기록/통합 이력 | 고유 정보·연결 확인 후 보관 판단 |
-| `docs/archive/history/02_프론트엔드_작업.md` | 작성 시점을 명시한 과거 기록/통합 이력 | 고유 정보·연결 확인 후 보관 판단 |
-| `docs/archive/history/03_프론트엔드_작업.md` | 작성 시점을 명시한 과거 기록/통합 이력 | 고유 정보·연결 확인 후 보관 판단 |
-| `docs/archive/history/04_프론트엔드_작업.md` | 작성 시점을 명시한 과거 기록/통합 이력 | 고유 정보·연결 확인 후 보관 판단 |
-| `docs/archive/history/05_프론트엔드_작업.md` | 작성 시점을 명시한 과거 기록/통합 이력 | 고유 정보·연결 확인 후 보관 판단 |
-| `docs/archive/SECURITY_HARDENING_REPORT.md` | 작성 시점을 명시한 과거 기록/통합 이력 | 고유 정보·연결 확인 후 보관 판단 |
-| `docs/archive/WORK_HISTORY.md` | 작성 시점을 명시한 과거 기록/통합 이력 | 고유 정보·연결 확인 후 보관 판단 |
+| `docs/history/B_프론트엔드_검증기록_0918.md` | 과거 이력·제안·구형 검증 근거 | 유지; 현재 기준과 구분 |
+| `docs/history/FRONTEND_REFINEMENT_REPORT.md` | 과거 이력·제안·구형 검증 근거 | 유지; 현재 기준과 구분 |
+| `docs/history/WORK_HISTORY.md` | 과거 이력·제안·구형 검증 근거 | 유지; 현재 기준과 구분 |
 | `docs/reference/DEMO_PRESENTATION_SCRIPT.md` | 발표/디자인/샘플 참고 자료 | 팀 사용·참조 확인 후 선택 |
 | `docs/reference/prototype/executive_slate_teal/DESIGN.md` | 발표/디자인/샘플 참고 자료 | 팀 사용·참조 확인 후 선택 |
 | `docs/reference/prototype/s01/code.html` | 발표/디자인/샘플 참고 자료 | 팀 사용·참조 확인 후 선택 |
@@ -226,11 +219,11 @@ VS Code 탐색기에서는 실행·환경 설정을 `package.json` 아래로 접
 | `docs/reference/prototype/states_recovery_actions/code.html` | 발표/디자인/샘플 참고 자료 | 팀 사용·참조 확인 후 선택 |
 | `docs/reference/prototype/states_recovery_actions/screen.png` | 발표/디자인/샘플 참고 자료 | 팀 사용·참조 확인 후 선택 |
 | `docs/reference/샘플문서/회사소개서_초안_mock-job-001.md` | 발표/디자인/샘플 참고 자료 | 팀 사용·참조 확인 후 선택 |
-| `docs/security/BACKEND_SECURITY_REQUIRED.md` | 현재 코드 대조·배포 기준 | 현재 기준으로 유지 |
-| `docs/security/DEPLOYMENT_SECURITY_REQUIRED.md` | 현재 코드 대조·배포 기준 | 현재 기준으로 유지 |
-| `docs/WORK_SUMMARY.md` | 현재 상태·남은 일·새 작업 기록의 원본 | 유지 |
+| `docs/security/BACKEND_SECURITY_REQUIRED.md` | 현재 상태·코드 대조·배포 기준 | 현재 기준으로 유지 |
+| `docs/security/DEPLOYMENT_SECURITY_REQUIRED.md` | 현재 상태·코드 대조·배포 기준 | 현재 기준으로 유지 |
+| `docs/WORK_SUMMARY.md` | 현재 상태·코드 대조·배포 기준 | 현재 기준으로 유지 |
 
-점검한 프로젝트 파일: 122개. 자동 생성물과 개인 파일은 위 폴더 정책을 따른다.
+점검한 프로젝트 파일: 113개. 자동 생성물과 개인 파일은 위 폴더 정책을 따른다.
 
 </details>
 
@@ -281,4 +274,4 @@ node scripts/check-ai-workflow.mjs --screen-preview
 
 `src/components/profile/` 등 이전 화면 모듈과 `scripts/fixtures/`는 구형 흐름·SSR 검수에서 참조할 수 있다. 현재 주 화면에서 안 보인다는 이유만으로 삭제하지 않는다.
 
-날짜별 구현·검증·인계 기록과 당시 실행 명령은 [보관 이력](docs/archive/WORK_HISTORY.md)에 모았다. 새 작업은 [현재 작업 현황](docs/WORK_SUMMARY.md)의 4절에 누적한다.
+날짜별 구현·검증·인계 기록과 당시 실행 명령은 [보관 이력](docs/history/WORK_HISTORY.md)에 모았다. 새 작업은 [현재 작업 현황](docs/WORK_SUMMARY.md)의 4절에 누적한다.
