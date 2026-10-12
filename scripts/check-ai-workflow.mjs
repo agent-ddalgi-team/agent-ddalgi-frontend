@@ -22,6 +22,54 @@ async function reviewRegressions() {
         module: ts.ModuleKind.CommonJS,
       },
     }).outputText
+  const publicationModule = { exports: {} }
+  runInNewContext(transpile(await readFile(new URL('../src/api/publication.ts', import.meta.url), 'utf8')), {
+    exports: publicationModule.exports, require: () => ({}),
+  })
+  const { unusedReviewFactIds, issueEditLocations, canKeepDocumentAndValidate, issueRecoverySteps, canAcknowledge, missingRequiredFacts, requiredTextRestorations } = publicationModule.exports
+  const missingIssue = {code:'REQUIRED_MISSING',status:'open',origin:'server',scope:'content',block_ids:[],fact_ids:['required']}
+  const requiredFact = {fact_id:'required',status:'supported',value:'확인된 사실',evidence_refs:[{segment_id:'segment'}]}
+  assert.equal(missingRequiredFacts(missingIssue,{facts:[requiredFact]},[]).length,1)
+  for (const patch of [{status:'resolved'},{origin:'preflight'},{scope:'layout'},{fact_ids:[]}])
+    assert.equal(missingRequiredFacts({...missingIssue,...patch},{facts:[requiredFact]},[]).length,0)
+  for (const patch of [{status:'needs_confirmation'},{status:'conflict'},{value:' '},{evidence_refs:[]}])
+    assert.equal(missingRequiredFacts(missingIssue,{facts:[{...requiredFact,...patch}]},[]).length,0)
+  assert.equal(missingRequiredFacts(missingIssue,{facts:[requiredFact]},[{blocks:[{fact_ids:['required']}]}]).length,0)
+  const restoreBlock={block_id:'restore',type:'paragraph',fact_ids:['required'],content:{text:'축약된 내용'},evidence_refs:requiredFact.evidence_refs}
+  assert.equal(requiredTextRestorations(missingIssue,{facts:[requiredFact]},[{blocks:[restoreBlock]}]).length,1)
+  for (const patch of [{type:'image'},{type:'list'},{fact_ids:['required','other']},{evidence_refs:[]},{content:{text:requiredFact.value}}])
+    assert.equal(requiredTextRestorations(missingIssue,{facts:[requiredFact]},[{blocks:[{...restoreBlock,...patch}]}]).length,0)
+  for (const patch of [{status:'resolved'},{origin:'preflight'},{code:'VALUE_MISMATCH'}])
+    assert.equal(requiredTextRestorations({...missingIssue,...patch},{facts:[requiredFact]},[{blocks:[restoreBlock]}]).length,0)
+  assert.equal(requiredTextRestorations(missingIssue,{facts:[{...requiredFact,status:'needs_confirmation'}]},[{blocks:[restoreBlock]}]).length,0)
+  for (const code of ['IMAGE_MISMATCH', 'IMAGE_UNVERIFIABLE', 'PHOTO_CONTENT_REVIEW', 'BROKEN_IMAGE', 'PLACEHOLDER_REMAINING', 'REQUIRED_MISSING']) {
+    const issue = { code, status: 'open', severity: 'warning', origin: 'agent', scope: 'content' }
+    assert.ok(issueRecoverySteps(issue).length >= 2)
+    assert.equal(canAcknowledge(issue, true), false)
+    assert.equal(issueRecoverySteps({ ...issue, status: 'resolved' }).length, 0)
+  }
+  assert.ok(issueRecoverySteps({code:'REQUIRED_MISSING',status:'open',origin:'preflight'}).join(' ').includes('자료를 첨부'))
+  const unchangedReview = { status: 'pending', from_input_revision: 3, to_input_revision: 3,
+    items: [{ code: 'INPUT_CHANGED', requires_change: false }], fact_rebindings: { same: 'same' } }
+  assert.equal(canKeepDocumentAndValidate(unchangedReview), true)
+  for (const change of [{ status: 'stale' }, { status: 'applied' }, { to_input_revision: 4 },
+    { items: [{ requires_change: true }] }, { fact_rebindings: { old: 'new' } }]) {
+    assert.equal(canKeepDocumentAndValidate({ ...unchangedReview, ...change }), false)
+  }
+  const pages = [{ blocks: [
+    { block_id: 'used', fact_ids: ['used'], evidence_refs: [{ source_id: 'shared' }] },
+    { block_id: 'other', fact_ids: ['other'], evidence_refs: [{ source_id: 'shared' }] },
+  ] }]
+  const optional = { status: 'open', origin: 'preflight', scope: 'content', code: 'UNSUPPORTED_CLAIM',
+    block_ids: [], fact_ids: ['unused'], source_ids: ['shared'] }
+  assert.deepEqual(JSON.parse(JSON.stringify(issueEditLocations(optional, pages))), [])
+  assert.deepEqual(JSON.parse(JSON.stringify(unusedReviewFactIds([optional, optional], pages, ['unused']))), ['unused'])
+  for (const change of [{ fact_ids: ['used'] }, { code: 'REQUIRED_MISSING' }, { code: 'MOCK_VALUE' },
+    { code: 'VALUE_CONFLICT' }, { status: 'resolved' }, { origin: 'agent' }, { block_ids: ['used'] }]) {
+    assert.equal(unusedReviewFactIds([{ ...optional, ...change }], pages, ['used', 'unused']).length, 0)
+  }
+  assert.equal(unusedReviewFactIds([optional], pages, []).length, 0)
+  assert.equal(issueEditLocations({ ...optional, fact_ids: [] }, pages).length, 2)
   const config = await readFile(
     new URL('../vite.config.ts', import.meta.url),
     'utf8',
@@ -211,12 +259,22 @@ assert(
 )
 const live = paid || reviewReplay
 const publication = process.argv.includes('--publication')
+const sessionExpiryTrial = process.argv.includes('--session-expiry')
+assert(!sessionExpiryTrial || !live, '--session-expiry uses isolated mock data only')
+const unusedReviewTrial = process.argv.includes('--unused-review')
+assert(!unusedReviewTrial || (publication && !live), '--unused-review requires mock --publication')
+const saveReviewTrial = process.argv.includes('--save-review')
+const requiredInsertTrial = process.argv.includes('--required-insert')
+assert(!requiredInsertTrial || (publication && !live), '--required-insert requires mock --publication')
+assert(!saveReviewTrial || (publication && !live), '--save-review requires mock --publication')
 const docxTrial = process.argv.includes('--docx')
 assert(
   !docxTrial || (publication && !live),
   '--docx requires isolated mock --publication',
 )
 const impactTrial = process.argv.includes('--impact')
+const supplementRequiredTrial = process.argv.includes('--supplement-required')
+assert(!supplementRequiredTrial || impactTrial, '--supplement-required requires --impact')
 assert(
   !impactTrial || (publication && !live),
   '--impact requires isolated mock --publication',
@@ -244,6 +302,7 @@ let sequence = 0,
   browserLog = '',
   backendLog = '',
   dropPost = '',
+  sourceSelectionFixture = '',
   dropped = false,
   failPoll = false,
   failedPoll = false
@@ -251,6 +310,7 @@ const draftEntry = process.argv.includes('--draft-entry')
 assert(!draftEntry || !live, 'Draft entry uses isolated mock responses only')
 let preflightBlockMessage = ''
 let issueActionFixture = null
+let preflightGuidanceFixture = null
 let mismatchedIssueReads = 0, injectedIssueReads = 0
 const draftRecovery = process.argv.includes('--draft-recovery')
 assert(!draftRecovery || !live, 'Draft recovery uses mock responses only')
@@ -268,7 +328,16 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms))
 async function until(check, label, timeout = 25000) {
   const end = Date.now() + timeout
   while (Date.now() < end) {
-    if (await check()) return
+    try {
+      if (await check()) return
+    } catch (cause) {
+      // A reload can destroy the context while a readiness read is pending.
+      // Only polling retries; clicks, POSTs and unrelated CDP errors still fail.
+      if (
+        cause?.code !== -32000 ||
+        !/^(Inspected target navigated or closed|Execution context was destroyed|Cannot find context with specified id)/i.test(cause.message || '')
+      ) throw cause
+    }
     await delay(120)
   }
   throw new Error(`Timeout: ${label}`)
@@ -541,50 +610,6 @@ def _diagnostic_run(cmd, timeout, what):
 if not live_trial: _render._run=_diagnostic_run
 init_orm_db(settings.db_path,settings.private_runs_dir)
 app=create_app(settings)
-from starlette.responses import Response
-excluded_facts_map={}
-orig_facts_cache={}
-@app.middleware('http')
-async def review_middleware(request,call_next):
- path=request.url.path
- if request.method == 'POST' and '/preflights/' in path and path.endswith('/reviews'):
-  parts=path.strip('/').split('/')
-  if len(parts) == 7:
-   sid,pid=parts[3],parts[5]
-   body_bytes=await request.body()
-   body=json.loads(body_bytes.decode('utf-8')) if body_bytes else {}
-   action=body.get('action')
-   fact_ids=set(body.get('fact_ids',[]))
-   curr=excluded_facts_map.setdefault(pid,set())
-   if action == 'exclude': curr.update(fact_ids)
-   elif action == 'restore': curr.difference_update(fact_ids)
-   from app.db import connect
-   from app.services import preflights as pf_service
-   with connect(settings.db_path) as conn:
-    pf_out=pf_service.get(conn,sid,pid)
-    pf_data=pf_out.model_dump()
-   all_facts=orig_facts_cache.setdefault(pid,pf_data['facts'])
-   rev_ids=[f['fact_id'] for f in all_facts if f.get('field_key') != 'company_name']
-   pf_data['reviewable_fact_ids']=rev_ids
-   pf_data['excluded_facts']=[f for f in all_facts if f['fact_id'] in curr]
-   pf_data['facts']=[f for f in all_facts if f['fact_id'] not in curr]
-   return Response(content=json.dumps(pf_data),media_type='application/json',status_code=200)
- response=await call_next(request)
- if request.method == 'GET' and '/preflights/' in path and not path.endswith('/preflights'):
-  parts=path.strip('/').split('/')
-  if len(parts) == 6 and response.status_code == 200:
-   pid=parts[5]
-   body=b''
-   async for chunk in response.body_iterator: body+=chunk
-   data=json.loads(body.decode('utf-8'))
-   all_facts=orig_facts_cache.setdefault(pid,data['facts'])
-   curr=excluded_facts_map.setdefault(pid,set())
-   rev_ids=[f['fact_id'] for f in all_facts if f.get('field_key') != 'company_name']
-   data['reviewable_fact_ids']=rev_ids
-   data['excluded_facts']=[f for f in all_facts if f['fact_id'] in curr]
-   data['facts']=[f for f in all_facts if f['fact_id'] not in curr]
-   return Response(content=json.dumps(data),media_type='application/json')
- return response
 trial_ledger=None
 # The synthetic failure is used only by mock tests.
 if live_trial:
@@ -598,6 +623,17 @@ async def proposal_fixture(self, request):
   raise AgentError('UNSUPPORTED_PROPOSAL', '실제 AI 수정안 기능은 아직 연결되지 않았습니다.', False)
  return await original_propose(self, request)
 if not live_trial: MockAgent.propose=proposal_fixture
+if not live_trial and ${unusedReviewTrial ? 'True' : 'False'}:
+ from app.models import Fact
+ original_analyze=MockAgent.analyze
+ async def unused_fact_fixture(self, request):
+  result=await original_analyze(self, request)
+  evidence=next(f.evidence_refs for f in result.facts if f.evidence_refs)
+  for label in ('first','second'):
+   result.facts.append(Fact(fact_id='unused_'+label, field_key='unused_review_fixture',
+    value='추가 확인 대상 '+label, status='needs_confirmation', evidence_refs=evidence))
+  return result
+ MockAgent.analyze=unused_fact_fixture
 if os.environ.get('AI_UI_REVIEW_INPUT'):
  from app import agent_llm as llm
  from app.agent_bridge import AnalyzeResult, DraftResult
@@ -766,6 +802,10 @@ finally:
       })
     } else if (data.method === 'Fetch.requestPaused') {
       const p = data.params
+      if (unusedReviewTrial && p.request.method === 'POST' &&
+          /\/preflights\/[^/]+\/reviews$/.test(new URL(p.request.url).pathname) && p.responseStatusCode === 200) {
+        issueActionFixture = null
+      }
       if (mismatchedIssueReads > 0 && p.request.method === 'GET' &&
           /\/documents\/[^/]+\/issues$/.test(new URL(p.request.url).pathname) && p.responseStatusCode === 200) {
         mismatchedIssueReads--
@@ -778,6 +818,15 @@ finally:
         }).catch(cause=>errors.push('issue snapshot interception: '+cause.message))
         return
       }
+      if (preflightGuidanceFixture && p.request.method === 'GET' &&
+          new URL(p.request.url).pathname.endsWith('/preflights/' + preflightGuidanceFixture.preflight_id) && p.responseStatusCode === 200) {
+        intercept('Fetch.fulfillRequest', {
+          requestId: p.requestId, responseCode: 200,
+          responseHeaders: [{name: 'Content-Type', value: 'application/json'}],
+          body: Buffer.from(JSON.stringify(preflightGuidanceFixture)).toString('base64'),
+        })
+        return
+      }
       if (issueActionFixture && p.request.method === 'GET' &&
           /\/documents\/[^/]+\/issues$/.test(new URL(p.request.url).pathname) && p.responseStatusCode === 200) {
         intercept('Fetch.fulfillRequest', {
@@ -785,6 +834,38 @@ finally:
           responseHeaders: [{name: 'Content-Type', value: 'application/json'}],
           body: Buffer.from(JSON.stringify(issueActionFixture)).toString('base64'),
         })
+        return
+      }
+      const sourcePath = new URL(p.request.url).pathname
+      if (
+        sourceSelectionFixture &&
+        p.request.method === 'GET' &&
+        p.responseStatusCode === 200 &&
+        (sourcePath === '/api/v1/sources' || /\/sessions\/[^/]+\/sources$/.test(sourcePath))
+      ) {
+        command('Fetch.getResponseBody', { requestId: p.requestId })
+          .then(({ body, base64Encoded }) => {
+            const result = JSON.parse(base64Encoded ? Buffer.from(body, 'base64').toString('utf8') : body)
+            if (sourcePath === '/api/v1/sources') {
+              result.items.push({
+                source_id: 'UI_UNUSED_PENDING_SOURCE', source_version: 1,
+                scope: 'registered', name: '선택하지 않은 등록 자료 읽기 중',
+                kind: 'company', role: 'evidence', size_bytes: 1,
+                parse_status: 'reading', text_available: false, image_available: false,
+                asset_ids: [], use_as_company_evidence: true, origin_kind: 'real', warnings: [],
+              })
+            } else if (sourceSelectionFixture === 'public') {
+              result.items = result.items.map((item) => item.name === 'ai-connection-demo.txt'
+                ? { ...item, warnings: [...item.warnings, { code: 'PUBLIC_OPEN_DATA', message: '공개 연동 자료 검사' }] }
+                : item)
+            }
+            intercept('Fetch.fulfillRequest', {
+              requestId: p.requestId, responseCode: 200,
+              responseHeaders: [{ name: 'Content-Type', value: 'application/json' }],
+              body: Buffer.from(JSON.stringify(result)).toString('base64'),
+            })
+          })
+          .catch((cause) => errors.push('source selection interception: ' + cause.message))
         return
       }
       if (
@@ -1129,6 +1210,26 @@ finally:
     await evaluate("document.querySelector('input[aria-label=\"ai-connection-demo.txt 선택\"]').click()")
     await idle()
     checks.push('company saved/reloaded; changed company clears selection and retains uploads; public import without keys reports error without mutation')
+    await command('Fetch.enable', { patterns: [{ urlPattern: '*api/v1/*', requestStage: 'Response' }] })
+    for (const mode of ['attached', 'public']) {
+      sourceSelectionFixture = mode
+      await click('상태 새로고침')
+      await idle()
+      const tabLabel = mode === 'public' ? '공개 연동 데이터' : '이번 작업 첨부'
+      await evaluate('[...document.querySelectorAll("[role=tab]")].find(b=>b.textContent.includes('+JSON.stringify(tabLabel)+')).click()')
+      await until(() => has('input[aria-label="ai-connection-demo.txt 선택"]:checked:not(:disabled)'), mode + ' selected source')
+      await until(() => evaluate('[...document.querySelectorAll("button")].some(b=>b.textContent.trim()==="AI 자료 점검"&&!b.disabled)'), mode + ' only permits analysis despite unrelated pending registered source')
+      const state = await sessionState()
+      assert.equal(state.selected_source_ids.length, 1)
+      assert.ok(state.selected_source_ids[0].startsWith('src_'))
+      assert.ok(!state.selected_source_ids.includes('UI_UNUSED_PENDING_SOURCE'))
+    }
+    sourceSelectionFixture = ''
+    await click('상태 새로고침')
+    await idle()
+    await evaluate('[...document.querySelectorAll("[role=tab]")].find(b=>b.textContent.includes("이번 작업 첨부")).click()')
+    checks.push('session attachment only and public source only enable AI without registered selection; unselected reading registered source does not block')
+
   }
   if (photoTrial) {
     // DOCX limits enlargement to native pixels / 150ppi. Use enough pixels
@@ -1225,6 +1326,39 @@ finally:
     assert.ok(optional, 'optional fact available for review')
     const company = original.facts.find(f => f.field_key === 'company_name')
     assert.equal(await has(`[data-review-exclude="${company.fact_id}"]`), false)
+    const beforeGuidancePosts = calls.filter(c => c.method === 'POST').length
+    const ref = original.facts.flatMap(f => f.evidence_refs)[0]
+    assert.ok(ref)
+    preflightGuidanceFixture = { ...original, can_generate: false,
+      facts: [
+        {...company, value: null, status: 'missing', evidence_refs: []},
+        {...optional, field_key: 'technology', value: null, status: 'conflict', alternatives: [
+          {value: '후보 성능 120시간', evidence_refs: [{...ref, excerpt: '첫 번째 후보의 시험 원문'}]},
+          {value: '후보 성능 168시간', evidence_refs: [{...ref, excerpt: '두 번째 후보의 시험 원문'}]},
+          {value: '근거 미연결 후보', evidence_refs: []},
+        ]},
+      ],
+      reviewable_fact_ids: [optional.fact_id],
+      issues: [{issue_id: 'guidance_missing', code: 'REQUIRED_MISSING', severity: 'blocker', status: 'open', message: '회사명 근거 없음', fact_ids: [company.fact_id]},
+        {issue_id: 'guidance_conflict', code: 'VALUE_CONFLICT', severity: 'blocker', status: 'open', message: '기술 자료 상충', fact_ids: [optional.fact_id]}],
+    }
+    await reload()
+    await until(() => has('[data-fact-alternative]'), 'candidate evidence guidance loaded')
+    assert.ok(await evaluate(`document.querySelector('[data-preflight-fact="${company.fact_id}"] [data-fact-guidance]').textContent.includes('법인 식별 정보')`))
+    assert.ok(await evaluate(`document.querySelector('[data-preflight-fact="${company.fact_id}"] [data-fact-guidance]').textContent.includes('현재 제외할 수 없습니다')`))
+    assert.equal(await has(`[data-review-exclude="${company.fact_id}"]`), false)
+    assert.ok(await has(`[data-review-exclude="${optional.fact_id}"]`))
+    assert.ok(await evaluate(`document.querySelector('[data-preflight-fact="${optional.fact_id}"] [data-fact-guidance]').textContent.includes('시험 기준')`))
+    const candidates = await evaluate(`Array.from(document.querySelectorAll('[data-preflight-fact="${optional.fact_id}"] [data-fact-alternative]')).map(e=>e.textContent)`)
+    assert.ok(candidates[0].includes('첫 번째 후보의 시험 원문') && !candidates[0].includes('두 번째 후보의 시험 원문'))
+    assert.ok(candidates[1].includes('두 번째 후보의 시험 원문') && !candidates[1].includes('첫 번째 후보의 시험 원문'))
+    assert.ok(candidates[2].includes('연결된 원문 근거가 없습니다'))
+    assert.equal(await draftDisabled(), true)
+    assert.equal(calls.filter(c => c.method === 'POST').length, beforeGuidancePosts)
+    preflightGuidanceFixture = null
+    await reload()
+    await until(() => has(`[data-review-exclude="${optional.fact_id}"]`), 'actual preflight restored')
+    checks.push('missing/conflicting facts show specific evidence guidance, separate candidate sources and missing-source notice; required exclusion remains unavailable; no mutation or AI call')
     const analyses = posts('preflights').length
     await evaluate(`document.querySelectorAll('[data-testid=preflight-result] details').forEach(d=>d.open=true)`)
     dropped = false
@@ -1446,6 +1580,33 @@ finally:
   )
   await screenshot('draft.png')
   checks.push('draft saved, rendered and restored; source changes locked')
+  if (sessionExpiryTrial) {
+    const sessionRoute = `/api/v1/sessions/${sessionId}`
+    const documentRoute = `${sessionRoute}/documents/${doc.document_id}`
+    const state = (route) => evaluate(`fetch(${JSON.stringify(route)}).then(r=>{if(!r.ok)throw Error('State read failed');return r.json()})`)
+    for (const step of [1, 2, 3]) {
+      await screen(step)
+      await evaluate('window.scrollTo(0,0)')
+      const beforeSession = await state(sessionRoute)
+      const beforeDocument = await state(documentRoute)
+      await until(() => evaluate(`!!document.querySelector('[data-session-expiry] button:not(:disabled)')`), 'expiry refresh ready')
+      assert.ok(await evaluate(`(()=>{const e=document.querySelector('[data-session-expiry]');const r=e.getBoundingClientRect();return r.width>0&&r.height>0&&r.top>=0&&r.top<window.innerHeight&&e.textContent.includes('작업 종료·만료')})()`), `Expiry notice visible in S0${step}`)
+      const start = calls.length
+      await click('만료 시각 다시 확인')
+      await idle()
+      const afterSession = await state(sessionRoute)
+      const afterDocument = await state(documentRoute)
+      assert.equal(await evaluate(`document.querySelector('[data-session-expiry] time').dateTime`), afterSession.expires_at)
+      assert.equal(afterSession.expires_at, beforeSession.expires_at, 'Refresh must not extend expiry')
+      assert.equal(afterSession.last_activity_at, beforeSession.last_activity_at, 'Refresh must not count as activity')
+      assert.equal(afterSession.input_revision, beforeSession.input_revision)
+      assert.deepEqual(afterDocument, beforeDocument, 'Refresh must preserve document, validation and approvals')
+      assert.ok(calls.slice(start).every((request) => request.method === 'GET'), 'Expiry refresh must only read')
+      await screenshot(`session-expiry-s0${step}.png`)
+      checks.push(`S0${step} expiry notice visible; refresh matches server without extending expiry, AI calls or document changes`)
+    }
+    await screen(2)
+  }
   if (publication) {
     const route = `/api/v1/sessions/${sessionId}/documents/${doc.document_id}`
     const documentState = () =>
@@ -1466,8 +1627,17 @@ finally:
         .find((b) => b.type === 'paragraph' && b.fact_ids.length)
       const preservedText =
         paragraph.content.text + ' 사용자가 직접 편집한 내용입니다.'
+      await screen(1)
+      await until(() => evaluate(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='자료 변경 시작'&&!b.disabled)`), 'source editing initially available')
+      await click('자료 변경 시작')
+      await screen(2)
       await setText(paragraph.block_id, preservedText)
       await screen(1)
+      assert.ok(await evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='변경 자료 AI 점검').disabled`))
+      assert.ok(await evaluate(`!document.querySelector('[data-source-next]').textContent.includes('초안')`))
+      const dirtyPreflightPosts = posts('preflights').length
+      await evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='변경 자료 AI 점검').click()`)
+      assert.equal(posts('preflights').length, dirtyPreflightPosts)
       assert.equal(
         await evaluate(
           `[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='자료 변경 시작').disabled`,
@@ -1494,7 +1664,8 @@ finally:
         'source changes enabled after saved edits',
       )
       await click('자료 변경 시작')
-      await upload('impact-replacement.txt', fixture)
+      await upload('impact-replacement.txt', fixture + (supplementRequiredTrial
+        ? '대응 범위: 알루미늄 시험시편의 최대 가공 길이는 200mm입니다.\n' : ''))
       await until(
         () =>
           has('input[aria-label="impact-replacement.txt 선택"]:not(:disabled)'),
@@ -1525,6 +1696,25 @@ finally:
         async () => !(await has('[data-testid=preflight-result]')),
         'previous preflight invalidated',
       )
+      if (supplementRequiredTrial) {
+        // Test setup only: require the newly supplied field through the real inputs API.
+        // Reanalysis, C-05 choices, insertion and validation below use the actual UI.
+        const session = await evaluate(`fetch('/api/v1/sessions/${sessionId}').then(r=>r.json())`)
+        assert.equal(await evaluate(`fetch('/api/v1/sessions/${sessionId}/inputs', {
+          method:'PATCH',headers:{'Content-Type':'application/json','Idempotency-Key':crypto.randomUUID()},
+          body:JSON.stringify(${JSON.stringify({expected_input_revision:session.input_revision,brief:{...session.brief,required_fields:['capabilities']}})})
+        }).then(r=>r.status)`),200)
+        await reload()
+        await until(()=>has('[data-testid=impact-review]'),'supplement document restored after setup')
+        await screen(1)
+        await evaluate("[...document.querySelectorAll('[role=\"tab\"]')].find(t=>t.textContent.includes(\"이번 작업 첨부\")).click()")
+        await until(()=>has('input[aria-label="impact-replacement.txt 선택"]'),'supplement session restored after setup')
+        await screen(2)
+        await until(()=>has(`textarea[data-edit-block="${paragraph.block_id}"]`),'supplement manuscript restored after setup')
+        await screen(1)
+        await until(()=>evaluate(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='자료 변경 시작'&&!b.disabled)`),'supplement source editing restored after setup')
+        await click('자료 변경 시작')
+      }
       assert.equal(
         await evaluate(
           `document.querySelector('textarea[data-edit-block="${paragraph.block_id}"]').value`,
@@ -1535,12 +1725,32 @@ finally:
         (await documentState()).document.pages,
         beforeImpact.document.pages,
       )
-      await click('변경 자료 AI 점검')
+      await until(() => has('[data-source-next]:not(:disabled)'), 'changed inputs ready for analysis')
+      assert.ok(await evaluate(`document.querySelector('[data-source-next]').textContent.includes('변경 자료 AI 점검')`))
+      dropPost = 'preflights'
+      dropped = false
+      await evaluate(`document.querySelector('[data-source-next]').click()`)
+      await until(() => dropped, 'supplement preflight response lost')
+      await idle()
+      const supplementPosts = posts('preflights').length
+      await reload()
+      await screen(2)
+      await screen(1)
+      await until(() => evaluate(`document.querySelector('[data-source-next]').textContent.includes('점검 요청 처리 결과 확인')&&!document.querySelector('[data-source-next]').disabled`), 'supplement recovery after reload')
+      await evaluate(`document.querySelector('[data-source-next]').click()`)
+      await until(() => evaluate(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='같은 AI 요청 다시 확인'&&!b.disabled)`), 'same supplement request recovery available')
+      assert.equal(posts('preflights').length, supplementPosts)
+      await click('같은 AI 요청 다시 확인')
       await until(
         () => has('[data-testid=preflight-result]'),
         'new source preflight',
       )
-      await screen(2)
+      assert.equal(posts('preflights').at(-1).key, posts('preflights').at(-2).key)
+      await until(() => has('[data-source-review-continue]'), 'supplement continuation available')
+      const beforeContinuePosts = calls.filter(c=>c.method==='POST').length
+      await evaluate(`document.querySelector('[data-source-next]').click()`)
+      await until(() => evaluate(`document.activeElement?.dataset.testid==='impact-review'`), 'continuation focuses impact review')
+      assert.equal(calls.filter(c=>c.method==='POST').length, beforeContinuePosts)
       await until(
         () => has('input[aria-label="최신 점검 확인"]'),
         'impact panel',
@@ -1736,7 +1946,7 @@ finally:
           )),
         'applied review restored by GET',
       )
-      const afterImpact = await documentState()
+      let afterImpact = await documentState()
       assert.equal(
         afterImpact.document.document_revision,
         beforeImpact.document.document_revision + 1,
@@ -1771,10 +1981,11 @@ finally:
       checks.push(
         'C-05: source replacement preserves edits/photos; explicit confirmation resets; lost create reuses key; same-input reanalysis stales review; selected text/references applied once; lost apply restores by GET; reason/body absent from storage; full validation without regeneration',
       )
+      checks.push('supplement dock advances from analysis to existing document; dirty text blocks reanalysis; lost analysis restores same key after reload; review navigation focuses panel without POST')
       prepared = afterImpact
       await until(async () => {
         const checked = (await documentState()).validation
-        return checked && ['passed', 'needs_review'].includes(checked.status)
+        return checked && ['passed', 'needs_review', ...(supplementRequiredTrial ? ['failed'] : [])].includes(checked.status)
       }, 'impact full validation')
       const impactValidation = (await documentState()).validation
       assert.equal(
@@ -1793,6 +2004,40 @@ finally:
             .map((b) => b.block_id),
         ),
       )
+      if (supplementRequiredTrial) {
+        const added = latest.facts.find(f=>f.field_key==='capabilities'&&f.status==='supported')
+        assert.ok(added)
+        assert.ok(!oldPf.facts.some(f=>f.field_key==='capabilities'&&f.status==='supported'))
+        assert.equal(impactValidation.status,'failed')
+        await screen(3)
+        await until(()=>has(`[data-required-fact="${added.fact_id}"]`),'supplement required fact available in validation UI')
+        const before = await documentState()
+        const generationCalls = posts('preflights').length + posts('drafts').length
+        await evaluate(`document.querySelector('[data-required-fact="${added.fact_id}"]').click()`)
+        assert.ok(await evaluate(`document.querySelector('[data-required-insert-submit]').disabled`))
+        const selectedPage = before.document.pages[1]
+        await evaluate(`(()=>{const s=document.querySelector('[data-required-page]');s.value='${selectedPage.page_id}';s.dispatchEvent(new Event('change',{bubbles:true}))})()`)
+        await until(()=>has('[data-required-insert-submit]:enabled'),'supplement explicit insertion ready')
+        await evaluate(`document.querySelector('[data-required-insert-submit]').click()`)
+        await until(async()=>{const out=await documentState();return out.document.document_revision===before.document.document_revision+1&&out.validation?.document_revision===out.document.document_revision&&['passed','needs_review'].includes(out.validation.status)},'supplement inserted and actual server blocker cleared')
+        await idle()
+        afterImpact = await documentState()
+        const inserted = afterImpact.document.pages.flatMap(p=>p.blocks).filter(b=>b.fact_ids.includes(added.fact_id))
+        assert.equal(inserted.length,1)
+        assert.equal(inserted[0].content.text,added.value)
+        assert.deepEqual(inserted[0].evidence_refs,added.evidence_refs)
+        assert.equal(afterImpact.document.document_id,before.document.document_id)
+        const addedIssues = await evaluate(`fetch(${JSON.stringify(route)}+'/issues').then(r=>r.json())`)
+        assert.equal(addedIssues.issues.some(i=>i.status==='open'&&i.severity==='blocker'),false)
+        for (const page of before.document.pages)
+          assert.deepEqual(afterImpact.document.pages.find(p=>p.page_id===page.page_id).blocks.filter(b=>b.block_id!==inserted[0].block_id),page.blocks)
+        assert.equal(posts('preflights').length+posts('drafts').length,generationCalls)
+        await reload()
+        await screen(3)
+        await until(()=>has('[data-testid=draft-result]'),'supplement insertion reload')
+        assert.equal(await has(`[data-required-fact="${added.fact_id}"]`),false)
+        checks.push('new required scope from supplemental source: C-05 preserves manuscript and binds current evidence; real missing blocker exposes explicit fact/page insertion; one saved revision clears server blocker and preserves warnings; reload prevents duplicate; no re-extraction or regeneration')
+      }
       await click('문서 상태 새로고침')
       // Normal apply responses must also connect and poll their returned full-validation job.
       const lastValidation = impactValidation.validation_id
@@ -1816,29 +2061,8 @@ finally:
       )
       await screen(2)
       await until(() => evaluate(`!JSON.parse(sessionStorage.getItem('ddalgi.sources.v1.publication')).impactReviewId`), 'previous applied review cleared for new preflight')
-      await until(
-        () => has('input[aria-label="최신 점검 확인"]:not(:disabled)'),
-        'normal confirmation ready',
-      )
-      await evaluate(
-        `document.querySelector('input[aria-label="최신 점검 확인"]').click()`,
-      )
-      await click('변경 영향 불러오기')
-      await until(
-        () => has('textarea[aria-label="변경 유지 사유"]:not(:disabled)'),
-        'normal review loaded',
-      )
-      const normalRid = await evaluate(
-        `JSON.parse(sessionStorage.getItem('ddalgi.sources.v1.publication')).impactReviewId`,
-      )
-      const normalReview = await evaluate(
-        `fetch(${JSON.stringify(route)}+'/impact-reviews/'+${JSON.stringify(normalRid)}).then(r=>r.json())`,
-      )
-      assert.equal(normalReview.status, 'pending')
-      await evaluate(
-        `(()=>{const t=document.querySelector('textarea[aria-label="변경 유지 사유"]');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(t,'같은 입력의 최신 점검을 확인하고 기존 내용을 유지합니다.');t.dispatchEvent(new Event('input',{bubbles:true}))})()`,
-      )
-      await click('선택한 변경 적용·전체 재검증')
+      await until(() => has('[data-keep-and-validate]:not(:disabled)'), 'one click continuation ready')
+      await evaluate(`document.querySelector('[data-keep-and-validate]:not(:disabled)').click()`)
       await until(async () => {
         const out = await documentState()
         return (
@@ -1849,6 +2073,9 @@ finally:
           out.validation.status !== 'pending'
         )
       }, 'normal apply full validation')
+      const normalRid = await evaluate(`JSON.parse(sessionStorage.getItem('ddalgi.sources.v1.publication')).impactReviewId`)
+      const normalReview = await evaluate(`fetch(${JSON.stringify(route)}+'/impact-reviews/'+${JSON.stringify(normalRid)}).then(r=>r.json())`)
+      assert.equal(normalReview.status, 'applied')
       await until(
         () =>
           evaluate(
@@ -2339,6 +2566,7 @@ finally:
         '붉은색 사각형',
       )
       await selectBlock(photo.block_id)
+      assert.equal(state.document.pages.flatMap(p=>p.blocks).find(b=>b.block_id===photo.block_id).content.alt, '붉은색 사각형')
       await click('사진 교체 후보 보기')
       await photoReady()
       await evaluate(
@@ -2452,24 +2680,46 @@ finally:
       )
       if (!live) {
         dropped = false
-        dropSave = true
+        if (saveReviewTrial && process.argv.includes('--save-review-lost-validate')) dropPost = 'validate'
+        else dropSave = true
       }
-      await click('문구 저장')
+      await click(saveReviewTrial ? '저장하고 내용 검사' : '문구 저장')
       if (!live) {
         await until(() => dropped, 'save response dropped')
         await idle()
+        if (saveReviewTrial && process.argv.includes('--save-review-lost-validate')) {
+          await reload()
+          await until(() => has('[data-testid=draft-result]'), 'saved validation request restored')
+          await screen(2)
+          await until(() => evaluate(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='같은 문서 요청 다시 확인'&&!b.disabled)`), 'validation replay ready after reload')
+          const recovery = await evaluate(`JSON.parse(sessionStorage.getItem('ddalgi.sources.v1.publication'))`)
+          assert.equal(recovery.pending.kind, 'validate')
+          assert.equal(recovery.pending.body.expected_revision, current.document.document_revision + 1)
+          assert.equal(JSON.stringify(recovery).includes(editable.content.text), false)
+        }
         await click('같은 문서 요청 다시 확인')
       }
       await idle()
+      if (saveReviewTrial) await until(async () => {
+        const state = await documentState()
+        return !!state.validation && state.validation.document_revision === state.document.document_revision && state.validation.status !== 'pending'
+      }, 'save continues through content validation')
       const edited = await documentState()
       assert.equal(
         edited.document.document_revision,
         current.document.document_revision + 1,
       )
-      assert.equal(edited.validation, null)
+      if (saveReviewTrial) assert.equal(edited.validation.document_revision, edited.document.document_revision)
+      else assert.equal(edited.validation, null)
+      if (saveReviewTrial && process.argv.includes('--save-review-lost-validate')) {
+        const attempts = posts('validate').slice(-2)
+        assert.equal(attempts.length, 2)
+        assert.equal(attempts[0].key, attempts[1].key)
+      }
       assert.equal(edited.approval, null)
       checks.push(
-        live
+        saveReviewTrial ? 'save-and-validate resumes the same failed request, creates one document revision and validates the saved revision'
+          : live
           ? 'edit/delete/save creates one revision'
           : 'edit/delete/save and lost save response create one revision',
       )
@@ -2536,6 +2786,62 @@ finally:
       checks.push(
         'explicit empty-page cleanup preserves all nonempty pages; dirty edits block cleanup; persisted once and restored after reload',
       )
+    }
+    if (unusedReviewTrial) {
+      await screen(3)
+      await idle()
+      const before = await documentState()
+      const state = await saved()
+      const pf = await evaluate(`fetch('/api/v1/sessions/${state.sessionId}/preflights/${state.preflightId}').then(r=>r.json())`)
+      const optional = pf.facts.filter(f => f.field_key === 'unused_review_fixture')
+      assert.equal(optional.length, 2)
+      assert.ok(optional.every(f => pf.reviewable_fact_ids.includes(f.fact_id)))
+      assert.ok(optional.every(f => !before.document.pages.some(p => p.blocks.some(b => b.fact_ids.includes(f.fact_id)))))
+      issueActionFixture = { document_revision: before.document.document_revision,
+        validation_id: before.validation?.validation_id || null,
+        issues: optional.map(f => ({ issue_id: 'unused_' + f.fact_id, code: 'UNSUPPORTED_CLAIM',
+          message: '사용하지 않은 선택 항목의 확인 필요', severity: 'blocker', scope: 'content',
+          status: 'open', origin: 'preflight', layout_format: null, block_ids: [], fact_ids: [f.fact_id],
+          source_ids: f.evidence_refs.map(ref => ref.source_id), resolution: null })) }
+      await click('문서 상태 새로고침')
+      await until(() => has('[data-unused-facts-exclude]:not(:disabled)'), 'unused exclusion ready')
+      const analyses = posts('preflights').length
+      const drafts = posts('drafts').length
+      const lostExclusion = process.argv.includes('--unused-review-lost')
+      if (lostExclusion) { dropped = false; dropPost = 'reviews' }
+      await evaluate(`document.querySelector('[data-unused-facts-exclude]').click()`)
+      if (lostExclusion) {
+        await until(() => dropped, 'exclusion reply lost')
+        await until(() => has('[data-exclusion-retry]:not(:disabled)'), 'in-app exclusion recovery')
+        await reload()
+        await until(() => has('[data-testid=draft-result]'), 'pending exclusion restored')
+        await screen(3)
+        await until(() => has('[data-exclusion-retry]:not(:disabled)'), 'recovery survives reload')
+        const reviews = posts('reviews')
+        await evaluate(`document.querySelector('[data-exclusion-retry]:not(:disabled)').click()`)
+        await until(() => posts('reviews').length > reviews.length, 'same review replay sent')
+        const replayed = posts('reviews').slice(-2)
+        assert.equal(replayed[0].key, replayed[1].key)
+      }
+      await until(async () => {
+        const current = await documentState()
+        return current.document.document_revision === before.document.document_revision + 1 &&
+          current.validation && current.validation.status !== 'pending'
+      }, 'one click excludes unused facts, keeps document and completes validation')
+      await idle()
+      const after = await documentState()
+      assert.deepEqual(after.document.pages, before.document.pages)
+      assert.equal(posts('preflights').length, analyses)
+      assert.equal(posts('drafts').length, drafts)
+      await reload()
+      await until(() => has('[data-testid=draft-result]'), 'completed exclusion reload')
+      await screen(3)
+      await until(() => has('#publication-panel'), 'publication restored')
+      assert.equal(await has('[data-keep-and-validate]'), false)
+      assert.equal((await documentState()).document.document_revision, after.document.document_revision)
+      checks.push(lostExclusion
+        ? 'lost batch exclusion response recovers in S03 after reload using the same key, then applies and validates without re-extraction or regeneration'
+        : 'one click batch excludes two unused facts, applies unchanged document, polls validation and survives reload without re-extraction or draft generation')
     }
     const edited = await documentState()
     if (live) {
@@ -2610,6 +2916,92 @@ finally:
     if (!live) {
       const refreshReady = () => until(() => evaluate(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='문서 상태 새로고침'&&!b.disabled)`),'snapshot refresh settled')
       await refreshReady()
+      if (requiredInsertTrial) {
+        const initialState = await documentState()
+        const aiState = await saved()
+        const pf = await evaluate(`fetch('/api/v1/sessions/${sessionId}/preflights/${aiState.preflightId}').then(r=>r.json())`)
+        const company = pf.facts.find(f=>f.field_key==='company_name'&&f.status==='supported')
+        assert.ok(company)
+        const removedIds = initialState.document.pages.flatMap(p=>p.blocks).filter(b=>b.fact_ids.includes(company.fact_id)).map(b=>b.block_id)
+        assert.ok(removedIds.length)
+        const removedStatus = await evaluate(`fetch(${JSON.stringify(route)},{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(${JSON.stringify({expected_revision:initialState.document.document_revision,operations:removedIds.map(block_id=>({op:'delete_block',block_id}))})})}).then(r=>r.status)`)
+        assert.equal(removedStatus,200)
+        await refreshReady()
+        await click('문서 상태 새로고침')
+        await until(()=>evaluate(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='내용 검증 실행'&&!b.disabled)`),'missing content validation ready')
+        await click('내용 검증 실행')
+        await until(()=>has(`[data-required-fact="${company.fact_id}"]`),'real missing company exposes supported insertion')
+        await idle()
+        const beforeInsert = await documentState()
+        const chosenPage = beforeInsert.document.pages[1]
+        const generationCalls = posts('preflights').length + posts('drafts').length
+        await evaluate(`document.querySelector('[data-required-fact="${company.fact_id}"]').click()`)
+        assert.ok(await evaluate(`document.querySelector('[data-required-insert-submit]').disabled`))
+        await evaluate(`(()=>{const s=document.querySelector('[data-required-page]');s.value='${chosenPage.page_id}';s.dispatchEvent(new Event('change',{bubbles:true}))})()`)
+        await until(()=>has('[data-required-insert-submit]:enabled'),'explicit insertion ready')
+        dropSave = true
+        dropped = false
+        await evaluate(`document.querySelector('[data-required-insert-submit]').click()`)
+        await until(()=>dropped,'insertion save response lost')
+        await until(()=>evaluate(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='같은 문서 요청 다시 확인'&&!b.disabled)`),'insert retry ready')
+        await click('같은 문서 요청 다시 확인')
+        await until(async()=>{const out=await documentState();return out.document.document_revision===beforeInsert.document.document_revision+1&&out.validation?.document_revision===out.document.document_revision&&out.validation.status!=='pending'},'insert saved once and validated')
+        await idle()
+        const afterInsert = await documentState()
+        const inserted = afterInsert.document.pages.flatMap(p=>p.blocks).filter(b=>b.fact_ids.includes(company.fact_id))
+        assert.equal(inserted.length,1)
+        assert.equal(inserted[0].content.text,company.value)
+        assert.deepEqual(inserted[0].evidence_refs,company.evidence_refs)
+        assert.equal(afterInsert.document.pages[1].blocks.at(-1).block_id,inserted[0].block_id)
+        for (const page of beforeInsert.document.pages)
+          assert.deepEqual(afterInsert.document.pages.find(p=>p.page_id===page.page_id).blocks.filter(b=>b.block_id!==inserted[0].block_id),page.blocks)
+        assert.equal(posts('preflights').length+posts('drafts').length,generationCalls)
+        const patchCalls=calls.filter(c=>c.method==='PATCH'&&c.path===route)
+        assert.equal(patchCalls.at(-1).key,patchCalls.at(-2).key)
+        await reload()
+        await screen(3)
+        await until(()=>has('[data-testid=draft-result]'),'inserted document reload')
+        assert.equal(await has(`[data-required-fact="${company.fact_id}"]`),false)
+        const currentIssues=await evaluate(`fetch(${JSON.stringify(route)}+'/issues').then(r=>r.json())`)
+        assert.equal(currentIssues.issues.some(i=>i.status==='open'&&i.code==='REQUIRED_MISSING'&&i.fact_ids?.includes(company.fact_id)),false)
+        checks.push('real missing company inserted on selected page with original evidence; explicit choices; lost save retries same key once; saved revision validated; other blocks preserved; reload prevents duplicate; no extraction or draft generation')
+        const beforeShorten=await documentState()
+        const shortened='회사 정보'
+        assert.equal(await evaluate(`fetch(${JSON.stringify(route)},{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(${JSON.stringify({expected_revision:beforeShorten.document.document_revision,operations:[{op:'replace_block_content',block_id:inserted[0].block_id,content:{text:shortened}}]})})}).then(r=>r.status)`),200)
+        await refreshReady()
+        await click('문서 상태 새로고침')
+        await until(()=>evaluate(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='내용 검증 실행'&&!b.disabled)`),'shortened fact validation ready')
+        await click('내용 검증 실행')
+        await until(()=>has(`[data-required-restore="${inserted[0].block_id}"]`),'linked missing text exposes restoration')
+        await idle()
+        assert.equal(await has(`[data-required-fact="${company.fact_id}"]`),false)
+        assert.ok(await evaluate(`document.querySelector('[data-required-restore]').textContent.includes('${shortened}')`))
+        assert.ok(await evaluate(`document.querySelector('[data-required-restore]').textContent.includes(${JSON.stringify(company.value)})`))
+        const beforeRestore=await documentState()
+        dropSave=true
+        dropped=false
+        await evaluate(`document.querySelector('[data-required-restore-submit]').click()`)
+        await until(()=>dropped,'restore save response lost')
+        await until(()=>evaluate(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='같은 문서 요청 다시 확인'&&!b.disabled)`),'restore retry ready')
+        await click('같은 문서 요청 다시 확인')
+        await until(async()=>{const out=await documentState();return out.document.document_revision===beforeRestore.document.document_revision+1&&out.validation?.document_revision===out.document.document_revision&&out.validation.status!=='pending'},'restored text saved once and validated')
+        await idle()
+        const restored=await documentState()
+        for(const page of beforeRestore.document.pages) {
+          const expected=page.blocks.map(b=>b.block_id===inserted[0].block_id?{...b,content:{...b.content,text:company.value}}:b)
+          assert.deepEqual(restored.document.pages.find(p=>p.page_id===page.page_id).blocks,expected)
+        }
+        const restorePatches=calls.filter(c=>c.method==='PATCH'&&c.path===route)
+        assert.equal(restorePatches.at(-1).key,restorePatches.at(-2).key)
+        await reload()
+        await screen(3)
+        await until(()=>has('[data-testid=draft-result]'),'restored text reload')
+        const restoredIssues=await evaluate(`fetch(${JSON.stringify(route)}+'/issues').then(r=>r.json())`)
+        assert.equal(restoredIssues.issues.some(i=>i.status==='open'&&i.code==='REQUIRED_MISSING'&&i.fact_ids?.includes(company.fact_id)),false)
+        assert.equal(await has('[data-required-restore]'),false)
+        assert.equal(posts('preflights').length+posts('drafts').length,generationCalls)
+        checks.push('linked required paragraph restored after explicit before/after comparison; lost save applies once; refs and other content preserved; revalidation clears real missing issue; reload and no regeneration')
+      }
       const beforeAudit = await documentState()
       const originalSnapshotPosts = calls.filter(c=>c.method==='POST').length
       const issueGetCount = () => calls.filter(c=>c.method==='GET' && c.path.endsWith('/issues')).length
@@ -2638,7 +3030,7 @@ finally:
       assert.ok(linked)
       const originalPosts = calls.filter(c=>c.method==='POST').length
       const fixture = (code, fields={}) => ({issue_id:'audit_'+code,code,message:'화면 처리 경로 검사',severity:'blocker',scope:'content',status:'open',origin:'agent',layout_format:null,block_ids:[],fact_ids:[],source_ids:[],resolution:null,...fields})
-      issueActionFixture = {document_revision:beforeAudit.document.document_revision,validation_id:null,issues:[
+      issueActionFixture = {document_revision:beforeAudit.document.document_revision,validation_id:beforeAudit.validation?.validation_id || null,issues:[
         fixture('VALUE_CONFLICT',{origin:'preflight',fact_ids:[linked.fact_ids[0]]}),
         fixture('CONDITION_LOSS',{source_ids:[linked.evidence_refs[0].source_id]}),
         fixture('VALUE_MISMATCH',{block_ids:['removed_block'],fact_ids:[linked.fact_ids[0]]}),
@@ -2647,9 +3039,18 @@ finally:
         fixture('LAYOUT_OVERFLOW',{scope:'layout',origin:'layout'}),
         fixture('UNSUPPORTED_CLAIM',{status:'resolved'}),
       ]}
+      const auditPhoto = beforeAudit.document.pages.flatMap(p=>p.blocks).find(b=>b.type==='image')
+      if (photoTrial) {
+        assert.ok(auditPhoto)
+        for (const code of ['IMAGE_MISMATCH','IMAGE_UNVERIFIABLE','PHOTO_CONTENT_REVIEW'])
+          issueActionFixture.issues.push(fixture(code,{block_ids:[auditPhoto.block_id],severity:'warning'}))
+      }
       await refreshReady()
       await click('문서 상태 새로고침')
       await until(()=>has('[data-issue-code="VALUE_CONFLICT"] [data-issue-evidence-action]'),'conflict evidence action')
+      assert.equal(await has('[data-issue-code="UNSUPPORTED_CLAIM"]'), false)
+      await evaluate(`document.querySelector('[data-issue-history-toggle]').click()`)
+      await until(()=>has('[data-issue-code="UNSUPPORTED_CLAIM"]'), 'resolved issue history expands')
       for (const code of ['VALUE_CONFLICT','CONDITION_LOSS','VALUE_MISMATCH']) {
         assert.ok(await has(`[data-issue-code="${code}"] [data-issue-location-kind="related"]`))
         assert.ok(await evaluate(`document.querySelector('[data-issue-code="${code}"]').textContent.includes('관련 사실·자료가 연결된 위치')`))
@@ -2657,13 +3058,34 @@ finally:
       assert.equal(await evaluate(`document.querySelectorAll('[data-issue-code="CERTIFICATION_MISMATCH"] [data-issue-block]').length`),1)
       assert.ok(await has('[data-issue-code="CERTIFICATION_MISMATCH"] [data-issue-location-kind="direct"]'))
       assert.ok(await has('[data-issue-code="REQUIRED_MISSING"] [data-issue-evidence-action]'))
+      assert.ok(await has('[data-issue-code="REQUIRED_MISSING"] [data-issue-recovery]'))
+      if (photoTrial) {
+        for (const code of ['IMAGE_MISMATCH','IMAGE_UNVERIFIABLE','PHOTO_CONTENT_REVIEW']) {
+          assert.ok(await evaluate(`document.querySelector('[data-issue-code="${code}"] [data-issue-recovery]').textContent.includes('사진')`))
+          assert.equal(await has(`[data-issue-code="${code}"] input[aria-label^="경고 확인 사유"]`), false)
+        }
+        await evaluate(`document.querySelector('[data-issue-code="IMAGE_MISMATCH"] [data-issue-block]').click()`)
+        await until(()=>evaluate(`document.activeElement?.dataset.editBlock==='${auditPhoto.block_id}'`),'photo issue focuses caption editor')
+        assert.ok(await evaluate(`document.querySelector('[data-editor-issues]').textContent.includes('사진에서 확인할 내용')`))
+        assert.ok(await has('[data-editor-issues] [data-issue-recovery]'))
+        await screen(3)
+      }
       for (const code of ['LAYOUT_OVERFLOW','UNSUPPORTED_CLAIM']) assert.equal(await has(`[data-issue-code="${code}"] [data-issue-evidence-action]`),false)
       for (const issue of issueActionFixture.issues) assert.equal(await has(`[data-issue-code="${issue.code}"] input[aria-label^="경고 확인 사유"]`),false)
       await evaluate(`document.querySelector('[data-issue-code="VALUE_CONFLICT"] [data-issue-block="${linked.block_id}"]').click()`)
       await until(()=>evaluate(`!!document.querySelector('[data-screen="S02"]:not([hidden])')`),'related fact opens editor')
+      assert.ok(await has('[data-editor-issues]'))
+      assert.ok(await evaluate(`document.querySelector('[data-editor-issues]').textContent.includes('화면 처리 경로 검사')`))
+      assert.ok(await evaluate(`document.querySelector('[data-editor-issues] summary').textContent.includes('원문 근거')`))
+      await screen(3)
+      await evaluate(`document.querySelector('[data-issue-code="VALUE_CONFLICT"] [data-issue-evidence-action]').click()`)
+      await until(()=>evaluate(`document.activeElement?.dataset.preflightFact === '${linked.fact_ids[0]}'`),'issue focuses its exact fact')
+      assert.ok(await evaluate(`document.activeElement.closest('details').open`))
+      assert.ok(await evaluate(`document.activeElement.classList.contains('border-teal-600')`))
       await screen(3)
       await evaluate(`document.querySelector('[data-issue-code="REQUIRED_MISSING"] [data-issue-evidence-action]').click()`)
       await until(()=>evaluate(`!!document.querySelector('[data-screen="S01"]:not([hidden])')`),'whole document issue opens preflight')
+      await until(()=>evaluate(`document.activeElement?.id === 'ai-workflow'`),'unknown fact focuses preflight panel')
       assert.deepEqual((await documentState()).document,beforeAudit.document)
       assert.equal(calls.filter(c=>c.method==='POST').length,originalPosts)
       issueActionFixture = null
@@ -2747,8 +3169,18 @@ finally:
     }
     assert.equal((await documentState()).validation.status, 'passed')
     if (photoTrial) {
-      // The earlier photo-proposal scenario leaves two tall images on the cover.
-      // Verify overflow blocks approval, then explicitly remove the old image.
+      // Make overflow independent of earlier text deletion/insertion scenarios.
+      // Repeat a valid selected image, then remove these test blocks through the UI.
+      const beforeOverflow = await documentState()
+      const overflowPage = beforeOverflow.document.pages.find(p=>p.blocks.some(b=>b.type==='image'))
+      const overflowImage = overflowPage.blocks.find(b=>b.type==='image')
+      const overflowIds = ['overflow_fixture_1','overflow_fixture_2','overflow_fixture_3']
+      const overflowOps = overflowIds.map(block_id=>({op:'insert_block',page_id:overflowPage.page_id,
+        after_block_id:overflowImage.block_id,block:{...overflowImage,block_id}}))
+      assert.equal(await evaluate(`fetch(${JSON.stringify(route)},{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(${JSON.stringify({expected_revision:beforeOverflow.document.document_revision,operations:overflowOps})})}).then(r=>r.status)`),200)
+      await until(()=>evaluate(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='문서 상태 새로고침'&&!b.disabled)`),'overflow refresh ready')
+      await click('문서 상태 새로고침')
+      await until(()=>evaluate(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='PDF 배치 검사'&&!b.disabled)`),'overflow document ready')
       if (docxTrial)
         await evaluate(
           `document.querySelector('button[aria-label="DOCX 출력 선택"]').click()`,
@@ -2773,10 +3205,12 @@ finally:
         .flatMap((p) => p.blocks)
         .filter((b) => b.type === 'image')
       assert.ok(images.length >= 2)
-      await editorPage(images[0].block_id)
-      await evaluate(
-        `(()=>{const b=[...document.querySelectorAll('[data-block-id="${images[0].block_id}"] button')].find(b=>b.textContent.includes('삭제'));b.click()})()`,
-      )
+      for (const blockId of [images[0].block_id, ...overflowIds]) {
+        await editorPage(blockId)
+        await evaluate(
+          `(()=>{const b=[...document.querySelectorAll('[data-block-id="${blockId}"] button')].find(b=>b.textContent.includes('삭제'));b.click()})()`,
+        )
+      }
       await click('문구 저장')
       await idle()
       await screen(3)
@@ -3107,6 +3541,49 @@ finally:
       assert.equal(posts('proposals').length, 1)
       assert.equal(posts('validate').length, 1)
     }
+  }
+  if (sessionExpiryTrial) {
+    // Expire only this harness's temporary DB; use the real API for cleanup and 410.
+    await new Promise((resolve, reject) => {
+      const fixture = spawn(join(backendRoot, '.venv/Scripts/python.exe'), ['-B', '-c', `
+import sqlite3,sys
+from pathlib import Path
+p=Path(sys.argv[1]).resolve()
+assert p.parent.name=='runs' and p.parent.parent.name.startswith('ddalgi-ai-ui-')
+assert p.name=='app.sqlite3' and p.is_file()
+c=sqlite3.connect(p)
+assert c.execute('UPDATE sessions SET expires_at=? WHERE session_id=? AND status=?',
+                 ('2000-01-01T00:00:00Z',sys.argv[2],'active')).rowcount==1
+c.commit();c.close()
+`, join(output, 'runs', 'app.sqlite3'), sessionId], {windowsHide:true,stdio:['ignore','pipe','pipe']})
+      let diagnostic = ''
+      fixture.stderr.on('data', data => { diagnostic += data })
+      fixture.on('error', reject)
+      fixture.on('close', code => code === 0 ? resolve() : reject(new Error('Expiry fixture failed: ' + diagnostic)))
+    })
+    await screen(3)
+    const beforeExpiry = calls.length
+    const expiredSessionId = sessionId
+    await click('만료 시각 다시 확인')
+    await idle()
+    await until(() => evaluate(`!![...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='작업 시작 / 이어하기'&&!b.disabled&&b.getClientRects().length)`), 'expired work returns to start')
+    assert.ok(await evaluate(`document.body.innerText.includes('만료')`))
+    assert.equal(await saved(), null)
+    assert.equal(await evaluate(`sessionStorage.getItem('ddalgi.sources.v1.publication')`), null)
+    assert.equal(await has('[data-session-expiry]'), false)
+    assert.equal(await has('[data-testid=draft-result]'), false)
+    assert.ok(calls.slice(beforeExpiry).every(request => request.method === 'GET'), 'Expiry detection must not regenerate or mutate')
+    assert.equal(await evaluate(`fetch('/api/v1/sessions/${expiredSessionId}').then(r=>r.status)`), 410)
+    await screenshot('session-expired-start.png')
+    const beforeRestart = calls.length
+    await click('작업 시작 / 이어하기')
+    await idle()
+    sessionId = await evaluate(`JSON.parse(sessionStorage.getItem('ddalgi.sources.v1')).sessionId`)
+    assert.notEqual(sessionId, expiredSessionId)
+    assert.ok(await has('[data-session-expiry]'))
+    assert.equal(await has('[data-testid=draft-result]'), false)
+    assert.ok(calls.slice(beforeRestart).filter(request => request.method === 'POST').every(request => /\/sessions$/.test(request.path)), 'Restart must only create a session, never AI work')
+    checks.push('real expired session returns 410; stale draft/publication references removed; visible new work starts a distinct session without AI generation')
   }
   await click('작업 종료')
   await click('종료하고 정리')
