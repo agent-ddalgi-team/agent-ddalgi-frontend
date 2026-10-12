@@ -1,3 +1,5 @@
+> **과거 기록:** 작성 당시 상태를 보존합니다. 현재 구현·남은 과제는 [작업 현황](../WORK_SUMMARY.md)을 따릅니다. 본문의 다음 번호 MD 생성 안내는 현행 규칙이 아닙니다.
+
 # 프론트엔드 보안 감사 및 Hardening 작업 보고서
 (Frontend Security Audit & Hardening Report)
 

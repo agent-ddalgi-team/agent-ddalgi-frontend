@@ -1,4 +1,4 @@
-// 검증용 스크립트 (docs/B_프론트엔드_검증기록_0918.md 1절).
+// 검증용 스크립트 (docs/archive/B_프론트엔드_검증기록_0918.md 1절).
 // 실행: 프로젝트 루트에서 `node scripts/checks/run_ssr.mjs` (파일 복사 불필요)
 // fixtures의 Mock JSON을 실제 화면 컴포넌트에 넣어 서버 렌더링하고, 기대 내용이 출력되는지 자동 대조한다.
 import { renderToStaticMarkup } from 'react-dom/server'
