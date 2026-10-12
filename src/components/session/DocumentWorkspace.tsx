@@ -10,6 +10,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Columns3,
+  Copy,
   Download,
   Edit3,
   FileText,
@@ -246,6 +247,30 @@ export function DocumentWorkspace({
   )
   const blockers = openIssues.filter((i) => i.severity === 'blocker')
   const warnings = openIssues.filter((i) => i.severity === 'warning')
+  const [diagnosticsCopied, setDiagnosticsCopied] = useState(false)
+  const copyDiagnostics = () => {
+    const diag = [
+      `=== 회사소개서 화면-PDF 점검 및 진단 리포트 ===`,
+      `- 문서 식별자: ${doc.document_id}`,
+      `- 버전: Document Rev ${doc.document_revision} / Input Rev ${doc.input_revision}`,
+      `- 목표 쪽수 vs 생성 쪽수: 목표 ${doc.target_pages}쪽 / 논리 ${doc.pages.length}쪽 / 실제 PDF ${layout?.actual_pages ?? '배치검사 미수행'}쪽`,
+      `- 출력 형식: ${work.formatLabel}`,
+      `- 내용 검증 상태: ${validation?.status ?? '검사 전'}`,
+      `- 배치 검사 상태: ${layout?.status ?? '검사 전'}`,
+      `- 미해결 블로커 (${blockers.length}건):`,
+      ...blockers.map((b, idx) => `  ${idx + 1}. [${b.code}] ${b.message}`),
+      `- 미해결 경고 (${warnings.length}건):`,
+      ...warnings.map((w, idx) => `  ${idx + 1}. [${w.code}] ${w.message}`),
+      `- 전체 페이지 및 블록 요약:`,
+      ...doc.pages.map((p, idx) => `  * ${idx + 1}쪽 (${p.title}): 블록 ${p.blocks.length}개 (사진 ${p.blocks.filter(b => b.type === 'image').length}장, 근거참조 ${p.blocks.reduce((acc, b) => acc + b.evidence_refs.length, 0)}개)`),
+    ].join('\n')
+
+    void navigator.clipboard.writeText(diag).then(() => {
+      setDiagnosticsCopied(true)
+      setTimeout(() => setDiagnosticsCopied(false), 3000)
+    })
+  }
+
   const assetUrl = (id: string) => screenAssetUrl(doc.session_id, id)
   const selectPage = (index: number) => {
     setPageIndex(index)
@@ -579,7 +604,61 @@ export function DocumentWorkspace({
       {work.notice && !work.busy && <Banner tone="ok">{work.notice}</Banner>}
       {work.error && (
         <Banner tone="error">
-          <span className="whitespace-pre-wrap">{work.error}</span>
+          <div className="flex flex-col gap-2">
+            <span className="whitespace-pre-wrap font-medium">{work.error}</span>
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              {work.dirty && (
+                <button
+                  type="button"
+                  className={button}
+                  disabled={work.busy}
+                  onClick={() => void work.save()}
+                >
+                  <Save className="h-3.5 w-3.5 text-[#007A78]" />
+                  문서 변경 다시 저장
+                </button>
+              )}
+              {step === 3 && (
+                <>
+                  <button
+                    type="button"
+                    className={button}
+                    disabled={work.actionBlocked}
+                    onClick={() => void work.validate()}
+                  >
+                    내용 검증 다시 실행
+                  </button>
+                  <button
+                    type="button"
+                    className={button}
+                    disabled={work.actionBlocked}
+                    onClick={() => void work.checkLayout()}
+                  >
+                    배치 검사 다시 실행
+                  </button>
+                  {work.approved && (
+                    <button
+                      type="button"
+                      className={button}
+                      disabled={work.actionBlocked}
+                      onClick={() => void work.exportDocument()}
+                    >
+                      출력 파일 다시 준비
+                    </button>
+                  )}
+                </>
+              )}
+              <button
+                type="button"
+                className={button}
+                disabled={work.busy}
+                onClick={() => void work.refresh()}
+              >
+                <RefreshCw className="h-3.5 w-3.5 text-[#007A78]" />
+                상태 새로고침
+              </button>
+            </div>
+          </div>
         </Banner>
       )}
       {work.saved.pending && !work.busy && (
@@ -1337,29 +1416,63 @@ export function DocumentWorkspace({
               </span>
             </div>
 
-            {selectedBlock && openIssues.some(issue => issue.block_ids.includes(selectedBlock.block_id) ||
-              (!issue.block_ids.length && issue.fact_ids?.some(id => selectedBlock.fact_ids.includes(id)))) && (
-              <section className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs" data-editor-issues>
-                <h3 className="font-bold text-amber-950">이 {isPhoto(selectedBlock) ? '사진에서' : '문장에서'} 확인할 내용</h3>
-                {openIssues.filter(issue => issue.block_ids.includes(selectedBlock.block_id) ||
-                  (!issue.block_ids.length && issue.fact_ids?.some(id => selectedBlock.fact_ids.includes(id)))).map(issue => (
-                  <div key={issue.issue_id} className="mt-2 whitespace-pre-wrap break-words" data-editor-issue={issue.issue_id}>
-                    <p className="font-semibold">{issue.origin === 'preflight' ? '자료 확인 필요' : issue.scope === 'layout' ? '배치 검사 지적' : '내용 검사 지적'}</p>
-                    <p>{issueMessageParts(issue.message).reason}</p>
-                    {issueMessageParts(issue.message).action && <p className="mt-1">권장 수정: {issueMessageParts(issue.message).action}</p>}
-                    {!!issueRecoverySteps(issue).length && (
-                      <ol data-issue-recovery className="mt-2 list-decimal space-y-1 pl-4">
-                        {issueRecoverySteps(issue).map(step => <li key={step}>{step}</li>)}
-                      </ol>
-                    )}
+            {selectedBlock && (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
+                <div className="flex items-center justify-between border-b border-slate-200/70 pb-2">
+                  <span className="flex items-center gap-1.5 font-bold text-slate-800">
+                    <Link2 className="h-3.5 w-3.5 text-[#007A78]" />
+                    연결된 원문 근거 ({selectedBlock.evidence_refs?.length || 0}개)
+                  </span>
+                  {selectedBlock.fact_ids && selectedBlock.fact_ids.length > 0 && (
+                    <span className="rounded bg-teal-50 px-1.5 py-0.5 text-[10px] font-bold text-[#007A78]">
+                      사실 ID {selectedBlock.fact_ids.length}개
+                    </span>
+                  )}
+                </div>
+                {selectedBlock.evidence_refs && selectedBlock.evidence_refs.length > 0 ? (
+                  <div className="mt-2.5 flex flex-col gap-2 max-h-48 overflow-y-auto">
+                    {selectedBlock.evidence_refs.map((ref, idx) => {
+                      const src = sources.find((s) => s.source_id === ref.source_id)
+                      return (
+                        <div key={idx} className="rounded-lg border border-slate-200 bg-white p-2">
+                          <p className="font-semibold text-slate-900 truncate" title={src?.name || ref.source_id}>
+                            {src?.name || ref.source_id}
+                          </p>
+                          <p className="mt-0.5 text-[10px] text-slate-500">
+                            {Object.entries(ref.locator)
+                              .map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : String(v)}`)
+                              .join(' · ')}
+                          </p>
+                          {ref.excerpt && (
+                            <blockquote className="mt-1.5 border-l-2 border-[#007A78] pl-2 text-[11px] leading-relaxed text-slate-700 whitespace-pre-wrap">
+                              {ref.excerpt}
+                            </blockquote>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
-                ))}
-                <details className="mt-3">
-                  <summary className="cursor-pointer font-semibold">이 문장에 연결된 원문 근거</summary>
-                  <Evidence refs={selectedBlock.evidence_refs} sources={sources} />
-                </details>
-                <p className="mt-2 text-amber-900">문구를 수정한 뒤 아래 ‘저장하고 내용 검사’를 누르세요. 자료 자체의 확인이 필요한 항목은 자료 점검에서 보완하거나 제외해야 합니다.</p>
-              </section>
+                ) : (
+                  <p className="mt-2 text-[11px] text-slate-500">
+                    이 블록에는 직접 연결된 원문 근거가 없습니다 (제목 또는 생성 연결 문구).
+                  </p>
+                )}
+                {openIssues.some((i) => i.block_ids?.includes(selectedBlock.block_id)) && (
+                  <div className="mt-2.5 rounded-lg border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-900">
+                    <p className="font-bold flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3 text-amber-700" />
+                      이 블록에 확인이 필요한 지적이 있습니다:
+                    </p>
+                    <ul className="mt-1 list-disc pl-4 space-y-0.5">
+                      {openIssues
+                        .filter((i) => i.block_ids?.includes(selectedBlock.block_id))
+                        .map((i) => (
+                          <li key={i.issue_id}>{i.message}</li>
+                        ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
             )}
 
             <div className="flex flex-col gap-1.5">
@@ -1771,6 +1884,15 @@ export function DocumentWorkspace({
                     ? `검사한 ${work.formatLabel} · ${layout?.actual_pages ?? previews.length}쪽`
                     : `구성 미리보기 · ${doc.pages.length}쪽 · ${work.formatLabel} 배치 검사 전`}
                 </span>
+                <button
+                  type="button"
+                  className={button}
+                  title="화면과 최종 PDF 간의 차이, 쪽수, 블록 및 이슈를 복사하여 담당자에게 전달합니다"
+                  onClick={copyDiagnostics}
+                >
+                  <Copy className="h-3.5 w-3.5 text-[#007A78]" />
+                  {diagnosticsCopied ? '진단 정보 복사됨' : '진단 정보 복사'}
+                </button>
                 <button
                   type="button"
                   className={`${button} inspector-toggle`}

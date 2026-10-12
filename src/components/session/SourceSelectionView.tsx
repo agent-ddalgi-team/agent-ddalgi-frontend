@@ -1,4 +1,3 @@
-import { screenAssetUrl } from '../../services/mockBackend'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import {
@@ -8,12 +7,10 @@ import {
   DownloadCloud,
   Pencil,
   Check,
-  CheckCircle2,
   ChevronDown,
   FileSpreadsheet,
   FileText,
   FolderOpen,
-  Globe,
   Image as ImageIcon,
   Info,
   Lightbulb,
@@ -23,9 +20,7 @@ import {
   ShieldCheck,
   Sliders,
   Sparkles,
-  Trash2,
   UploadCloud,
-  XCircle,
 } from 'lucide-react'
 import type { SourceBrief, WorkSource } from '../../api/sources'
 import { useSources } from '../../hooks/useSources'
@@ -35,21 +30,8 @@ import type { Preflight } from '../../api/aiWorkflow'
 import { DocumentWorkspace } from './DocumentWorkspace'
 import type { WizardStep } from './StepIndicator'
 import { CompanyChangeModal } from './CompanyChangeModal'
+import { SourceSelectModal } from './SourceSelectModal'
 
-const statusText = {
-  queued: '읽기 대기',
-  reading: '읽는 중',
-  complete: '읽기 완료',
-  partial: '일부 읽기',
-  failed: '읽기 실패',
-}
-const statusBadge = {
-  queued: 'bg-slate-100 text-slate-600',
-  reading: 'bg-slate-100 text-slate-600',
-  complete: 'bg-emerald-50 text-emerald-800',
-  partial: 'bg-amber-50 text-amber-800',
-  failed: 'bg-red-50 text-red-800',
-}
 const purposeHint: Record<string, string> = {
   '신규 고객 소개 (표준 제안용)':
     '기업 개요와 핵심 제조 역량을 부각하는 데 초점을 맞춥니다.',
@@ -65,40 +47,16 @@ const directionHint: Record<SourceBrief['direction'], string> = {
   quality_process: '품질 체계와 공정·설비 근거를 앞세웁니다.',
   customer_response: '고객 대응과 납기 관련 내용을 앞세웁니다.',
 }
-const panel = 'rounded-2xl border border-slate-200 bg-white p-5 shadow-xs'
+const panel =
+  'rounded-2xl border border-slate-200/80 bg-white/95 p-5 shadow-[0_4px_20px_-4px_rgba(15,23,42,0.03)] backdrop-blur-xs transition-shadow duration-200 hover:shadow-[0_8px_24px_-4px_rgba(15,23,42,0.06)]'
 const button =
-  'inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-xs transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50'
+  'inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-slate-200/90 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-2xs transition-all duration-150 hover:border-slate-300 hover:bg-slate-50/90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40'
 const primary =
-  'inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-[#007A78] px-4 py-2 text-xs font-bold text-white shadow-xs transition-all hover:bg-[#006663] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none'
+  'inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-gradient-to-r from-slate-950 via-slate-900 to-zinc-900 px-4 py-2 text-xs font-bold text-white shadow-sm shadow-slate-950/25 transition-all duration-200 hover:from-slate-900 hover:via-slate-800 hover:to-zinc-800 hover:shadow-md hover:shadow-slate-900/30 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-none disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none'
 const input =
-  'w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-medium text-slate-900 transition-all focus:border-[#007A78] focus:outline-none focus:ring-2 focus:ring-[#007A78]/30'
+  'w-full min-w-0 rounded-xl border border-slate-200/90 bg-slate-50/70 px-3.5 py-2.5 text-xs font-medium text-slate-900 transition-all focus:border-slate-800 focus:bg-white focus:outline-none focus:ring-3 focus:ring-slate-800/15'
 const label =
   'flex items-center justify-between text-xs font-semibold text-slate-800'
-
-const sizeLabel = (bytes: number) => {
-  const kb = Math.max(1, Math.ceil(bytes / 1024))
-  return kb >= 1024 ? `${(kb / 1024).toFixed(1)}MB` : `${kb.toLocaleString()}KB`
-}
-
-function SourceIcon({ source }: { source: WorkSource }) {
-  const isPhoto = source.kind === 'photo' || /\.(jpe?g|png)$/i.test(source.name)
-  const tone =
-    source.parse_status === 'partial' || source.parse_status === 'failed'
-      ? 'bg-amber-50 text-amber-700'
-      : 'bg-teal-50 text-[#007A78]'
-  const Icon = isPhoto
-    ? ImageIcon
-    : /\.pptx$/i.test(source.name)
-      ? FileSpreadsheet
-      : FileText
-  return (
-    <div
-      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${tone}`}
-    >
-      <Icon className="h-5 w-5" />
-    </div>
-  )
-}
 
 function computeSufficiency(pf: Preflight | null | undefined) {
   if (!pf) return null
@@ -196,6 +154,7 @@ export function SourceSelectionView({
 }) {
   const [sourceEditing, setSourceEditing] = useState(false)
   const [sourceChangeBlocked, setSourceChangeBlocked] = useState(true)
+  const [sourceModalOpen, setSourceModalOpen] = useState(false)
   const work = useSources(sourceEditing && !sourceChangeBlocked)
   const ai = useAiWorkflow(work.session)
   const [evidenceTarget, setEvidenceTarget] = useState<{ sessionId: string; factIds: string[] } | null>(null)
@@ -230,9 +189,6 @@ export function SourceSelectionView({
     document.addEventListener('pointerdown', closeOutside)
     return () => document.removeEventListener('pointerdown', closeOutside)
   }, [purposeOpen])
-  const [tab, setTab] = useState<'registered' | 'public' | 'session'>(
-    'registered',
-  )
   const [dragging, setDragging] = useState(false)
   const [tag, setTag] = useState('')
   const [tagOpen, setTagOpen] = useState(false)
@@ -310,35 +266,32 @@ export function SourceSelectionView({
   const displayScore =
     work.briefDirty ||
     (ai.preflight && ai.preflight.input_revision !== work.session?.input_revision)
-      ? 0
-      : (sufficiency?.score ?? liveSufficiencyScore)
+      ? liveSufficiencyScore
+      : (sufficiency?.score || liveSufficiencyScore)
   const hasOverview =
-    sufficiency?.categories.some(
-      (c) => c.key === 'overview' && c.status === 'supported',
-    ) ?? liveOverview
+    (sufficiency
+      ? sufficiency.categories.some(
+          (c) => c.key === 'overview' && c.status === 'supported',
+        )
+      : false) || liveOverview
   const hasProcess =
-    sufficiency?.categories.some(
-      (c) => c.key === 'process' && c.status === 'supported',
-    ) ?? liveProcess
+    (sufficiency
+      ? sufficiency.categories.some(
+          (c) => c.key === 'process' && c.status === 'supported',
+        )
+      : false) || liveProcess
   const hasPerformance =
-    sufficiency?.categories.some(
-      (c) => c.key === 'performance' && c.status === 'supported',
-    ) ?? livePerformance
+    (sufficiency
+      ? sufficiency.categories.some(
+          (c) => c.key === 'performance' && c.status === 'supported',
+        )
+      : false) || livePerformance
   const hasCert =
-    sufficiency?.categories.some(
-      (c) => c.key === 'certification' && c.status === 'supported',
-    ) ?? liveCert
-  const missingCategories =
-    sufficiency?.categories
-      ? sufficiency.categories
-          .filter((c) => c.status !== 'supported')
-          .map((c) => c.label)
-      : ([
-          !hasOverview && '기업 개요·연혁',
-          !hasProcess && '제조 공정·설비',
-          !hasPerformance && '고객사 납품 실적',
-          !hasCert && '품질·공인 인증서',
-        ].filter(Boolean) as string[])
+    (sufficiency
+      ? sufficiency.categories.some(
+          (c) => c.key === 'certification' && c.status === 'supported',
+        )
+      : false) || liveCert
 
   const isDemo = work.session ? work.session.demo : work.demo
   const counts = {
@@ -390,8 +343,29 @@ export function SourceSelectionView({
   const setBrief = (patch: Partial<SourceBrief>) =>
     work.setBrief({ ...work.brief, ...patch })
   const chooseFiles = (files: File[]) => {
-    setTab('session')
     void work.upload(files)
+  }
+  const handleQuickSampleUpload = () => {
+    const companyName = currentCompany || '(주)거산케미칼'
+    const sampleContent = `[시연] 화면 분석 및 초안 생성용 기업 기본 정보 자료입니다.
+회사명: ${companyName}
+회사 개요: ${companyName}은(는) 첨단 산업용 화학약품 및 정밀 표면처리 공정 전문 기업입니다.
+사업 분야: 특수 도금, 아노다이징, 반도체 및 전자 부품 표면처리
+제품: 정밀 도금 부품, 표면처리 약품, 맞춤형 공정 솔루션
+기술: 친환경 고기능성 표면처리 및 균일 피막 제어 기술
+강점: 다품종 소량 생산 및 까다로운 규격 대응, 철저한 품질 보증 체계
+공정 목록: P01 아연도금, P02 아노다이징, P03 알칼리흑착, P04 인산염피막, P05 무전해니켈, P06 크롬도금, P07 전해연마
+납기: 일반 주문: 접수 확정 후 영업일 4~6일 내 출하 준비
+연혁: 2000년 회사 설립 및 표면처리 사업 개시
+인증: ISO 9001, ISO 14001, AS9100 인증 획득
+`
+    const cleanName = companyName.replace(/[^a-zA-Z0-9가-힣]/g, '') || '기업'
+    const file = new File(
+      [sampleContent],
+      `${cleanName}_기본정보_시연용.txt`,
+      { type: 'text/plain' },
+    )
+    chooseFiles([file])
   }
   const toggleEmphasis = (item: string) =>
     setBrief({
@@ -451,170 +425,6 @@ export function SourceSelectionView({
       ? !enrichedAi.canConfirm
       : false
     : !canAnalyze
-
-  const renderSource = (source: WorkSource) => {
-    const isSelected = selected.has(source.source_id)
-    const canSelect =
-      (source.text_available || source.image_available) &&
-      ['complete', 'partial'].includes(source.parse_status)
-    const disabled = locked || (!isSelected && !canSelect)
-    const origin =
-      source.origin_kind === 'demo'
-        ? '시연 자료 · 실제 회사의 사실을 증명하지 않습니다'
-        : source.scope === 'registered'
-          ? '제공 자료'
-          : '이번 작업 첨부'
-    const readState = source.text_available
-      ? '읽은 텍스트 있음'
-      : source.image_available
-        ? '이미지만 있음 · 글자 읽기는 지원하지 않음'
-        : '사용 가능한 텍스트 없음'
-    const StatusIcon =
-      source.parse_status === 'complete'
-        ? CheckCircle2
-        : source.parse_status === 'failed'
-          ? XCircle
-          : source.parse_status === 'partial'
-            ? AlertTriangle
-            : Loader2
-    return (
-      <li
-        key={source.source_id}
-        data-source-id={source.source_id}
-        className={`rounded-xl border p-3.5 transition-all ${
-          isSelected
-            ? 'border-[#007A78] bg-white shadow-2xs ring-1 ring-[#007A78]/20'
-            : canSelect
-              ? 'border-slate-200 bg-white hover:border-slate-300'
-              : 'border-slate-200 bg-slate-50 opacity-80'
-        }`}
-      >
-        <div className="flex items-start justify-between gap-3">
-          <label
-            className={`flex min-w-0 flex-1 items-start gap-3 ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
-          >
-            <span className="relative mt-2 flex h-5 w-5 shrink-0 items-center justify-center">
-              <input
-                type="checkbox"
-                aria-label={`${source.name} 선택`}
-                className="peer sr-only"
-                checked={isSelected}
-                disabled={disabled}
-                onChange={() => void work.select(source)}
-              />
-              <span
-                className={`flex h-5 w-5 items-center justify-center rounded transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-[#007A78]/40 ${
-                  isSelected
-                    ? 'bg-[#007A78] text-white'
-                    : 'bg-slate-200 text-slate-400'
-                }`}
-              >
-                <Check className="h-3.5 w-3.5" />
-              </span>
-            </span>
-            <SourceIcon source={source} />
-            <span className="flex min-w-0 flex-col gap-0.5">
-              <span className="flex flex-wrap items-center gap-2">
-                <span className="break-all text-xs font-bold text-slate-900">
-                  {source.name}
-                </span>
-                <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600">
-                  {sizeLabel(source.size_bytes)}
-                </span>
-                {source.source_id.startsWith('src-pub-') && (
-                  <span className="inline-flex items-center gap-1 rounded bg-teal-50 border border-teal-200 px-1.5 py-0.2 text-[10px] font-bold text-[#007A78]">
-                    <Globe className="h-2.5 w-2.5" />
-                    공개 데이터
-                  </span>
-                )}
-                {source.role === 'instruction' && (
-                  <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600">
-                    작성 조건용
-                  </span>
-                )}
-              </span>
-              <span
-                className={`text-[11px] ${
-                  source.source_id.startsWith('src-pub-')
-                    ? 'text-teal-800 font-medium'
-                    : source.origin_kind === 'demo'
-                      ? 'text-amber-800'
-                      : 'text-slate-500'
-                }`}
-              >
-                {source.source_id.startsWith('src-pub-') && source.warnings?.[0]
-                  ? `🏛️ ${source.warnings[0].message} · ${readState}`
-                  : `${origin} · ${readState}`}
-                {!source.use_as_company_evidence &&
-                  source.role !== 'instruction' &&
-                  ' · 참고용 자료'}
-                {source.role === 'instruction' && ' · 작성 조건용'}
-              </span>
-            </span>
-          </label>
-          <div className="flex shrink-0 items-center gap-2">
-            <span
-              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${statusBadge[source.parse_status]}`}
-            >
-              <StatusIcon
-                className={`h-3 w-3 ${['queued', 'reading'].includes(source.parse_status) ? 'animate-spin' : ''}`}
-              />
-              {statusText[source.parse_status]}
-            </span>
-            {source.scope === 'session' && (
-              <button
-                type="button"
-                className="cursor-pointer rounded-lg p-1 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-40"
-                aria-label={`${source.name} 삭제`}
-                disabled={
-                  locked ||
-                  ['queued', 'reading'].includes(source.parse_status) ||
-                  work.pendingUpload
-                }
-                onClick={() => setDeleteSource(source)}
-              >
-                <Trash2 size={16} />
-              </button>
-            )}
-          </div>
-        </div>
-        {!!source.asset_ids.length && work.session && (
-          <details className="mt-3 text-[11px] text-[#007A78]">
-            <summary className="cursor-pointer font-semibold">
-              사진 {source.asset_ids.length}개 보기
-            </summary>
-            <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4">
-              {source.asset_ids.map((asset, index) => {
-                const href = screenAssetUrl(work.session!.session_id, asset)
-                return (
-                  <a key={asset} href={href} target="_blank" rel="noreferrer">
-                    <img
-                      loading="lazy"
-                      className="aspect-video w-full rounded-lg border border-slate-200 bg-slate-800 object-cover"
-                      alt={`${source.name} 이미지 ${index + 1}`}
-                      src={href}
-                    />
-                  </a>
-                )
-              })}
-            </div>
-          </details>
-        )}
-        {source.warnings.map((warning, index) => (
-          <p
-            className="mt-2 flex items-start gap-1.5 text-[11px] text-amber-900"
-            key={`${warning.code}-${index}`}
-          >
-            <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
-            <span>
-              {warning.message}
-              {warning.action ? ` ${warning.action}` : ''}
-            </span>
-          </p>
-        ))}
-      </li>
-    )
-  }
 
   return (
     <>
@@ -962,7 +772,7 @@ export function SourceSelectionView({
                           type="button"
                           role="option"
                           aria-selected={work.brief.purpose === item}
-                          className={`block w-full cursor-pointer rounded-lg px-2 py-2 text-left text-xs leading-relaxed hover:bg-teal-50 ${purposeIndex === index ? 'bg-teal-50 text-[#007A78]' : 'text-slate-700'}`}
+                          className={`block w-full cursor-pointer rounded-lg px-2 py-2 text-left text-xs leading-relaxed hover:bg-slate-100 ${purposeIndex === index ? 'bg-slate-100 text-slate-950 font-bold' : 'text-slate-700'}`}
                           onMouseDown={(event) => event.preventDefault()}
                           onClick={() => {
                             setBrief({ purpose: item })
@@ -1186,74 +996,124 @@ export function SourceSelectionView({
             </div>
           </section>
 
-          {/* 가운데: 활용할 자료 */}
+          {/* 가운데: AI Agent 참고 자료 & 데이터 준비 */}
           <section
-            className={`${panel} flex min-w-0 flex-col gap-4`}
-            aria-label="자료 목록"
+            className={`${panel} flex min-w-0 flex-col gap-4 bg-white`}
+            aria-label="AI 참고 자료"
           >
-            <div className="flex flex-col justify-between gap-2 border-b border-slate-100 pb-2 sm:flex-row sm:items-center">
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-slate-900">
-                  활용할 자료
-                </h2>
-                <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-blue-700">
-                  {selected.size}개 선택됨
-                </span>
+            {/* 1. 컴팩트한 첨부파일 요약 UI (Gmail/Outlook/Notion 스타일) */}
+            <div className="rounded-2xl border border-[#E9EDF2] bg-white p-4.5 shadow-2xs transition-all">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E9EDF2] pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#F7F5FF] text-[#6855F5] border border-[#6855F5]/20 shadow-2xs">
+                    <FileText className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-sm font-bold text-[#202530]">
+                        AI 참고 자료
+                      </h2>
+                      <span className="rounded-full bg-[#F7F5FF] text-[#6855F5] border border-[#6855F5]/30 px-2 py-0.5 text-[11px] font-bold">
+                        {selectedSources.length}개 선택됨
+                      </span>
+                    </div>
+                    <p className="text-xs text-[#89919F]">
+                      AI Agent가 답변에 활용할 자료입니다.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={locked}
+                  onClick={() => setSourceModalOpen(true)}
+                  className="cursor-pointer inline-flex items-center gap-1.5 rounded-xl border border-[#E9EDF2] bg-white px-3.5 py-1.5 text-xs font-semibold text-[#202530] hover:bg-[#F8FAFC] hover:border-slate-300 transition-all shadow-2xs active:scale-[0.98] disabled:opacity-40"
+                >
+                  <Sliders className="h-3.5 w-3.5 text-[#6855F5]" />
+                  {selectedSources.length === 0 ? '자료 선택' : '자료 변경'}
+                </button>
               </div>
-              <div
-                className="inline-flex gap-1 rounded-xl bg-slate-100 p-1"
-                role="tablist"
-                aria-label="자료 구분"
-              >
-                {(
-                  [
-                    ['registered', '등록 자료'],
-                    ['public', '🏛️ 공개 연동 데이터'],
-                    ['session', '이번 작업 첨부'],
-                  ] as const
-                ).map(([key, text]) => (
-                  <button
-                    key={key}
-                    type="button"
-                    role="tab"
-                    aria-selected={tab === key}
-                    onClick={() => setTab(key)}
-                    className={`flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition-all ${
-                      tab === key
-                        ? 'bg-white font-bold text-[#007A78] shadow-2xs'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    <span>{text}</span>
-                    <span
-                      className={`flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold ${
-                        tab === key
-                          ? 'bg-teal-200 text-teal-900'
-                          : 'bg-slate-200 text-slate-600'
-                      }`}
+
+              {/* 첨부파일 칩 목록 (Gmail/Outlook 스타일) */}
+              <div className="mt-3.5">
+                {selectedSources.length === 0 ? (
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 rounded-xl bg-[#F8FAFC] p-3 text-xs border border-dashed border-[#E9EDF2]">
+                    <div className="flex items-center gap-2 text-[#89919F]">
+                      <Info className="h-4 w-4 text-slate-400 shrink-0" />
+                      <span>선택된 참고 자료가 없습니다.</span>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={locked}
+                      onClick={() => setSourceModalOpen(true)}
+                      className="cursor-pointer inline-flex items-center gap-1 rounded-lg bg-[#6855F5] px-3 py-1.5 text-xs font-bold text-white shadow-2xs hover:bg-[#5744E3] transition-colors"
                     >
-                      {counts[key]}
-                    </span>
-                  </button>
-                ))}
+                      <Plus className="h-3.5 w-3.5" />
+                      자료 선택
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* 1~3개 선택 시 전부 표시, 4개 이상 선택 시 최대 3개 표시 + '+N개' 칩 */}
+                    {(selectedSources.length <= 3
+                      ? selectedSources
+                      : selectedSources.slice(0, 3)
+                    ).map((source) => {
+                      const isPhoto =
+                        source.kind === 'photo' ||
+                        /\.(jpe?g|png)$/i.test(source.name)
+                      const isPpt = /\.pptx$/i.test(source.name)
+                      const Icon = isPhoto
+                        ? ImageIcon
+                        : isPpt
+                          ? FileSpreadsheet
+                          : FileText
+                      return (
+                        <div
+                          key={source.source_id}
+                          title={source.name}
+                          onClick={() => setSourceModalOpen(true)}
+                          className="group inline-flex items-center gap-1.5 rounded-lg border border-[#E9EDF2] bg-[#F8FAFC] px-2.5 py-1.5 text-xs text-[#202530] hover:bg-slate-100 hover:border-slate-300 transition-colors cursor-pointer shadow-2xs"
+                        >
+                          <Icon className="h-3.5 w-3.5 text-[#89919F] group-hover:text-[#6855F5] transition-colors shrink-0" />
+                          <span className="truncate max-w-[130px] sm:max-w-[180px] font-medium">
+                            {source.name}
+                          </span>
+                        </div>
+                      )
+                    })}
+
+                    {selectedSources.length > 3 && (
+                      <button
+                        type="button"
+                        onClick={() => setSourceModalOpen(true)}
+                        className="cursor-pointer inline-flex items-center rounded-lg border border-[#6855F5]/30 bg-[#F7F5FF] px-2.5 py-1.5 text-xs font-bold text-[#6855F5] hover:bg-[#EBE7FF] hover:border-[#6855F5]/50 transition-colors shadow-2xs"
+                        title="전체 자료 목록 보기"
+                      >
+                        +{selectedSources.length - 3}개
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
-            <div className="rounded-xl border border-teal-200/90 bg-gradient-to-r from-teal-50/80 via-white to-teal-50/30 p-3 text-xs shadow-2xs">
+            {/* 2. 관리자 소속 공개 데이터 연동 배너 */}
+            <div className="rounded-xl border border-[#E9EDF2] bg-gradient-to-r from-slate-50/80 via-white to-white p-3.5 text-xs shadow-2xs">
               <div className="flex flex-wrap items-center justify-between gap-2.5">
                 <div className="flex items-center gap-2.5">
-                  <Building2 className="h-8 w-8 rounded-lg bg-[#007A78] p-1.5 text-white" />
+                  <Building2 className="h-7 w-7 rounded-lg bg-slate-900 p-1.5 text-white shadow-xs shrink-0" />
                   <div>
-                    <p className="font-bold">
-                      관리자 소속 공개 데이터 자동 연동
+                    <p className="font-bold text-[#202530]">
+                      관리자 소속 공개 데이터 연동
                     </p>
                     <button
                       type="button"
-                      className="mt-1 inline-flex items-center gap-1 rounded-full bg-teal-100 px-2 py-1 text-teal-900"
+                      className="mt-0.5 inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[11px] text-slate-800 font-medium hover:bg-slate-200 transition-colors"
                       onClick={onCompanyModalOpen}
                     >
                       소속: {currentCompany || '회사 선택'}{' '}
-                      <Pencil className="h-3 w-3" />
+                      <Pencil className="h-2.5 w-2.5 text-slate-500" />
                     </button>
                   </div>
                 </div>
@@ -1263,24 +1123,23 @@ export function SourceSelectionView({
                   disabled={locked || !currentCompany}
                   onClick={() => void work.importPublic()}
                 >
-                  <DownloadCloud className="h-4 w-4" /> 공개 데이터 자동으로
-                  가져오기
+                  <DownloadCloud className="h-3.5 w-3.5" />
+                  공개 데이터 가져오기
                 </button>
               </div>
-              <p className="mt-2 text-slate-600">
-                {work.session
-                  ? work.publicStatus?.message || '공개 자료 연결 상태 확인 중'
-                  : '작업을 시작하면 DART 연결 상태를 확인합니다.'}
-                {' · '}실제로 등록된 공개 자료 {counts.public}건
+              <p className="mt-1.5 text-[11px] text-[#89919F]">
+                {work.publicStatus?.message || '공개 연동 설정 확인 중'} · 등록된 공개 자료 {counts.public}건
               </p>
             </div>
+
+            {/* 3. 자료 충족도 게이지 */}
             <div
-              className={`rounded-xl border p-3 text-xs transition-all ${
+              className={`rounded-xl border p-3.5 text-xs transition-all ${
                 displayScore >= 80
-                  ? 'border-emerald-200 bg-emerald-50/80 text-emerald-950'
+                  ? 'border-emerald-200 bg-emerald-50/70 text-emerald-950'
                   : displayScore > 0
-                    ? 'border-amber-200 bg-amber-50/80 text-amber-950'
-                    : 'border-slate-200 bg-slate-50/80 text-slate-700'
+                    ? 'border-amber-200 bg-amber-50/70 text-amber-950'
+                    : 'border-[#E9EDF2] bg-[#F8FAFC] text-slate-700'
               }`}
               aria-label="자료 충족도"
             >
@@ -1290,45 +1149,28 @@ export function SourceSelectionView({
                     {displayScore >= 80 ? '✓' : displayScore > 0 ? '⚠️' : 'ℹ️'}
                   </span>
                   <strong className="text-xs">
-                    {displayScore > 0
-                      ? displayScore >= 80
-                        ? `데이터 충족도 ${displayScore}% (우수: 핵심 팩트 충족)`
-                        : `데이터 충족도 ${displayScore}% (주의: 필수 팩트 데이터 부족)`
-                      : '데이터 충족도 · 점검 필요 (자료를 선택해 주세요)'}
+                    {selectedSourcesList.length === 0
+                      ? '데이터 충족도 · 점검 필요 (자료를 선택해 주세요)'
+                      : ai.preflight && ai.preflight.input_revision !== work.session?.input_revision
+                        ? `데이터 충족도 ${displayScore}% (자료 변경됨 · AI 재점검 권장)`
+                        : displayScore >= 80
+                          ? `데이터 충족도 ${displayScore}% (우수: 핵심 팩트 충족)`
+                          : `데이터 충족도 ${displayScore}% (주의: 필수 팩트 데이터 부족)`}
                   </strong>
                 </div>
-                {displayScore < 80 ? (
-                  <button
-                    type="button"
-                    className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-amber-800 px-2.5 py-1 text-[11px] font-bold text-white shadow-2xs hover:bg-amber-900 transition-colors"
-                    disabled={locked}
-                    onClick={() => {
-                      fileInput.current?.click()
-                      document
-                        .getElementById('file-upload-dropzone')
-                        ?.scrollIntoView({
-                          behavior: 'smooth',
-                          block: 'center',
-                        })
-                    }}
-                  >
-                    <Plus className="h-3 w-3" /> 부족한 자료 파일 직접 첨부
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-emerald-800 px-2.5 py-1 text-[11px] font-bold text-white shadow-2xs hover:bg-emerald-900 transition-colors"
-                    disabled={locked}
-                    onClick={() => fileInput.current?.click()}
-                  >
-                    <Plus className="h-3 w-3" /> 추가 파일 첨부
-                  </button>
-                )}
+                <button
+                  type="button"
+                  disabled={locked}
+                  onClick={() => setSourceModalOpen(true)}
+                  className="inline-flex cursor-pointer items-center gap-1 text-[11px] font-bold text-[#6855F5] hover:underline"
+                >
+                  상세 자료 선택 열기 &rarr;
+                </button>
               </div>
 
-              {/* 실시간 프로그레스 바 */}
+              {/* 프로그레스 바 */}
               <div
-                className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200"
+                className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-slate-200/70 shadow-inner"
                 role="progressbar"
                 aria-label="근거 항목 충족률"
                 aria-valuemin={0}
@@ -1337,19 +1179,19 @@ export function SourceSelectionView({
                 aria-valuetext={`${displayScore}%`}
               >
                 <div
-                  className={`h-full transition-all duration-500 ${
+                  className={`h-full rounded-full transition-all duration-500 ${
                     displayScore >= 80
-                      ? 'bg-emerald-600'
+                      ? 'bg-gradient-to-r from-emerald-600 to-teal-700'
                       : displayScore > 0
-                        ? 'bg-[#007A78]'
+                        ? 'bg-gradient-to-r from-amber-500 to-orange-600'
                         : 'bg-slate-300'
                   }`}
                   style={{ width: `${displayScore}%` }}
                 />
               </div>
 
-              {/* 4대 핵심 분야 실시간 충족 상태 태그 */}
-              <div className="mt-2 flex flex-wrap gap-2">
+              {/* 4대 핵심 분야 상태 태그 */}
+              <div className="mt-2.5 flex flex-wrap gap-1.5">
                 {[
                   { label: '기업 개요', ok: hasOverview },
                   { label: '제조 공정', ok: hasProcess },
@@ -1358,76 +1200,20 @@ export function SourceSelectionView({
                 ].map((cat) => (
                   <span
                     key={cat.label}
-                    className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] transition-colors ${
+                    className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] transition-colors ${
                       cat.ok
-                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold'
+                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 font-semibold'
                         : 'bg-white text-slate-500 border border-slate-200'
                     }`}
                   >
-                    {cat.ok ? '✓' : '○'} {cat.label}:{' '}
-                    {cat.ok ? '근거 있음' : '자료 필요'}
+                    {cat.ok ? '✓' : '○'} {cat.label}
                   </span>
                 ))}
               </div>
-
-              <p className="mt-2 text-slate-600">
-                {displayScore === 0 ? (
-                  '자료를 선택하고 AI 자료 점검을 하면 확인된 근거의 충족도를 표시합니다.'
-                ) : displayScore < 80 ? (
-                  <span>
-                    현재 <strong>{missingCategories.join(', ')}</strong> 관련
-                    팩트가 부족합니다. 위 목록에서 관련 자료를 추가 선택하거나
-                    직접 파일을 첨부해 주시면 충족도가 향상됩니다.
-                  </span>
-                ) : (
-                  '기업 개요, 제조 공정, 납품 실적, 품질 인증에 필요한 핵심 팩트가 충분히 반영되었습니다.'
-                )}
-                {sufficiency?.has_blockers &&
-                  ' 해결해야 할 필수 문제가 있습니다.'}
-              </p>
             </div>
 
-            {!work.session && counts[tab] === 0 ? (
-              <div className="flex flex-col items-center gap-2 py-10 text-center">
-                <FolderOpen className="h-8 w-8 text-slate-300" />
-                <p className="text-sm font-semibold text-slate-700">
-                  먼저 ‘작업 시작 / 이어하기’를 눌러 주세요.
-                </p>
-                <p className="text-[11px] text-slate-500">
-                  작업을 시작하면 등록 자료 목록을 불러오고 파일을 첨부할 수
-                  있습니다.
-                </p>
-              </div>
-            ) : counts[tab] === 0 ? (
-              <p className="py-8 text-center text-sm text-slate-500">
-                {tab === 'registered'
-                  ? '등록된 자료가 없습니다. 이번 작업에 파일을 첨부할 수 있습니다.'
-                  : tab === 'public'
-                    ? '연동된 공개 자료가 없습니다. 회사 선택 후 공개 데이터 가져오기에서 연결 상태를 확인할 수 있습니다.'
-                    : '첨부한 파일이 없습니다. 아래에서 파일을 추가해 주세요.'}
-              </p>
-            ) : (
-              <ul className="flex flex-col gap-2.5">
-                {(tab === 'public'
-                  ? work.sources.filter((s) =>
-                      s.warnings?.some((w) => w.code === 'PUBLIC_OPEN_DATA'),
-                    )
-                  : tab === 'registered'
-                    ? work.sources.filter((s) => s.scope === 'registered')
-                    : work.sources.filter((s) => s.scope === 'session')
-                ).map(renderSource)}
-              </ul>
-            )}
-
-            <div className="flex flex-col gap-2.5 border-t border-slate-100 pt-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-bold text-slate-900">
-                  이번 작업에 사용할 파일 추가
-                </h3>
-                <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
-                  이번 작업에서만 임시 보관
-                </span>
-              </div>
+            {/* 4. 슬림 간편 첨부 드롭존 */}
+            <div className="flex flex-col gap-2 rounded-xl border border-dashed border-[#E9EDF2] bg-[#F8FAFC] p-3 text-xs">
               <input
                 ref={fileInput}
                 type="file"
@@ -1443,10 +1229,10 @@ export function SourceSelectionView({
               />
               <div
                 id="file-upload-dropzone"
-                className={`flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed p-4 text-center transition-colors ${
+                className={`flex flex-col sm:flex-row items-center justify-between gap-2.5 rounded-lg p-2.5 transition-colors ${
                   dragging
-                    ? 'border-[#007A78] bg-[#E6F4F1]/60'
-                    : 'border-slate-200 bg-slate-50/60'
+                    ? 'border border-[#6855F5] bg-[#F7F5FF]'
+                    : 'bg-white border border-slate-200/70 hover:border-slate-300'
                 }`}
                 onDragOver={(e) => {
                   e.preventDefault()
@@ -1459,33 +1245,31 @@ export function SourceSelectionView({
                   if (!locked) chooseFiles(Array.from(e.dataTransfer.files))
                 }}
               >
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#E6F4F1] text-[#007A78]">
-                  <UploadCloud className="h-4 w-4" />
-                </div>
-                <button
-                  type="button"
-                  className={button}
-                  disabled={locked}
-                  onClick={() => fileInput.current?.click()}
-                >
-                  <Plus className="h-3.5 w-3.5 text-[#007A78]" />
-                  파일 추가
-                </button>
-                <p className="text-xs font-bold text-slate-800">
-                  파일을 끌어 놓거나 추가 버튼을 누르세요
-                </p>
-                <p className="text-[11px] text-slate-500">
-                  첨부 파일은 공용 자료실에 저장되지 않고 작업을 종료하면
-                  서버에서 정리됩니다. 첨부와 선택은 별개입니다.
-                </p>
-                <div className="mt-1 flex flex-wrap items-center justify-center gap-2 text-[10px] font-medium text-slate-400">
-                  <span>파일당 최대 10MB</span>
-                  <span>•</span>
-                  <span>이번 작업 최대 10개</span>
-                  <span>•</span>
-                  <span className="font-semibold text-[#007A78]">
-                    TXT, MD, PDF, DOCX, PPTX, JPG, PNG
+                <div className="flex items-center gap-2 text-slate-700">
+                  <UploadCloud className="h-4 w-4 text-[#89919F] shrink-0" />
+                  <span className="text-[11px] text-[#202530] font-medium">
+                    새 파일 끌어놓기 또는 첨부 (TXT, MD, PDF, DOCX, PPTX, JPG)
                   </span>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    className="cursor-pointer inline-flex items-center gap-1 rounded-lg bg-white border border-slate-200 px-2.5 py-1 text-[11px] font-semibold text-slate-800 hover:bg-slate-50 transition-colors shadow-2xs"
+                    disabled={locked}
+                    onClick={() => fileInput.current?.click()}
+                  >
+                    <Plus className="h-3 w-3 text-[#6855F5]" />
+                    파일 추가
+                  </button>
+                  <button
+                    type="button"
+                    className="cursor-pointer inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-200 transition-colors"
+                    disabled={locked}
+                    onClick={handleQuickSampleUpload}
+                  >
+                    <FileText className="h-3 w-3 text-slate-600" />
+                    시연 샘플
+                  </button>
                 </div>
               </div>
             </div>
@@ -1521,10 +1305,10 @@ export function SourceSelectionView({
               blocked={aiBlocked || selected.size === 0}
               canAnalyze={canAnalyze}
               onAnalyze={analyze}
+              onQuickSample={handleQuickSampleUpload}
               supplementBlocked={hasDocument && sourceChangeBlocked}
               onSupplement={() => {
                 flushSync(() => {
-                  setTab('session')
                   if (hasDocument) setSourceEditing(true)
                 })
                 fileInput.current?.click()
@@ -1711,6 +1495,20 @@ export function SourceSelectionView({
         onConfirm={work.changeCompany}
         disabled={locked}
         hasSession={!!work.session}
+      />
+      <SourceSelectModal
+        key={String(sourceModalOpen)}
+        isOpen={sourceModalOpen}
+        onClose={() => setSourceModalOpen(false)}
+        sources={work.sources}
+        selectedIds={selected}
+        onToggleSelect={(source) => void work.select(source)}
+        onSelectMultiple={(sources, state) => void work.selectMultiple(sources, state)}
+        onDeleteSource={(source) => setDeleteSource(source)}
+        onUpload={chooseFiles}
+        onQuickSample={handleQuickSampleUpload}
+        locked={locked}
+        session={work.session}
       />
     </>
   )

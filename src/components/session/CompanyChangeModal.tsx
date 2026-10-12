@@ -114,7 +114,7 @@ export function CompanyChangeModal({
         {/* 헤더 */}
         <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-50 text-[#007A78] border border-teal-100">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-900 border border-slate-300">
               <Building2 className="h-5 w-5" />
             </div>
             <div>
@@ -160,7 +160,7 @@ export function CompanyChangeModal({
                 className={`w-full rounded-xl border px-3.5 py-2.5 text-sm font-semibold transition-all outline-none ${
                   errorMsg
                     ? 'border-rose-400 bg-rose-50/30 text-rose-900 focus:ring-2 focus:ring-rose-200'
-                    : 'border-slate-300 bg-slate-50/50 text-slate-900 focus:border-[#007A78] focus:bg-white focus:ring-2 focus:ring-teal-100'
+                    : 'border-slate-300 bg-slate-50/50 text-slate-900 focus:border-slate-800 focus:bg-white focus:ring-2 focus:ring-slate-800/15'
                 }`}
                 autoFocus
               />
@@ -194,59 +194,38 @@ export function CompanyChangeModal({
                 빠른 기업 선택 (DART 검색 결과)
               </span>
             </div>
-            <div
-              className="max-h-56 overflow-y-auto"
-              aria-live="polite"
-              aria-busy={searching}
-            >
-              {inputName.trim().length < 2 ? (
-                <p className="text-xs text-slate-500">
-                  기업명을 두 글자 이상 입력해 주세요.
-                </p>
-              ) : searching ? (
-                <p className="text-xs text-slate-500">기업 검색 중…</p>
-              ) : searchError ? (
-                <p className="text-xs text-rose-600">{searchError}</p>
-              ) : results.length === 0 ? (
-                <p className="text-xs text-slate-500">
-                  일치하는 DART 기업이 없습니다. 회사명을 직접 입력해 저장할 수
-                  있습니다.
-                </p>
-              ) : null}
-              <div className="grid grid-cols-2 gap-2">
-                {results.map((item) => {
-                  const isSelected = selectedCode === item.corp_code
-                  return (
-                    <button
-                      key={item.corp_code}
-                      type="button"
-                      disabled={disabled || saving}
-                      onClick={() => updateName(item.corp_name, item.corp_code)}
-                      className={`flex flex-col items-start p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
-                        isSelected
-                          ? 'border-teal-500 bg-teal-50/80 shadow-xs'
-                          : 'border-slate-200 hover:border-teal-300 hover:bg-slate-50'
-                      }`}
-                    >
-                      <div className="flex w-full items-center justify-between">
-                        <span className="min-w-0 break-words text-xs font-bold text-slate-900">
-                          {item.display_name || item.corp_name}
-                        </span>
-                        {isSelected && (
-                          <Check className="h-3.5 w-3.5 text-[#007A78]" />
-                        )}
-                      </div>
-                      <span className="text-[10px] text-slate-500 mt-0.5 truncate w-full">
-                        DART 고유번호 {item.corp_code}
+            <div className="grid grid-cols-2 gap-2">
+              {PRESET_COMPANIES.map((item) => {
+                const isSelected = inputName.trim() === item.name
+                return (
+                  <button
+                    key={item.name}
+                    type="button"
+                    onClick={() => handleSelectPreset(item.name)}
+                    className={`flex flex-col items-start p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                      isSelected
+                        ? 'border-slate-800 bg-slate-100/90 shadow-xs'
+                        : 'border-slate-200 hover:border-slate-400 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex w-full items-center justify-between">
+                      <span className="text-xs font-bold text-slate-900">
+                        {item.name}
                       </span>
-                    </button>
-                  )
-                })}
-              </div>
+                      {isSelected && (
+                        <Check className="h-3.5 w-3.5 text-slate-900" />
+                      )}
+                    </div>
+                    <span className="text-[10px] text-slate-500 mt-0.5 truncate w-full">
+                      {item.category}
+                    </span>
+                  </button>
+                )
+              })}
             </div>
           </div>
 
-          <p className="rounded-xl bg-teal-50 p-3 text-xs text-teal-900">
+          <p className="rounded-xl bg-slate-100 p-3 text-xs text-slate-800">
             {disabled
               ? '진행 중인 작업을 마친 뒤, 초안이 있으면 자료 변경 시작을 먼저 선택해 주세요.'
               : hasSession

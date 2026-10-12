@@ -143,7 +143,7 @@ export const SystemStatusModal: React.FC<SystemStatusModalProps> = ({
         {/* Modal Header */}
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-[#E6F4F1] text-[#007A78] flex items-center justify-center">
+            <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-900 border border-slate-200 flex items-center justify-center">
               <Sliders className="h-4 w-4" />
             </div>
             <div>
@@ -172,7 +172,7 @@ export const SystemStatusModal: React.FC<SystemStatusModalProps> = ({
             onClick={() => setFilterCode('all')}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 cursor-pointer ${
               filterCode === 'all'
-                ? 'bg-[#007A78] text-white shadow-2xs font-bold'
+                ? 'bg-slate-900 text-white shadow-2xs font-bold'
                 : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
           >
@@ -185,7 +185,7 @@ export const SystemStatusModal: React.FC<SystemStatusModalProps> = ({
               onClick={() => setFilterCode(c.code)}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 cursor-pointer ${
                 filterCode === c.code
-                  ? 'bg-[#007A78] text-white shadow-2xs font-bold'
+                  ? 'bg-slate-900 text-white shadow-2xs font-bold'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
@@ -251,7 +251,7 @@ export const SystemStatusModal: React.FC<SystemStatusModalProps> = ({
 
               {/* Bottom Enforcement */}
               <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-200/60 text-slate-500 mt-auto">
-                <span className="text-[#007A78] font-semibold">
+                <span className="text-slate-900 font-semibold">
                   {card.enforcement}
                 </span>
               </div>
@@ -262,7 +262,7 @@ export const SystemStatusModal: React.FC<SystemStatusModalProps> = ({
         {/* Modal Footer */}
         <div className="flex items-center justify-between pt-2 border-t border-slate-100">
           <div className="flex items-center gap-1.5 text-xs text-slate-500">
-            <ShieldCheck className="h-4 w-4 text-[#007A78]" />
+            <ShieldCheck className="h-4 w-4 text-slate-800" />
             <span>유휴 시간 120분 기준 보안 보호 정책 적용 중</span>
           </div>
 

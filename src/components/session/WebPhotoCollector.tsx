@@ -209,17 +209,17 @@ export const WebPhotoCollector: React.FC<WebPhotoCollectorProps> = ({
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-teal-200/80 bg-gradient-to-br from-[#F0FDFA] to-white p-4 shadow-xs">
+    <div className="flex flex-col gap-3 rounded-2xl border border-slate-300/80 bg-gradient-to-br from-slate-100/60 via-white to-white p-4 shadow-xs">
       {/* 1. 패널 상단 타이틀 */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-teal-100 pb-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2.5">
         <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#007A78] text-white shadow-2xs">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-900 text-white shadow-2xs">
             <Globe className="h-4 w-4" />
           </div>
           <div>
             <h3 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
               <span>웹 사이트 & 회사 홈페이지 사진 자동 수집기</span>
-              <span className="inline-flex items-center gap-0.5 rounded-full bg-teal-100 px-2 py-0.2 text-[9px] font-bold text-[#007A78]">
+              <span className="inline-flex items-center gap-0.5 rounded-full bg-slate-200 px-2 py-0.2 text-[9px] font-bold text-slate-900">
                 <Sparkles className="h-2.5 w-2.5" />
                 AI 실시간 크롤링
               </span>
@@ -249,7 +249,7 @@ export const WebPhotoCollector: React.FC<WebPhotoCollectorProps> = ({
               maxLength={300}
               autoComplete="off"
               disabled={disabled || isSearching}
-              className="w-full rounded-xl border border-teal-200 bg-white py-2 pl-9 pr-8 text-xs text-slate-900 shadow-2xs transition-all placeholder:text-slate-400 focus:border-[#007A78] focus:outline-none focus:ring-2 focus:ring-[#007A78]/20 disabled:bg-slate-100"
+              className="w-full rounded-xl border border-slate-300 bg-white py-2 pl-9 pr-8 text-xs text-slate-900 shadow-2xs transition-all placeholder:text-slate-400 focus:border-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/15 disabled:bg-slate-100"
             />
             {query && !isSearching && (
               <button
@@ -266,7 +266,7 @@ export const WebPhotoCollector: React.FC<WebPhotoCollectorProps> = ({
             type="button"
             onClick={() => void handleSearch(query, category)}
             disabled={disabled || isSearching || !query.trim()}
-            className="inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-[#007A78] px-4 py-2 text-xs font-bold text-white shadow-xs transition-all hover:bg-[#006663] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+            className="inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-slate-950 via-slate-900 to-zinc-900 px-4 py-2 text-xs font-bold text-white shadow-xs transition-all hover:from-slate-900 hover:to-zinc-800 disabled:cursor-not-allowed disabled:bg-none disabled:bg-slate-200 disabled:text-slate-400"
           >
             {isSearching ? (
               <>
@@ -544,7 +544,7 @@ export const WebPhotoCollector: React.FC<WebPhotoCollectorProps> = ({
       </div>
 
       {/* 5. 선택한 사진들을 첨부 자료로 등록하는 버튼 */}
-      <div className="flex items-center justify-between border-t border-teal-100 pt-2 text-xs">
+      <div className="flex items-center justify-between border-t border-slate-200 pt-2 text-xs">
         <span className="text-[11px] text-slate-500">
           선택한 사진은 <strong>300DPI 인쇄 표준 규격</strong>으로 첨부 및
           초안에 배치됩니다.
@@ -553,7 +553,7 @@ export const WebPhotoCollector: React.FC<WebPhotoCollectorProps> = ({
           type="button"
           onClick={handleConfirmAdd}
           disabled={disabled || selectedIds.size === 0}
-          className="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#007A78] to-[#0F766E] px-4 py-2 text-xs font-bold text-white shadow-xs transition-all hover:brightness-105 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:bg-none disabled:text-slate-400"
+          className="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-slate-950 via-slate-900 to-zinc-900 px-4 py-2 text-xs font-bold text-white shadow-xs transition-all hover:from-slate-900 hover:to-zinc-800 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:bg-none disabled:text-slate-400"
         >
           <ImageIcon className="h-3.5 w-3.5" />
           <span>선택한 {selectedIds.size}장의 사진 첨부 등록</span>

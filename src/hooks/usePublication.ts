@@ -153,6 +153,32 @@ async function snapshot(sid: string, did: string) {
 const failure = (e: unknown) =>
   e instanceof Error ? e.message : '요청을 처리하지 못했습니다.'
 
+function readLocalEdits(sid: string, did: string): { edits: Record<string, string>; removed: string[] } {
+  try {
+    const raw = sessionStorage.getItem(`${STORAGE}.${sid}.${did}.draft_edits`)
+    if (!raw) return { edits: {}, removed: [] }
+    const parsed = JSON.parse(raw)
+    if (parsed && typeof parsed.edits === 'object' && Array.isArray(parsed.removed)) {
+      return { edits: parsed.edits, removed: parsed.removed }
+    }
+    return { edits: {}, removed: [] }
+  } catch {
+    return { edits: {}, removed: [] }
+  }
+}
+
+function persistLocalEdits(sid: string, did: string, edits: Record<string, string>, removed: string[]) {
+  try {
+    if (Object.keys(edits).length === 0 && removed.length === 0) {
+      sessionStorage.removeItem(`${STORAGE}.${sid}.${did}.draft_edits`)
+    } else {
+      sessionStorage.setItem(`${STORAGE}.${sid}.${did}.draft_edits`, JSON.stringify({ edits, removed }))
+    }
+  } catch {
+    // ignore sessionStorage errors
+  }
+}
+
 export function usePublication(
   initial: DraftResult,
   inputRevision = initial.document.input_revision,
@@ -163,8 +189,8 @@ export function usePublication(
   const [result, setResult] = useState<PublicationDocument | null>(null)
   const [proposal, setProposal] = useState<Proposal | null>(null)
   const [issues, setIssues] = useState<Issue[]>([])
-  const [edits, setEdits] = useState<Record<string, string>>({})
-  const [removed, setRemoved] = useState<string[]>([])
+  const [edits, setEdits] = useState<Record<string, string>>(() => readLocalEdits(sid, did).edits)
+  const [removed, setRemoved] = useState<string[]>(() => readLocalEdits(sid, did).removed)
   const [saved, setSaved] = useState<Saved>(() => read(sid, did))
   const [job, setJob] = useState<PublicationJob | null>(null)
   const [busy, setBusy] = useState(true)
@@ -190,6 +216,10 @@ export function usePublication(
     setIssues(value.issues)
     setConfirmed(false)
   }
+
+  useEffect(() => {
+    persistLocalEdits(sid, did, edits, removed)
+  }, [sid, did, edits, removed])
 
   useEffect(() => {
     let cancelled = false
@@ -483,6 +513,7 @@ export function usePublication(
         if (action.kind === 'save') {
           setEdits({})
           setRemoved([])
+          persistLocalEdits(sid, did, {}, [])
           setConflict(null)
         }
         setNotice(
@@ -698,6 +729,7 @@ export function usePublication(
       if (discard) {
         setEdits({})
         setRemoved([])
+        persistLocalEdits(sid, did, {}, [])
         setConflict(null)
       }
       if (savedRef.current.approvalId !== value.result.approval?.approval_id)

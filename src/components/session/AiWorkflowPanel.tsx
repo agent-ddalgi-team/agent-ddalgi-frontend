@@ -7,6 +7,7 @@ import {
   Image as ImageIcon,
   Info,
   Loader2,
+  Plus,
   RefreshCw,
   Sparkles,
 } from 'lucide-react'
@@ -57,7 +58,7 @@ const categories = ['개요', '공정/품질', '인증'] as const
 const button =
   'inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50'
 const primary =
-  'inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#007A78] px-4 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-[#006663] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none'
+  'inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-slate-950 via-slate-900 to-zinc-900 px-4 py-2.5 text-xs font-bold text-white shadow-xs hover:from-slate-900 hover:to-zinc-800 shadow-slate-950/20 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-none disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none'
 const text = (value: unknown) => (typeof value === 'string' ? value : '')
 
 function categoryState(facts: Preflight['facts'], category: string) {
@@ -83,7 +84,7 @@ export function Evidence({
   if (!refs.length) return null
   return (
     <details className="mt-3 text-xs text-slate-600">
-      <summary className="cursor-pointer font-semibold text-teal-800">
+      <summary className="cursor-pointer font-bold text-slate-900">
         근거 {refs.length}개 확인
       </summary>
       <ul className="mt-2 space-y-3">
@@ -104,7 +105,7 @@ export function Evidence({
                 )
                 .join(' · ')}
             </p>
-            <blockquote className="mt-2 whitespace-pre-wrap border-l-2 border-teal-300 pl-3">
+            <blockquote className="mt-2 whitespace-pre-wrap border-l-2 border-slate-400 pl-3">
               {ref.excerpt}
             </blockquote>
           </li>
@@ -189,6 +190,7 @@ export function AiWorkflowPanel({
   canAnalyze,
   onAnalyze,
   onSupplement,
+  onQuickSample,
   supplementBlocked = false,
   focusedFactIds = [],
 }: {
@@ -201,6 +203,7 @@ export function AiWorkflowPanel({
   canAnalyze: boolean
   onAnalyze: () => void
   onSupplement: () => void
+  onQuickSample?: () => void
   supplementBlocked?: boolean
   focusedFactIds?: string[]
 }) {
@@ -227,7 +230,7 @@ export function AiWorkflowPanel({
     : working
       ? [
           ai.saved?.attempt?.kind === 'draft' ? '초안 작성 중' : '점검 중',
-          'bg-teal-50 text-teal-800',
+          'bg-slate-100 text-slate-900 font-bold',
           Loader2,
         ]
       : ai.saved?.attempt?.kind === 'draft' && job?.status === 'failed'
@@ -246,7 +249,7 @@ export function AiWorkflowPanel({
     >
       <div className="flex items-center justify-between border-b border-slate-100 pb-2">
         <h2 className="flex items-center gap-2 text-base font-bold text-slate-900">
-          <Sparkles className="h-5 w-5 text-[#007A78]" />
+          <Sparkles className="h-5 w-5 text-slate-800" />
           사전 점검
         </h2>
         <span
@@ -267,14 +270,14 @@ export function AiWorkflowPanel({
       {working && (
         <p
           role="status"
-          className="flex items-center gap-2 rounded-xl bg-teal-50 p-3 text-xs text-teal-800"
+          className="flex items-center gap-2 rounded-xl bg-slate-100 p-3 text-xs text-slate-900 font-medium"
         >
           <Loader2 size={16} className="animate-spin" />
           {job?.progress.message || 'AI 작업 상태를 확인하고 있습니다.'}
         </p>
       )}
       {!working && ai.notice && (
-        <p role="status" className="text-xs text-teal-800">
+        <p role="status" className="text-xs text-slate-800">
           {ai.notice}
         </p>
       )}
@@ -348,12 +351,12 @@ export function AiWorkflowPanel({
           <div
             className={`flex flex-col gap-1 rounded-xl border p-3.5 ${
               ready
-                ? 'border-[#007A78]/20 bg-[#E6F4F1]'
+                ? 'border-slate-300 bg-slate-100/80'
                 : 'border-amber-200 bg-amber-50'
             }`}
           >
             <div
-              className={`flex items-center gap-1.5 text-xs font-bold ${ready ? 'text-[#007A78]' : 'text-amber-900'}`}
+              className={`flex items-center gap-1.5 text-xs font-bold ${ready ? 'text-slate-950' : 'text-amber-900'}`}
             >
               {ready ? (
                 <CheckCircle2 className="h-4 w-4" />
@@ -383,7 +386,7 @@ export function AiWorkflowPanel({
           <div className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3.5">
             <div className="flex items-center justify-between text-xs font-bold">
               <span className="text-slate-700">자료 충실도</span>
-              <span className="text-[#007A78]">
+              <span className="text-slate-900 font-black">
                 근거 있음 {supported} / 사실 {facts.length}
               </span>
             </div>
@@ -393,7 +396,7 @@ export function AiWorkflowPanel({
               aria-label={`사실 ${facts.length}개 중 근거 있음 ${supported}개`}
             >
               <div
-                className="h-full rounded-full bg-[#007A78] transition-all duration-700"
+                className="h-full rounded-full bg-gradient-to-r from-slate-700 via-zinc-800 to-slate-950 transition-all duration-700"
                 style={{
                   width: `${facts.length ? (supported / facts.length) * 100 : 0}%`,
                 }}
@@ -424,10 +427,10 @@ export function AiWorkflowPanel({
           <div className="flex flex-col gap-1 rounded-xl border border-slate-200 bg-slate-50 p-3.5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900">
-                <FileText className="h-4 w-4 text-[#007A78]" />
+                <FileText className="h-4 w-4 text-slate-800" />
                 <span>추천 구성 플랜</span>
               </div>
-              <span className="rounded bg-[#007A78] px-2 py-0.5 text-[10px] font-bold text-white">
+              <span className="rounded bg-slate-900 px-2 py-0.5 text-[10px] font-bold text-white shadow-2xs">
                 {preflight.recommendations.suggested_pages}쪽 구조
               </span>
             </div>
@@ -456,7 +459,7 @@ export function AiWorkflowPanel({
                     key={i}
                     className="flex items-start gap-1.5 rounded bg-slate-50 p-2 text-[11px] leading-relaxed text-slate-600"
                   >
-                    <ImageIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#007A78]" />
+                    <ImageIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-800" />
                     <span>{item}</span>
                   </li>
                 ))}
@@ -509,6 +512,17 @@ export function AiWorkflowPanel({
                             >
                               근거 자료 보완
                             </button>
+                            {onQuickSample && fact.status === 'missing' && (
+                              <button
+                                type="button"
+                                className="inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-slate-800 bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-900 shadow-2xs transition-colors hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
+                                disabled={reviewBlocked || supplementBlocked}
+                                onClick={onQuickSample}
+                              >
+                                <Plus className="h-3.5 w-3.5 text-slate-900" />
+                                시연용 기본정보 자동 추가
+                              </button>
+                            )}
                             {canExclude(fact.fact_id) && (
                               <button
                                 type="button"
@@ -523,6 +537,12 @@ export function AiWorkflowPanel({
                               </button>
                             )}
                           </div>
+                          {!canExclude(fact.fact_id) &&
+                            fact.status === 'missing' && (
+                              <p className="mt-2 text-[11px] text-amber-900">
+                                필수 내용은 근거를 보완한 뒤 다시 점검해 주세요. 상단 버튼으로 시연용 기업 정보를 바로 추가할 수 있습니다.
+                              </p>
+                            )}
                         </div>
                       ))}
                   </li>
@@ -534,16 +554,16 @@ export function AiWorkflowPanel({
           {!!notices.length && (
             <div className="flex flex-col gap-1.5">
               <h4 className="flex items-center gap-1.5 text-xs font-bold text-slate-900">
-                <Info className="h-4 w-4 text-[#007A78]" />
+                <Info className="h-4 w-4 text-slate-800" />
                 참고 안내 {notices.length}건
               </h4>
               <ul className="flex flex-col gap-1.5 text-[11px]">
                 {notices.map((issue) => (
                   <li
                     key={issue.issue_id}
-                    className="rounded-lg border border-teal-100 bg-teal-50/50 p-2.5 leading-relaxed text-slate-700"
+                    className="rounded-lg border border-slate-200 bg-slate-100/60 p-2.5 leading-relaxed text-slate-700"
                   >
-                    <span className="mr-1.5 inline-block rounded bg-teal-100/80 px-1.5 py-0.5 text-[10px] font-bold text-[#007A78]">
+                    <span className="mr-1.5 inline-block rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-bold text-slate-900">
                       안내
                     </span>
                     {readableIssueMessage(issue.message)}
@@ -554,7 +574,7 @@ export function AiWorkflowPanel({
           )}
 
           <details className="rounded-xl border border-slate-200 p-3">
-            <summary className="cursor-pointer text-xs font-semibold text-[#007A78]">
+            <summary className="cursor-pointer text-xs font-bold text-slate-900">
               사실과 근거 자세히 보기 ({facts.length}개)
             </summary>
             <div className="mt-3 grid gap-2">
@@ -570,7 +590,7 @@ export function AiWorkflowPanel({
                       {labels[fact.field_key] || fact.field_key}
                     </h4>
                     <span
-                      className={`text-[11px] font-semibold ${fact.status === 'supported' ? 'text-[#007A78]' : 'text-amber-800'}`}
+                      className={`text-[11px] font-bold ${fact.status === 'supported' ? 'text-slate-900' : 'text-amber-800'}`}
                     >
                       {statusLabel[fact.status]}
                     </span>
@@ -661,7 +681,7 @@ export function AiWorkflowPanel({
               <label className="flex cursor-pointer select-none items-start gap-2.5 rounded-xl p-2 transition-colors hover:bg-slate-50">
                 <input
                   type="checkbox"
-                  className="mt-0.5 h-4 w-4 cursor-pointer accent-[#007A78]"
+                  className="mt-0.5 h-4 w-4 cursor-pointer accent-slate-900"
                   checked={ai.confirmed}
                   disabled={blocked || !ai.canConfirm}
                   onChange={(e) => ai.setConfirmed(e.target.checked)}
