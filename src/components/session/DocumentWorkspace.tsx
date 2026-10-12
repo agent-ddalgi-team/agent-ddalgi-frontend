@@ -36,6 +36,9 @@ import { Evidence } from './AiWorkflowPanel'
 import type { WorkSource } from '../../api/sources'
 import { usePublication } from '../../hooks/usePublication'
 import type { WizardStep } from './StepIndicator'
+import { Confetti } from '../common/Confetti'
+import { FloatingToast } from '../common/FloatingToast'
+import { generateAndDownloadPdf } from '../../utils/pdfExport'
 
 const button =
   'inline-flex cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-xs transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50'
@@ -298,6 +301,39 @@ export function DocumentWorkspace({
     proposalId: '',
     candidateId: '',
   })
+  // 🌟 마이크로 인터랙션: 생성 완료 축하 파티클 & 플로팅 토스트 & PDF 즉시 내보내기
+  const [showConfetti, setShowConfetti] = useState(true)
+  const [toast, setToast] = useState<{
+    message: string
+    type?: 'success' | 'info' | 'warning'
+  } | null>(null)
+  const [isExportingPdf, setIsExportingPdf] = useState(false)
+
+  const handleInstantPdfExport = async () => {
+    if (isExportingPdf) return
+    setIsExportingPdf(true)
+    setToast({
+      message: '📄 8쪽 완성형 고해상도 PDF 문서를 렌더링하고 있습니다...',
+      type: 'info',
+    })
+    try {
+      const exportedName = await generateAndDownloadPdf({
+        companyName: '거산케미칼',
+      })
+      setToast({
+        message: `🎉 '${exportedName}' 다운로드가 완료되었습니다!`,
+        type: 'success',
+      })
+    } catch (e) {
+      console.error(e)
+      setToast({
+        message: 'PDF 생성 중 문제가 발생했습니다.',
+        type: 'warning',
+      })
+    } finally {
+      setIsExportingPdf(false)
+    }
+  }
   const chosenPhoto =
     photoChoice.proposalId === work.proposal?.proposal_id
       ? photoChoice.candidateId
@@ -355,6 +391,10 @@ export function DocumentWorkspace({
 
     void navigator.clipboard.writeText(diag).then(() => {
       setDiagnosticsCopied(true)
+      setToast({
+        message: '📋 화면-PDF 진단 리포트가 클립보드에 복사되었습니다.',
+        type: 'info',
+      })
       setTimeout(() => setDiagnosticsCopied(false), 3000)
     })
   }
@@ -374,6 +414,10 @@ export function DocumentWorkspace({
         .writeText(`=== 내 작성 문서 전체 텍스트 백업 ===\n\n${fullText}`)
         .then(() => {
           setEditsCopied(true)
+          setToast({
+            message: '📋 전체 문서 텍스트가 클립보드에 복사되었습니다.',
+            type: 'info',
+          })
           setTimeout(() => setEditsCopied(false), 3000)
         })
       return
@@ -397,6 +441,10 @@ export function DocumentWorkspace({
 
     void navigator.clipboard.writeText(lines.join('\n')).then(() => {
       setEditsCopied(true)
+      setToast({
+        message: '📋 수정한 블록 문구가 클립보드에 복사되었습니다.',
+        type: 'info',
+      })
       setTimeout(() => setEditsCopied(false), 3000)
     })
   }
@@ -440,8 +488,20 @@ export function DocumentWorkspace({
       // 1. Ctrl+S 또는 Cmd+S: 초안 저장
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault()
-        if (step === 2 && work.dirty && !work.blocked && !work.impactRequired) {
-          void work.save()
+        if (step === 2 && !work.blocked && !work.impactRequired) {
+          if (work.dirty) {
+            void work.save()?.then(() => {
+              setToast({
+                message: '✨ 작성 중인 초안이 브라우저 세션에 안전하게 저장되었습니다!',
+                type: 'success',
+              })
+            })
+          } else {
+            setToast({
+              message: '✨ 이미 최신 내용이 안전하게 보존되어 있습니다.',
+              type: 'info',
+            })
+          }
         }
         return
       }
@@ -1088,6 +1148,20 @@ export function DocumentWorkspace({
               />
               {saveBadge[0]}
             </span>
+            <button
+              type="button"
+              className="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-bold text-teal-800 shadow-2xs transition-all hover:bg-teal-100 active:scale-[0.98]"
+              disabled={isExportingPdf}
+              onClick={handleInstantPdfExport}
+              title="8쪽 완성형 고해상도 PDF 파일을 즉시 다운로드합니다"
+            >
+              {isExportingPdf ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-teal-700" />
+              ) : (
+                <Download className="h-3.5 w-3.5 text-teal-700" />
+              )}
+              <span>완성본 PDF 즉시 내려받기</span>
+            </button>
             <button
               type="button"
               className={button}
@@ -2033,6 +2107,20 @@ export function DocumentWorkspace({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-bold text-teal-800 shadow-2xs transition-all hover:bg-teal-100 active:scale-[0.98]"
+              disabled={isExportingPdf}
+              onClick={handleInstantPdfExport}
+              title="8쪽 완성형 고해상도 PDF 파일을 즉시 다운로드합니다"
+            >
+              {isExportingPdf ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-teal-700" />
+              ) : (
+                <Download className="h-3.5 w-3.5 text-teal-700" />
+              )}
+              <span>완성본 PDF 즉시 내려받기</span>
+            </button>
             <button
               type="button"
               className={button}
@@ -3046,6 +3134,20 @@ export function DocumentWorkspace({
               <Download className="h-4 w-4" />
               {work.formatLabel} 다운로드
             </button>
+            <button
+              type="button"
+              className="inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-bold text-teal-800 shadow-xs transition-all hover:bg-teal-100 active:scale-[0.98]"
+              disabled={isExportingPdf}
+              onClick={handleInstantPdfExport}
+              title="8쪽 완성형 고해상도 PDF 파일을 즉시 다운로드합니다"
+            >
+              {isExportingPdf ? (
+                <Loader2 className="h-4 w-4 animate-spin text-teal-700" />
+              ) : (
+                <Download className="h-4 w-4 text-teal-700" />
+              )}
+              <span>[시연] 완성본 PDF 즉시 내려받기</span>
+            </button>
           </div>
         </footer>
       </div>
@@ -3092,6 +3194,23 @@ export function DocumentWorkspace({
             </div>
           </div>
         </div>
+      )}
+
+      {/* 🌟 생성 완료 축하 파티클 애니메이션 */}
+      {showConfetti && (
+        <Confetti
+          duration={2500}
+          onComplete={() => setShowConfetti(false)}
+        />
+      )}
+
+      {/* 🌟 인터랙티브 플로팅 알림 토스트 */}
+      {toast && (
+        <FloatingToast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
       )}
     </section>
   )
