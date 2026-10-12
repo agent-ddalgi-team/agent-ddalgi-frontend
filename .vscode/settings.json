@@ -1,4 +1,9 @@
 {
   "editor.defaultFormatter": "esbenp.prettier-vscode",
-  "editor.formatOnSave": true
+  "editor.formatOnSave": true,
+  "explorer.fileNesting.enabled": true,
+  "explorer.fileNesting.expand": false,
+  "explorer.fileNesting.patterns": {
+    "package.json": "package-lock.json, index.html, vite.config.ts, tsconfig*.json, eslint.config.js, .prettierrc, .prettierignore, .env, .env.example, .gitignore, .gitattributes"
+  }
 }
