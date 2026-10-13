@@ -53,7 +53,8 @@ frontend/
 ├─ scripts/                실행·검사·관리 도구
 │  ├─ checks/              Mock 화면 렌더링 검사
 │  └─ fixtures/            가상 테스트 입력·응답·사용법
-├─ .agents/                기존 AI 도구 작업 규칙
+├─ AGENTS.md               AI 공통 작업 규칙 원본
+├─ .agents/                기존 규칙 경로의 안내 링크
 ├─ .claude/                개인 Claude 설정·자료 (기존 미추적)
 ├─ .vscode/                VS Code 설정
 ├─ node_modules/           npm이 설치한 라이브러리 (자동 생성)
@@ -79,7 +80,7 @@ frontend/
 
 | 찾는 내용 | 문서 |
 |---|---|
-| 작업 규칙 | [폴더 관리](.agents/rules/work_history.md#folder-management), [README 관리](.agents/rules/work_history.md#readme-management) |
+| 작업 규칙 | [폴더 관리](AGENTS.md#folder-management), [README 관리](AGENTS.md#readme-management) |
 | 현재 기능·남은 일·새 작업 기록 | [WORK_SUMMARY](docs/WORK_SUMMARY.md) |
 | 전체 파일 역할·삭제 판단 | [관리 부록](docs/WORK_SUMMARY.md#file-retention) |
 | 과거 검증·개선 제안 | [통합 이력](docs/history/WORK_HISTORY.md), [개선 제안](docs/history/FRONTEND_REFINEMENT_REPORT.md), [구형 SSR 기록](docs/history/B_프론트엔드_검증기록_0918.md) |
