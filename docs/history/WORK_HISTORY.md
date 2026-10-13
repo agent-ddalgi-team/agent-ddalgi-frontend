@@ -671,3 +671,14 @@ build·ESLint·격리 --publication --required-insert 28묶음/PDF4쪽 통과. �
 `AI_CHECK_BACKEND=C:/final/backend`, `AI_CHECK_LIVE=0`에서 `node scripts/check-ai-workflow.mjs --publication --impact --supplement-required --photos --required-insert`와 같은 명령의 `--docx` 조합이 각각 실제 4쪽 승인·다운로드까지 통과했다. PDF는 Temp ddalgi-ai-ui-RpGeUm, DOCX는 ddalgi-ai-ui-z49PIe에 있다. build·변경 파일 ESLint·diff 검사 통과, 기존 500kB 청크 경고는 유지한다.
 
 새 검사는 격리 세션의 작성 조건에 대응 범위를 필수로 지정하는 준비 요청만 실제 inputs API로 수행한다. 보완 자료 선택·재점검·최신 근거 선택·적용 응답 유실·새로고침·누락 사실/페이지 선택·저장/재검증은 실제 화면에서 수행한다. 필수 오류 해소, 다른 경고 유지, 기존 문서ID/다른 블록/원문 근거 보존, 추가 단계의 재추출·재생성 없음과 중복 방지를 확인했다. 각 실행의 초안 요청은 1회다. 가상 AI의 화면/API 회귀이며 실제 LLM 의미 판단 품질 검사는 아니다. 원본 시연 DB·환경 설정·백엔드 API는 변경하지 않았다.
+
+
+<a id="readme-history-20261013"></a>
+## 2026-10-13 README에서 분리한 과거 정리·검수 기록
+
+아래는 기존 README(`f506892`)에 있던 정리 당시 설명을 보존한 것이다. 현재 사용법은 [작업 현황](../WORK_SUMMARY.md#source-correction-guide), 파일 관리는 [관리 부록](../WORK_SUMMARY.md#file-retention), 검사는 [검사 안내](../WORK_SUMMARY.md#frontend-checks)를 따른다.
+
+- 당시 구조 설명은 `codex/frontend-folder-organization-20261012` 정리 브랜치 기준이었다. 당시에는 공유 브랜치 반영 후 pull하도록 안내했다. 지금 작업의 기반은 해당 정리가 포함된 develop `9be1b04`이며 이번 README 개편의 원격 공유까지 완료했다는 뜻은 아니다.
+- 중복 노션 요약은 WORK_SUMMARY로, 번호별 기록 등 7개 문서의 핵심은 WORK_HISTORY로 통합했다. 일일요약·옛 브랜치 비교 2개를 제거했고 history에는 MD 3개를 유지했다. 원문은 해당 정리 이전 Git 이력에 있다. 소스·설정·회사 자료를 지운 작업은 아니다.
+- 원문 오타 정정 당시 격리 검수는 `AI_CHECK_BACKEND`에 해당 PC의 백엔드 경로, `AI_CHECK_LIVE=0`을 지정해 `node scripts/check-ai-workflow.mjs --source-correction`으로 진행했다. 임시 DB·가상 AI·실제 HTTP/브라우저로 입력 검증·기록·재검증·다른 blocker 유지·새로고침 이력을 확인한 기록이며 유료 AI 판단 품질 평가는 포함하지 않는다. 이번 문서 개편에서 재실행한 결과가 아니다.
+- Git 추적 위치는 같은 커밋을 받으면 같지만 기존 경로를 수정 중인 팀원에게 병합 충돌이 생길 수 있다. 개인 PC 경로·DB·환경값은 pull로 자동 공유되지 않으며 VS Code 숨김·접기와 실제 파일 이동은 다르다.
