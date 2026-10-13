@@ -32,7 +32,7 @@ frontend/
 - 과거 보관: [통합 작업 이력](docs/history/WORK_HISTORY.md), [개선 제안](docs/history/FRONTEND_REFINEMENT_REPORT.md), [구형 SSR 검증 기록](docs/history/B_프론트엔드_검증기록_0918.md)
 - 선택 참고: [시연 대본](docs/reference/DEMO_PRESENTATION_SCRIPT.md), [설계 시안](docs/reference/prototype/), [가상 출력 샘플](docs/reference/샘플문서/)
 - 가상 자료: [테스트 자료](scripts/fixtures/), [자료 사용법](scripts/fixtures/day2_테스트데이터_사용법.md)
-- AI 작업 기록 규칙: [.agents/rules/work_history.md](.agents/rules/work_history.md). 새 번호 MD를 자동 생성하지 않고 `docs/WORK_SUMMARY.md` 4절에 누적한다. 과거 기록의 옛 생성 지침은 적용하지 않는다. MD가 프로그램을 설정하거나 모든 도구에서 자동으로 읽히는 것은 아니다.
+- 작업 규칙: [.agents/rules/work_history.md](.agents/rules/work_history.md)의 [폴더 관리 규칙](.agents/rules/work_history.md#folder-management)과 [README 관리 규칙](.agents/rules/work_history.md#readme-management)을 따른다. 새 번호 MD를 자동 생성하지 않고 `docs/WORK_SUMMARY.md` 4절에 누적한다. 과거 기록의 옛 생성 지침은 적용하지 않는다. MD가 프로그램을 설정하거나 모든 도구에서 자동으로 읽히는 것은 아니다.
 
 **현재 설명과 과거 기록을 구분한다.** 보안 문서는 프론트·백엔드 코드를 대조한 현재 기준이며 history/발표 대본은 당시 기록이다. 편집 내용의 sessionStorage 보관은 암호화가 아니고, ‘즉시 PDF’는 현재 문서의 서버 승인 출력과 별개다. 자세한 근거와 남은 과제는 위 보안 문서를 따른다. 중복 노션 요약은 WORK_SUMMARY에, 번호별 기록 등 7개 문서의 핵심은 WORK_HISTORY에 통합했다. 일일요약·옛 브랜치 비교는 제거했다. history에는 MD 3개만 유지하고 새 작업마다 별도 파일을 만들지 않는다.
 
