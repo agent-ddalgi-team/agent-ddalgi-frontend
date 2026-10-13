@@ -1,5 +1,5 @@
-// 검증용 스크립트 (docs/B_프론트엔드_검증기록_0918.md 1절).
-// 실행: 이 파일과 run_ssr.mjs를 프로젝트 루트에 복사한 뒤 `node run_ssr.mjs`
+// 검증용 스크립트 (docs/history/B_프론트엔드_검증기록_0918.md 1절).
+// 실행: 프로젝트 루트에서 `node scripts/checks/run_ssr.mjs` (파일 복사 불필요)
 // fixtures의 Mock JSON을 실제 화면 컴포넌트에 넣어 서버 렌더링하고, 기대 내용이 출력되는지 자동 대조한다.
 import { renderToStaticMarkup } from 'react-dom/server'
 import { ResultPanel } from '/src/components/profile/ResultPanel'
@@ -9,8 +9,8 @@ import {
   STATUS_LABELS,
 } from '/src/constants/profileLabels'
 import type { JobResponse, ProfileResult } from '/src/types/profile'
-import readyJson from '/fixtures/mock_job_ready.json'
-import errorJson from '/fixtures/mock_job_error.json'
+import readyJson from '/scripts/fixtures/mock_job_ready.json'
+import errorJson from '/scripts/fixtures/mock_job_error.json'
 
 const ready = readyJson as JobResponse
 const errorRes = errorJson as JobResponse
@@ -152,5 +152,6 @@ check(
 )
 
 console.log(results.join('\n'))
+if (results.some(result => result.startsWith('FAIL'))) throw new Error('Mock 화면 렌더링 검사 실패')
 console.log('\n===== 회사정보 영역 렌더링 텍스트(발췌) =====')
 console.log(text.split('\n').slice(0, 40).join('\n'))

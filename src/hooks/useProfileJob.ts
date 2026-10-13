@@ -131,7 +131,7 @@ export function useProfileJob() {
     [startPolling, stopPolling],
   )
 
-  // 서버 연결 전 시험용: fixtures/mock_job_ready.json, mock_job_error.json을 직접 읽어 같은 렌더링 경로로 확인한다.
+  // 서버 연결 전 시험용: scripts/fixtures/mock_job_ready.json, mock_job_error.json을 직접 읽어 같은 렌더링 경로로 확인한다.
   const loadMockResponse = useCallback(
     (response: JobResponse) => {
       stopPolling()
